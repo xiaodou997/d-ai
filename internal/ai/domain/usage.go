@@ -35,6 +35,7 @@ type UsageLog struct {
 	ResolvedProviderFamily             string
 	CapabilityType                     string
 	GroupTargetID                      string
+	UpstreamAccountID                  string
 	EndpointID                         string
 	CredentialPoolID                   string
 	ProviderCode                       string

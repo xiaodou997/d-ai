@@ -21,6 +21,7 @@ import (
 	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/internal/ai/imageedit"
 	"xiaodou/dai/internal/ai/imagepayload"
+	"xiaodou/dai/internal/ai/routing"
 	"xiaodou/dai/internal/ai/upstreamcompat"
 	"xiaodou/dai/libs/go/httpx"
 )
@@ -38,6 +39,7 @@ type upstreamAccountTestInput struct {
 	AccountID string `path:"accountID" doc:"上游账号 ID"`
 	Body      struct {
 		ModelCode string                         `json:"model_code" doc:"要测试的对外 model_code（账号下的显式绑定）"`
+		APIFormat string                         `json:"api_format" doc:"要测试的账号端点 API 格式"`
 		Prompt    string                         `json:"prompt,omitempty" doc:"测试提示词；生图/对话通用，为空用默认值"`
 		ImageEdit bool                           `json:"image_edit,omitempty" doc:"仅 OpenAI Images 生图模型：执行图片编辑测试"`
 		Image     *upstreamAccountTestImageInput `json:"image,omitempty" doc:"图片编辑测试使用的真实参考图片；image_edit=true 时必填"`
@@ -49,7 +51,7 @@ type upstreamAccountTestOutput struct {
 		OK                          bool   `json:"ok" doc:"上游是否返回可用结果"`
 		HTTPStatus                  int    `json:"http_status" doc:"上游 HTTP 状态码"`
 		LatencyMs                   int64  `json:"latency_ms" doc:"往返耗时(毫秒)"`
-		Capability                  string `json:"capability" doc:"测试能力：chat / image"`
+		Capability                  string `json:"capability" doc:"测试能力：chat / image / embedding"`
 		APIFormat                   string `json:"api_format" doc:"使用的上游 API 格式"`
 		UpstreamModel               string `json:"upstream_model" doc:"上游真实模型名"`
 		ReplyText                   string `json:"reply_text,omitempty" doc:"对话测试的回复文本"`
@@ -68,7 +70,6 @@ type upstreamAccountTestOutput struct {
 }
 
 type upstreamTestBinding struct {
-	APIFormat      string
 	UpstreamModel  string
 	CapabilityType string
 	ImagePolicy    imageGenerationBindingPolicy
@@ -115,11 +116,21 @@ func registerUpstreamAccountTest(api huma.API, d UpstreamDiagnosticsHTTPDeps) {
 			}
 			image = &decoded
 		}
+		endpoint, err := selectUpstreamTestEndpoint(account.Endpoints, in.Body.APIFormat)
+		if err != nil {
+			return nil, httpx.ErrBadRequest.WithDetail(err.Error())
+		}
+		if !domain.ProtocolSupportsCapability(endpoint.APIFormat, domain.CapabilityType(binding.CapabilityType)) {
+			return nil, httpx.ErrBadRequest.WithDetail("selected endpoint API format is incompatible with the model capability")
+		}
 		result := runUpstreamAccountTest(ctx, d.HTTPClient, upstreamTestConfig{
-			BaseURL:                     account.BaseURL,
+			BaseURL:                     endpoint.BaseURL,
+			PathOverride:                endpoint.PathOverride,
 			APIKey:                      apiKey,
-			ExtraHeaders:                account.ExtraHeaders,
-			APIFormat:                   binding.APIFormat,
+			AuthScheme:                  endpoint.AuthScheme,
+			AuthHeader:                  endpoint.AuthHeader,
+			ExtraHeaders:                endpoint.ExtraHeaders,
+			APIFormat:                   string(endpoint.APIFormat),
 			UpstreamModel:               binding.UpstreamModel,
 			Capability:                  binding.CapabilityType,
 			Prompt:                      strings.TrimSpace(in.Body.Prompt),
@@ -130,7 +141,7 @@ func registerUpstreamAccountTest(api huma.API, d UpstreamDiagnosticsHTTPDeps) {
 			ImageUpstreamResponseFormat: binding.ImagePolicy.UpstreamResponseFormat,
 			Timeouts:                    domain.DefaultRouteTimeouts(domain.CapabilityType(binding.CapabilityType)),
 		})
-		if err := reconcileUpstreamAccountTestStatus(ctx, d.AccountHealth, in.AccountID, account.Status, result); err != nil {
+		if err := reconcileUpstreamAccountTestStatus(ctx, d.AccountHealth, d.EndpointManager, d.RuntimeHealth, in.AccountID, endpoint.ID, account.Status, result); err != nil {
 			return nil, mapServiceError(err)
 		}
 		out := &upstreamAccountTestOutput{}
@@ -138,7 +149,7 @@ func registerUpstreamAccountTest(api huma.API, d UpstreamDiagnosticsHTTPDeps) {
 		out.Body.HTTPStatus = result.HTTPStatus
 		out.Body.LatencyMs = result.LatencyMs
 		out.Body.Capability = result.Capability
-		out.Body.APIFormat = binding.APIFormat
+		out.Body.APIFormat = string(endpoint.APIFormat)
 		out.Body.UpstreamModel = binding.UpstreamModel
 		out.Body.ReplyText = result.ReplyText
 		out.Body.ImageB64 = result.ImageB64
@@ -156,7 +167,19 @@ func registerUpstreamAccountTest(api huma.API, d UpstreamDiagnosticsHTTPDeps) {
 	})
 }
 
-func reconcileUpstreamAccountTestStatus(ctx context.Context, health UpstreamAccountHealthWriter, accountID, currentStatus string, result upstreamTestResult) error {
+func reconcileUpstreamAccountTestStatus(ctx context.Context, health UpstreamAccountHealthWriter, endpoints UpstreamAccountEndpointManager, runtimeHealth routing.HealthTracker, accountID, endpointID, currentStatus string, result upstreamTestResult) error {
+	if endpoints != nil {
+		status, lastError := domain.HealthHealthy, ""
+		if !result.OK {
+			status, lastError = domain.HealthUnhealthy, result.Error
+		}
+		if _, err := endpoints.UpdateEndpointHealth(ctx, accountID, endpointID, status, lastError); err != nil {
+			return err
+		}
+	}
+	if result.OK && runtimeHealth != nil {
+		runtimeHealth.RecordSuccess(endpointID, routing.TargetEndpoint)
+	}
 	if health == nil || currentStatus == domain.UpstreamAccountStatusDisabled {
 		return nil
 	}
@@ -180,7 +203,6 @@ func loadUpstreamTestBinding(ctx context.Context, store UpstreamModelBindingStor
 		return upstreamTestBinding{}, mapServiceError(err)
 	}
 	b := upstreamTestBinding{
-		APIFormat:      binding.APIFormat,
 		UpstreamModel:  binding.UpstreamModelName,
 		CapabilityType: binding.CapabilityType,
 		ImagePolicy:    parseImageGenerationBindingPolicy(binding.ConfigJSON),
@@ -191,9 +213,36 @@ func loadUpstreamTestBinding(ctx context.Context, store UpstreamModelBindingStor
 	return b, nil
 }
 
+func selectUpstreamTestEndpoint(endpoints []domain.UpstreamAccountEndpoint, requested string) (domain.UpstreamAccountEndpoint, error) {
+	requested = strings.TrimSpace(requested)
+	active := make([]domain.UpstreamAccountEndpoint, 0, len(endpoints))
+	for _, endpoint := range endpoints {
+		if endpoint.Status != domain.EndpointStatusActive {
+			continue
+		}
+		active = append(active, endpoint)
+		if requested != "" && string(endpoint.APIFormat) == requested {
+			return endpoint, nil
+		}
+	}
+	if requested != "" {
+		return domain.UpstreamAccountEndpoint{}, fmt.Errorf("active endpoint not found for api_format %q", requested)
+	}
+	if len(active) == 1 {
+		return active[0], nil
+	}
+	if len(active) == 0 {
+		return domain.UpstreamAccountEndpoint{}, fmt.Errorf("account has no active endpoint")
+	}
+	return domain.UpstreamAccountEndpoint{}, fmt.Errorf("api_format is required when account has multiple active endpoints")
+}
+
 type upstreamTestConfig struct {
 	BaseURL                     string
+	PathOverride                string
 	APIKey                      string
+	AuthScheme                  string
+	AuthHeader                  string
 	ExtraHeaders                []byte
 	APIFormat                   string
 	UpstreamModel               string
@@ -364,12 +413,15 @@ func runUpstreamAccountTest(ctx context.Context, client HTTPDoer, cfg upstreamTe
 	}
 	capability := strings.TrimSpace(cfg.Capability)
 	isImage := capability == string(domain.CapabilityImage)
+	isEmbedding := capability == string(domain.CapabilityEmbedding)
 	res := upstreamTestResult{Capability: "chat"}
 	if isImage {
 		res.Capability = "image"
 		res.ImageStreamMode = normalizedUpstreamTestImageStreamMode(cfg.ImageStreamMode)
 		res.ImageEditTransport = normalizedUpstreamTestImageEditTransport(cfg.ImageEditTransport)
 		res.ImageUpstreamResponseFormat = normalizedUpstreamTestImageResponseFormat(cfg.ImageUpstreamResponseFormat)
+	} else if isEmbedding {
+		res.Capability = "embedding"
 	}
 
 	prompt := cfg.Prompt
@@ -388,10 +440,6 @@ func runUpstreamAccountTest(ctx context.Context, client HTTPDoer, cfg upstreamTe
 	req, err := buildUpstreamTestRequest(deadline.ctx, cfg, isImage, prompt)
 	if err != nil {
 		res.Error = err.Error()
-		return res
-	}
-	if err := applyDiscoveryExtraHeaders(req.Header, cfg.ExtraHeaders); err != nil {
-		res.Error = "invalid extra_headers: " + err.Error()
 		return res
 	}
 
@@ -429,6 +477,8 @@ func runUpstreamAccountTest(ctx context.Context, client HTTPDoer, cfg upstreamTe
 
 	if isImage {
 		parseUpstreamTestImageResponse(&res, cfg.APIFormat, body)
+	} else if isEmbedding {
+		parseUpstreamTestEmbeddingResponse(&res, cfg.APIFormat, body)
 	} else {
 		parseUpstreamTestChatResponse(&res, cfg.APIFormat, body)
 	}
@@ -436,7 +486,6 @@ func runUpstreamAccountTest(ctx context.Context, client HTTPDoer, cfg upstreamTe
 }
 
 func buildUpstreamTestRequest(ctx context.Context, cfg upstreamTestConfig, isImage bool, prompt string) (*http.Request, error) {
-	base := strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/")
 	format := strings.TrimSpace(cfg.APIFormat)
 	if cfg.ImageEdit && (!isImage || format != string(domain.ProtocolOpenAIImages)) {
 		return nil, fmt.Errorf("image edit compatibility test requires an OpenAI Images binding")
@@ -450,7 +499,6 @@ func buildUpstreamTestRequest(ctx context.Context, cfg upstreamTestConfig, isIma
 	imageStream := normalizedUpstreamTestImageStreamMode(cfg.ImageStreamMode) == domain.ImageStreamModeForceStream
 	switch format {
 	case string(domain.ProtocolGeminiGenerate):
-		requestURL = fmt.Sprintf("%s/v1beta/models/%s:generateContent?key=%s", base, cfg.UpstreamModel, cfg.APIKey)
 		if isImage {
 			body, _ = json.Marshal(map[string]any{
 				"contents": []any{map[string]any{"role": "user", "parts": []any{map[string]any{"text": prompt}}}},
@@ -465,7 +513,6 @@ func buildUpstreamTestRequest(ctx context.Context, cfg upstreamTestConfig, isIma
 			})
 		}
 	case string(domain.ProtocolAnthropicMessages):
-		requestURL = base + "/v1/messages"
 		body, _ = json.Marshal(map[string]any{
 			"model":      cfg.UpstreamModel,
 			"max_tokens": 64,
@@ -473,7 +520,6 @@ func buildUpstreamTestRequest(ctx context.Context, cfg upstreamTestConfig, isIma
 		})
 	case string(domain.ProtocolOpenAIImages):
 		if cfg.ImageEdit {
-			requestURL = base + "/v1/images/edits"
 			if cfg.Image == nil || len(cfg.Image.Data) == 0 {
 				return nil, fmt.Errorf("image edit compatibility test requires an uploaded image")
 			}
@@ -487,7 +533,6 @@ func buildUpstreamTestRequest(ctx context.Context, cfg upstreamTestConfig, isIma
 			body, contentType = encoded.Body, encoded.ContentType
 			break
 		}
-		requestURL = base + "/v1/images/generations"
 		payload := map[string]any{
 			"model": cfg.UpstreamModel, "prompt": prompt, "n": 1, "size": upstreamTestOpenAIImageSize, "stream": imageStream,
 		}
@@ -495,14 +540,45 @@ func buildUpstreamTestRequest(ctx context.Context, cfg upstreamTestConfig, isIma
 			payload["response_format"] = responseFormat
 		}
 		body, _ = json.Marshal(payload)
-	default: // openai_chat / openai_responses / 其它兜底走 chat completions
-		requestURL = base + "/v1/chat/completions"
+	case string(domain.ProtocolOpenAIResponses):
+		body, _ = json.Marshal(map[string]any{
+			"model": cfg.UpstreamModel, "input": prompt, "max_output_tokens": 64, "stream": false,
+		})
+	case string(domain.ProtocolOpenAIEmbeddings):
+		body, _ = json.Marshal(map[string]any{"model": cfg.UpstreamModel, "input": prompt})
+	case string(domain.ProtocolGeminiEmbeddings):
+		body, _ = json.Marshal(map[string]any{
+			"content": map[string]any{"parts": []any{map[string]any{"text": prompt}}},
+		})
+	default:
 		body, _ = json.Marshal(map[string]any{
 			"model":      cfg.UpstreamModel,
 			"messages":   []any{map[string]any{"role": "user", "content": prompt}},
 			"max_tokens": 64,
 			"stream":     false,
 		})
+	}
+	candidate := &domain.RouteCandidate{
+		Protocol:           domain.UpstreamProtocol(format),
+		BaseURL:            cfg.BaseURL,
+		RequestPath:        cfg.PathOverride,
+		UpstreamModel:      cfg.UpstreamModel,
+		APIKeyCiphertext:   cfg.APIKey,
+		EndpointAuthScheme: cfg.AuthScheme,
+		EndpointAuthHeader: cfg.AuthHeader,
+		ExtraHeaders:       map[string]string{},
+	}
+	if err := json.Unmarshal(cfg.ExtraHeaders, &candidate.ExtraHeaders); len(cfg.ExtraHeaders) > 0 && err != nil {
+		return nil, fmt.Errorf("invalid extra_headers: %w", err)
+	}
+	clientPath := ""
+	if cfg.ImageEdit {
+		clientPath = "/v1/images/edits"
+	}
+	var err error
+	requestURL, err = upstreamcompat.BuildURL(candidate, upstreamcompat.RequestMeta{ClientPath: clientPath})
+	if err != nil {
+		return nil, err
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, requestURL, bytes.NewReader(body))
@@ -515,15 +591,8 @@ func buildUpstreamTestRequest(ctx context.Context, cfg upstreamTestConfig, isIma
 	} else {
 		req.Header.Set("Accept", "application/json")
 	}
-	switch format {
-	case string(domain.ProtocolGeminiGenerate):
-		// key 已在 query 上
-	case string(domain.ProtocolAnthropicMessages):
-		for key, value := range upstreamcompat.AnthropicAPIKeyHeaders(cfg.APIKey) {
-			req.Header.Set(key, value)
-		}
-	default:
-		req.Header.Set("Authorization", "Bearer "+cfg.APIKey)
+	for key, value := range upstreamcompat.BuildHeaders(candidate, upstreamcompat.RequestMeta{ContentType: contentType, IsStream: isImage && imageStream}) {
+		req.Header.Set(key, value)
 	}
 	return req, nil
 }
@@ -576,6 +645,31 @@ func parseUpstreamTestChatResponse(res *upstreamTestResult, format string, body 
 		return
 	}
 	switch strings.TrimSpace(format) {
+	case string(domain.ProtocolOpenAIResponses):
+		res.ReplyText, _ = doc["output_text"].(string)
+		if res.ReplyText == "" {
+			if output, ok := doc["output"].([]any); ok {
+				for _, rawItem := range output {
+					item, _ := rawItem.(map[string]any)
+					content, _ := item["content"].([]any)
+					for _, rawContent := range content {
+						part, _ := rawContent.(map[string]any)
+						if text, _ := part["text"].(string); strings.TrimSpace(text) != "" {
+							res.ReplyText = text
+							break
+						}
+					}
+					if res.ReplyText != "" {
+						break
+					}
+				}
+			}
+		}
+		if usage, ok := doc["usage"].(map[string]any); ok {
+			res.PromptTokens = jsonInt(usage["input_tokens"])
+			res.OutputTokens = jsonInt(usage["output_tokens"])
+			res.TotalTokens = jsonInt(usage["total_tokens"])
+		}
 	case string(domain.ProtocolGeminiGenerate):
 		res.ReplyText = geminiFirstText(doc)
 		if usage, ok := doc["usageMetadata"].(map[string]any); ok {
@@ -616,6 +710,40 @@ func parseUpstreamTestChatResponse(res *upstreamTestResult, format string, body 
 	res.OK = strings.TrimSpace(res.ReplyText) != ""
 	if !res.OK && res.Error == "" {
 		res.Error = "upstream returned no text content"
+	}
+}
+
+func parseUpstreamTestEmbeddingResponse(res *upstreamTestResult, format string, body []byte) {
+	var doc map[string]any
+	if err := json.Unmarshal(body, &doc); err != nil {
+		res.Error = "parse response failed: " + err.Error()
+		return
+	}
+	var values []any
+	if format == string(domain.ProtocolGeminiEmbeddings) {
+		if embedding, ok := doc["embedding"].(map[string]any); ok {
+			values, _ = embedding["values"].([]any)
+		}
+		if usage, ok := doc["usageMetadata"].(map[string]any); ok {
+			res.PromptTokens = jsonInt(usage["promptTokenCount"])
+			res.TotalTokens = jsonInt(usage["totalTokenCount"])
+		}
+	} else {
+		if data, ok := doc["data"].([]any); ok && len(data) > 0 {
+			if item, ok := data[0].(map[string]any); ok {
+				values, _ = item["embedding"].([]any)
+			}
+		}
+		if usage, ok := doc["usage"].(map[string]any); ok {
+			res.PromptTokens = jsonInt(usage["prompt_tokens"])
+			res.TotalTokens = jsonInt(usage["total_tokens"])
+		}
+	}
+	res.OK = len(values) > 0
+	if res.OK {
+		res.ReplyText = fmt.Sprintf("embedding dimension: %d", len(values))
+	} else {
+		res.Error = "upstream returned no embedding vector"
 	}
 }
 

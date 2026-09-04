@@ -1,5 +1,5 @@
 -- ============================================================================
--- Upstream Account CRUD (上游账号；原 Provider + Endpoint 合并为顶级实体)
+-- Upstream Account CRUD (一个供应商账号 + 一把 API Key)
 -- ============================================================================
 
 -- name: CreateUpstreamAccount :one
@@ -7,25 +7,19 @@ INSERT INTO ai_upstream_accounts (
   name,
   tenant_display_name,
   tenant_access_mode,
-  base_url,
   api_key_ciphertext,
-  extra_headers,
-  default_protocol,
   concurrency_limit,
   price_book_id,
   tenant_multiplier,
   status
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+  $1, $2, $3, $4, $5, $6, $7, $8
 )
 RETURNING
   id,
   name,
   tenant_display_name,
   tenant_access_mode,
-  base_url,
-  extra_headers,
-  default_protocol,
   concurrency_limit,
   price_book_id,
   tenant_multiplier,
@@ -41,9 +35,6 @@ SELECT
   name,
   tenant_display_name,
   tenant_access_mode,
-  base_url,
-  extra_headers,
-  default_protocol,
   concurrency_limit,
   price_book_id,
   tenant_multiplier,
@@ -61,10 +52,7 @@ SELECT
   name,
   tenant_display_name,
   tenant_access_mode,
-  base_url,
   api_key_ciphertext,
-  extra_headers,
-  default_protocol,
   concurrency_limit,
   price_book_id,
   tenant_multiplier,
@@ -81,16 +69,13 @@ UPDATE ai_upstream_accounts
 SET name = $2,
     tenant_display_name = $3,
     tenant_access_mode = $4,
-    base_url = $5,
-    api_key_ciphertext = $6,
-    extra_headers = $7,
-    default_protocol = $8,
-    concurrency_limit = $9,
-    price_book_id = $10,
-    tenant_multiplier = $11,
-    status = $12,
-    invalid_reason = CASE WHEN $12 = 'invalid' THEN invalid_reason ELSE '' END,
-    invalid_at = CASE WHEN $12 = 'invalid' THEN invalid_at ELSE NULL END,
+    api_key_ciphertext = $5,
+    concurrency_limit = $6,
+    price_book_id = $7,
+    tenant_multiplier = $8,
+    status = $9,
+    invalid_reason = CASE WHEN $9 = 'invalid' THEN invalid_reason ELSE '' END,
+    invalid_at = CASE WHEN $9 = 'invalid' THEN invalid_at ELSE NULL END,
     updated_at = now()
 WHERE id = $1
 RETURNING
@@ -98,9 +83,6 @@ RETURNING
   name,
   tenant_display_name,
   tenant_access_mode,
-  base_url,
-  extra_headers,
-  default_protocol,
   concurrency_limit,
   price_book_id,
   tenant_multiplier,
@@ -122,9 +104,6 @@ RETURNING
   name,
   tenant_display_name,
   tenant_access_mode,
-  base_url,
-  extra_headers,
-  default_protocol,
   concurrency_limit,
   price_book_id,
   tenant_multiplier,
@@ -146,9 +125,6 @@ RETURNING
   name,
   tenant_display_name,
   tenant_access_mode,
-  base_url,
-  extra_headers,
-  default_protocol,
   concurrency_limit,
   price_book_id,
   tenant_multiplier,
@@ -160,6 +136,73 @@ RETURNING
 
 -- name: DeleteUpstreamAccount :exec
 DELETE FROM ai_upstream_accounts WHERE id = $1;
+
+-- ============================================================================
+-- Upstream Account Endpoint CRUD
+-- ============================================================================
+
+-- name: ListAllUpstreamAccountEndpoints :many
+SELECT id, account_id, api_format, base_url, path_override, auth_scheme,
+       auth_header, extra_headers, status, health_status, last_error,
+       last_checked_at, created_at, updated_at
+FROM ai_upstream_account_endpoints
+ORDER BY account_id, api_format;
+
+-- name: ListUpstreamAccountEndpoints :many
+SELECT id, account_id, api_format, base_url, path_override, auth_scheme,
+       auth_header, extra_headers, status, health_status, last_error,
+       last_checked_at, created_at, updated_at
+FROM ai_upstream_account_endpoints
+WHERE account_id = $1
+ORDER BY api_format ASC;
+
+-- name: GetUpstreamAccountEndpoint :one
+SELECT id, account_id, api_format, base_url, path_override, auth_scheme,
+       auth_header, extra_headers, status, health_status, last_error,
+       last_checked_at, created_at, updated_at
+FROM ai_upstream_account_endpoints
+WHERE id = $1 AND account_id = $2;
+
+-- name: CreateUpstreamAccountEndpoint :one
+INSERT INTO ai_upstream_account_endpoints (
+  account_id, api_format, base_url, path_override, auth_scheme, auth_header,
+  extra_headers, status
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, account_id, api_format, base_url, path_override, auth_scheme,
+          auth_header, extra_headers, status, health_status, last_error,
+          last_checked_at, created_at, updated_at;
+
+-- name: UpdateUpstreamAccountEndpoint :one
+UPDATE ai_upstream_account_endpoints
+SET api_format = $3,
+    base_url = $4,
+    path_override = $5,
+    auth_scheme = $6,
+    auth_header = $7,
+    extra_headers = $8,
+    status = $9,
+    health_status = 'unknown',
+    last_error = '',
+    last_checked_at = NULL,
+    updated_at = now()
+WHERE id = $1 AND account_id = $2
+RETURNING id, account_id, api_format, base_url, path_override, auth_scheme,
+          auth_header, extra_headers, status, health_status, last_error,
+          last_checked_at, created_at, updated_at;
+
+-- name: UpdateUpstreamAccountEndpointHealth :one
+UPDATE ai_upstream_account_endpoints
+SET health_status = $3,
+    last_error = $4,
+    last_checked_at = now(),
+    updated_at = now()
+WHERE id = $1 AND account_id = $2
+RETURNING id, account_id, api_format, base_url, path_override, auth_scheme,
+          auth_header, extra_headers, status, health_status, last_error,
+          last_checked_at, created_at, updated_at;
+
+-- name: DeleteUpstreamAccountEndpoint :execrows
+DELETE FROM ai_upstream_account_endpoints WHERE id = $1 AND account_id = $2;
 
 -- ============================================================================
 -- Group Target CRUD (分组 → 上游目标 直连关联；替代 Group Route)
@@ -236,7 +279,17 @@ SELECT
   gt.created_at,
   gt.updated_at,
   COALESCE(a.tenant_display_name, '')  AS account_name,
-  COALESCE(a.default_protocol, '')     AS default_protocol,
+  CASE WHEN a.id IS NOT NULL THEN ARRAY(
+    SELECT ae.api_format
+    FROM ai_upstream_account_endpoints ae
+    WHERE ae.account_id = a.id AND ae.status = 'active'
+    ORDER BY ae.api_format
+  ) WHEN cp.id IS NOT NULL THEN ARRAY[CASE
+    WHEN cp.fixed_provider_type = 'codex' THEN 'openai_responses'
+    WHEN cp.fixed_provider_type = 'claude_oauth' THEN 'anthropic_messages'
+    WHEN cp.fixed_provider_type IN ('gemini_cli', 'antigravity') THEN 'gemini_generate'
+    ELSE 'openai_chat'
+  END] ELSE ARRAY[]::text[] END AS api_formats,
   COALESCE(cp.tenant_display_name, '') AS pool_name,
   COALESCE(cp.fixed_provider_type, '') AS fixed_provider_type
 FROM ai_group_targets gt
@@ -520,6 +573,7 @@ SELECT
   resolved_provider_family,
   capability_type,
   group_target_id,
+  upstream_account_id,
   endpoint_id,
   credential_pool_id,
   provider_code,
@@ -628,6 +682,7 @@ SELECT
   resolved_provider_family,
   capability_type,
   group_target_id,
+  upstream_account_id,
   endpoint_id,
   credential_pool_id,
   provider_code,

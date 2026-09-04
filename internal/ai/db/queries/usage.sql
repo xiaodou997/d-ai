@@ -24,6 +24,7 @@ INSERT INTO ai_usage_logs (
   resolved_provider_family,
   capability_type,
   group_target_id,
+  upstream_account_id,
   endpoint_id,
   credential_pool_id,
   oauth_credential_id,
@@ -82,7 +83,7 @@ INSERT INTO ai_usage_logs (
   $41, $42, $43, $44, $45, $46, $47, $48, $49, $50,
   $51, $52, $53, $54, $55, $56, $57, $58, $59, $60,
 	  $61, $62, $63, $64, $65, $66, $67, $68, $69, $70,
-	  $71, $72, $73, $74
+	  $71, $72, $73, $74, $75
 )
 ON CONFLICT (request_id) DO NOTHING
 RETURNING id;

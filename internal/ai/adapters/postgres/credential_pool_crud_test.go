@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"xiaodou/dai/internal/ai/domain"
@@ -87,5 +88,80 @@ func TestCredentialPoolRoundTrip(t *testing.T) {
 	}
 	if !found {
 		t.Error("ListPools() did not return the created pool")
+	}
+}
+
+func TestCredentialPoolActivationRejectsUnsupportedActiveBindings(t *testing.T) {
+	ctx := context.Background()
+	pool, cleanup, err := testsupport.OpenAsyncTaskTestPool(ctx, testsupport.AsyncTaskPoolOptions{MaxConns: 2})
+	if err != nil {
+		t.Skipf("credential pool test database unavailable: %v", err)
+	}
+	t.Cleanup(func() { _ = cleanup(context.Background()) })
+
+	store := NewOAuthCredentialStore(pool, "0123456789abcdef0123456789abcdef")
+	id, err := store.CreatePool(ctx, domain.CredentialPoolCreate{
+		Name: "invalid-codex-pool", TenantDisplayName: "Invalid Codex Pool",
+		TenantAccessMode: "public", FixedProviderType: domain.FixedProviderCodex,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO ai_upstream_models (upstream_kind, upstream_id, model_code, capability_type, upstream_model_name, status)
+		VALUES ('oauth_pool', $1::uuid, 'image-model', 'image', 'image-model', 'active')
+	`, id); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.UpdatePoolStatus(ctx, id, "active"); !errors.Is(err, domain.ErrValidation) {
+		t.Fatalf("UpdatePoolStatus() error = %v, want validation", err)
+	}
+	poolAfter, err := store.GetPool(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if poolAfter.Status != "disabled" {
+		t.Fatalf("pool status after rejected activation = %q, want disabled", poolAfter.Status)
+	}
+}
+
+func TestDeleteCredentialPoolRemovesModelBindings(t *testing.T) {
+	ctx := context.Background()
+	pool, cleanup, err := testsupport.OpenAsyncTaskTestPool(ctx, testsupport.AsyncTaskPoolOptions{MaxConns: 2})
+	if err != nil {
+		t.Skipf("credential pool test database unavailable: %v", err)
+	}
+	t.Cleanup(func() { _ = cleanup(context.Background()) })
+
+	store := NewOAuthCredentialStore(pool, "0123456789abcdef0123456789abcdef")
+	id, err := store.CreatePool(ctx, domain.CredentialPoolCreate{
+		Name: "delete-codex-pool", TenantDisplayName: "Delete Codex Pool",
+		TenantAccessMode: "public", FixedProviderType: domain.FixedProviderCodex,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO ai_upstream_models (upstream_kind, upstream_id, model_code, capability_type, upstream_model_name, status)
+		VALUES ('oauth_pool', $1::uuid, 'chat-model', 'chat', 'chat-model', 'active')
+	`, id); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := store.DeletePool(ctx, id); err != nil {
+		t.Fatalf("DeletePool() error = %v", err)
+	}
+	var modelCount int
+	if err := pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM ai_upstream_models
+		WHERE upstream_kind = 'oauth_pool' AND upstream_id = $1::uuid
+	`, id).Scan(&modelCount); err != nil {
+		t.Fatal(err)
+	}
+	if modelCount != 0 {
+		t.Fatalf("remaining model bindings = %d, want 0", modelCount)
+	}
+	if _, err := store.GetPool(ctx, id); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("GetPool() after delete error = %v, want not found", err)
 	}
 }

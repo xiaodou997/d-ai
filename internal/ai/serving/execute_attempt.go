@@ -60,9 +60,8 @@ func buildClientInvocation(req *Request, candidate *domain.RouteCandidate, prepa
 }
 
 // acquireUpstreamSlot claims one concurrency slot on a direct upstream account.
-// Pool routes carry no EndpointID and are not capped here.
 func (s *ExecuteStep) acquireUpstreamSlot(ctx context.Context, req *Request, candidate *domain.RouteCandidate) (UpstreamSlot, error) {
-	if candidate == nil || candidate.EndpointID == "" || candidate.UpstreamConcurrencyLimit == nil || *candidate.UpstreamConcurrencyLimit <= 0 {
+	if candidate == nil || candidate.EffectiveAccountID() == "" || candidate.UpstreamConcurrencyLimit == nil || *candidate.UpstreamConcurrencyLimit <= 0 {
 		return nil, nil
 	}
 	if s.UpstreamLimiter == nil {
@@ -72,7 +71,7 @@ func (s *ExecuteStep) acquireUpstreamSlot(ctx context.Context, req *Request, can
 	if req != nil {
 		requestID = req.RequestID
 	}
-	return s.UpstreamLimiter.Acquire(ctx, candidate.EndpointID, requestID, *candidate.UpstreamConcurrencyLimit, upstreamSlotLeaseTTL(candidate))
+	return s.UpstreamLimiter.Acquire(ctx, candidate.EffectiveAccountID(), requestID, *candidate.UpstreamConcurrencyLimit, upstreamSlotLeaseTTL(candidate))
 }
 
 // upstreamSlotLeaseTTL bounds how long a slot can be stranded if the process
@@ -392,11 +391,11 @@ func (s *ExecuteStep) runAttempt(parentCtx context.Context, req *Request, cand *
 
 	case DecisionRetry:
 		drainAndClose(upResp)
-		if outcome.Status == ResultUnauthorized && !cand.IsPoolRoute() && cand.EndpointID != "" && s.AccountState != nil {
+		if outcome.Status == ResultUnauthorized && !cand.IsPoolRoute() && cand.EffectiveAccountID() != "" && s.AccountState != nil {
 			reason := fmt.Sprintf("runtime request: upstream returned HTTP %d", status)
-			if _, err := s.AccountState.MarkAccountInvalid(parentCtx, cand.EndpointID, reason); err != nil {
+			if _, err := s.AccountState.MarkAccountInvalid(parentCtx, cand.EffectiveAccountID(), reason); err != nil {
 				zap.L().Warn("failed to mark upstream account invalid",
-					requestLogFields(req, zap.String("account_id", cand.EndpointID), zap.Error(err))...,
+					requestLogFields(req, zap.String("account_id", cand.EffectiveAccountID()), zap.Error(err))...,
 				)
 			}
 		}

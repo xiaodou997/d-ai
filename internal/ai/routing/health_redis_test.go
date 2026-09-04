@@ -38,6 +38,24 @@ func TestRedisHealthTrackerSharesFailureCounterAcrossNodes(t *testing.T) {
 	}
 }
 
+func TestRedisHealthTrackerForgetClearsSharedState(t *testing.T) {
+	server := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: server.Addr()})
+	t.Cleanup(func() { _ = client.Close() })
+	tracker := NewRedisHealthTracker(NewInMemoryTracker(1, time.Minute), client)
+	tracker.RecordFailure("endpoint-1", TargetEndpoint)
+	if tracker.StateOf("endpoint-1") != StateOpen {
+		t.Fatal("endpoint should be open before Forget")
+	}
+	tracker.Forget("endpoint-1")
+	if tracker.StateOf("endpoint-1") != StateClosed {
+		t.Fatal("endpoint remained open after Forget")
+	}
+	if records := tracker.Snapshot(); len(records) != 0 {
+		t.Fatalf("snapshot after Forget = %+v", records)
+	}
+}
+
 func TestRedisHealthTrackerClaimsSingleHalfOpenProbe(t *testing.T) {
 	server := miniredis.RunT(t)
 	client := redis.NewClient(&redis.Options{Addr: server.Addr()})

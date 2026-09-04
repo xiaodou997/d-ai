@@ -103,7 +103,7 @@ type GroupTarget struct {
 type GroupTargetDetail struct {
 	GroupTarget
 	AccountName       string
-	DefaultProtocol   string
+	APIFormats        []string
 	PoolName          string
 	FixedProviderType string
 	// Available/UnavailableReason 表达该绑定当前对本租户是否仍可服务，用于把

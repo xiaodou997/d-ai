@@ -441,7 +441,7 @@ func healthTarget(cand *domain.RouteCandidate) (string, routing.TargetKind) {
 	if cand.IsPoolRoute() {
 		return cand.PoolID, routing.TargetPool
 	}
-	return cand.EndpointID, routing.TargetAccount
+	return cand.EndpointID, routing.TargetEndpoint
 }
 
 func (s *ExecuteStep) Rollback(_ context.Context, _ *Request) {}
@@ -462,7 +462,7 @@ func (s *ExecuteStep) writeSticky(ctx context.Context, req *Request, cand *domai
 			b.CredentialID = req.SelectedCredential.ID
 		}
 	} else {
-		b.TargetKind = "account"
+		b.TargetKind = "endpoint"
 		b.EndpointID = cand.EndpointID
 	}
 	if err := s.Sticky.SetBinding(ctx, subject.TenantID, runtimeSubjectStickyKey(subject), req.StickyModelKey(), req.ConversationID, &b); err != nil {

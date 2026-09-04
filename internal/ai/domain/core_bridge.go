@@ -7,7 +7,6 @@ import (
 	"xiaodou/dai/internal/ai/core/billing"
 	"xiaodou/dai/internal/ai/core/catalog"
 	"xiaodou/dai/internal/ai/core/identity"
-	"xiaodou/dai/internal/ai/core/upstream"
 )
 
 // ToCore converts a legacy capability to the rebuilt catalog capability.
@@ -63,33 +62,6 @@ func (k APIKey) ToCore() identity.APIKey {
 		CreatedBy:       k.CreatedBy,
 		CreatedAt:       k.CreatedAt,
 		UpdatedAt:       k.UpdatedAt,
-	}
-}
-
-// ToCore converts a legacy upstream account to the rebuilt upstream resource.
-func (a UpstreamAccount) ToCore() upstream.Upstream {
-	mode := upstream.AccessModeDirect
-	family := upstream.ProviderFamilyOpenAICompatible
-	switch EndpointProtocol(a.DefaultProtocol) {
-	case EndpointProtocolAnthropic:
-		family = upstream.ProviderFamilyAnthropic
-	case EndpointProtocolGemini:
-		family = upstream.ProviderFamilyGoogle
-	case EndpointProtocolOpenAICompatible:
-		family = upstream.ProviderFamilyOpenAICompatible
-	default:
-		family = upstream.ProviderFamilyOther
-	}
-	return upstream.Upstream{
-		ID:             a.ID,
-		Code:           a.Name,
-		Name:           a.Name,
-		ProviderFamily: family,
-		AccessMode:     mode,
-		BaseURL:        a.BaseURL,
-		Status:         upstream.Status(a.Status),
-		CreatedAt:      a.CreatedAt,
-		UpdatedAt:      a.UpdatedAt,
 	}
 }
 

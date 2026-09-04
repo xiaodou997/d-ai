@@ -149,7 +149,7 @@ type AttemptRecord struct {
 	TargetID           string // deployment_id or credential_id (legacy/opaque; kept for existing consumers)
 	ProviderCode       string
 	UpstreamModel      string
-	EndpointID         string // ai_upstream_accounts.id; empty for pool routes
+	EndpointID         string // ai_upstream_account_endpoints.id; empty for pool routes
 	PoolID             string // ai_credential_pools.id; empty for account routes
 	CredentialID       string // OAuth credential actually used this attempt; empty when not pool-based
 	ProfileRevision    string // fixed-client profile frozen for this attempt

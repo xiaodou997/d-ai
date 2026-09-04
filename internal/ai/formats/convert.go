@@ -4,13 +4,9 @@
 // no canonical hub or cross-protocol body translation here — the gateway
 // forwards request and response bytes verbatim.
 //
-// 注意（账号级路由后）：路由按账号 default_protocol 家族匹配候选（OpenAI 系的
-// 5 个子协议同属 openai_compatible 家族；见 adapters/postgres/routes.go 的
-// accountProtocolFamily），但候选回填的 wire 协议（c.Protocol）取 client 的真实
-// 细粒度协议，家族内 1:1 透传。因此 client_protocol == upstream_protocol 对全部
-// 8 个协议成立：每个 OpenAI 子协议各走自己的上游路径（/v1/responses、
-// /v1/embeddings、/v1/images、/v1/completions），gemini_embeddings 走 :embedContent。
-// 仍不做跨家族翻译——跨家族 shape 不符才会以上游 4xx 暴露。
+// 账号端点声明精确 wire 格式，零转换候选直接透传；开启协议转换的分组才会进入
+// bridge runtime。每个 OpenAI 子协议走自己的默认路径，gemini_embeddings 走
+// :embedContent；自定义路径由端点的 path_override 覆盖。
 package formats
 
 import (

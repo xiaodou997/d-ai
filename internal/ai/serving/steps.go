@@ -203,7 +203,7 @@ func findStickyCandidate(candidates []*domain.RouteCandidate, b *routing.StickyB
 			continue
 		}
 		switch b.TargetKind {
-		case "account":
+		case "endpoint", "account": // account is the legacy pre-endpoint label.
 			if c.EndpointID == b.EndpointID {
 				return i
 			}

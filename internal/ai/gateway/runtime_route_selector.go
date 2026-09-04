@@ -119,6 +119,7 @@ func plannedCandidate(planned coreruntime.PlannedTarget, req coreruntime.Request
 		RoutePolicy:                  string(group.RoutePolicy),
 		Protocol:                     providerProtocol,
 		BaseURL:                      up.BaseURL,
+		RequestPath:                  binding.RequestPath,
 		Timeouts:                     routeTimeoutsFromUpstream(runtimecompat.CapabilityFromCore(req.Capability), up),
 		ProviderCode:                 firstNonEmptyRuntime(up.Code, up.Name, up.ID),
 		UpstreamConcurrencyLimit:     up.ConcurrencyLimit,
@@ -142,9 +143,12 @@ func plannedCandidate(planned coreruntime.PlannedTarget, req coreruntime.Request
 	}
 	switch modelBinding.UpstreamKind {
 	case coreupstream.AccessModeDirect:
-		cand.EndpointID = up.ID
+		cand.AccountID = up.ID
+		cand.EndpointID = binding.EndpointID
 		cand.UpstreamModel = upstreamModel
 		cand.APIKeyCiphertext = binding.APIKeyCiphertext
+		cand.EndpointAuthScheme = binding.EndpointAuthScheme
+		cand.EndpointAuthHeader = binding.EndpointAuthHeader
 		cand.ExtraHeaders = mapStringCopy(binding.ExtraHeaders)
 	case coreupstream.AccessModeOAuthPool:
 		cand.PoolID = up.ID

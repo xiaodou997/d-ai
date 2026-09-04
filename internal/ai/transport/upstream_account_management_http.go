@@ -1,6 +1,10 @@
 package transport
 
-import "github.com/danielgtaylor/huma/v2"
+import (
+	"github.com/danielgtaylor/huma/v2"
+
+	"xiaodou/dai/internal/ai/routing"
+)
 
 // UpstreamAccountManagementHTTPDeps is the complete dependency boundary for
 // direct upstream-account CRUD and portable transfer workflows. Connectivity,
@@ -9,11 +13,13 @@ type UpstreamAccountManagementHTTPDeps struct {
 	Auth            HTTPAuthDeps
 	Accounts        UpstreamAccountCatalog
 	AccountManager  UpstreamAccountManager
+	EndpointManager UpstreamAccountEndpointManager
 	AccountReader   UpstreamAccountReader
 	ProviderSecrets ProviderSecretCodec
 	ModelBindings   UpstreamModelBindingStore
 	PriceBooks      PriceBookReader
 	AdminAudit      AdminAuditRecorder
+	RuntimeHealth   routing.HealthTracker
 }
 
 // RegisterUpstreamAccountManagement owns the platform-admin authenticated

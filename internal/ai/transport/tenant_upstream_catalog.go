@@ -13,7 +13,6 @@ import (
 type tenantUpstreamModelDTO struct {
 	ModelCode      string             `json:"model_code"`
 	CapabilityType string             `json:"capability_type"`
-	APIFormat      string             `json:"api_format"`
 	Availability   string             `json:"availability" enum:"available,no_price_configured"`
 	Price          *priceBookEntryDTO `json:"price,omitempty"`
 }
@@ -26,6 +25,7 @@ type tenantUpstreamResourceDTO struct {
 	PriceBookID       string                   `json:"price_book_id,omitempty"`
 	PriceBookName     string                   `json:"price_book_name,omitempty"`
 	PriceBookRevision int64                    `json:"price_book_revision,omitempty"`
+	APIFormats        []string                 `json:"api_formats"`
 	Models            []tenantUpstreamModelDTO `json:"models"`
 }
 
@@ -78,12 +78,13 @@ func loadTenantUpstreamResources(ctx context.Context, reader ModelCatalogReader,
 			ID: resource.ID, ResourceKind: string(resource.Kind), Name: resource.Name,
 			TenantMultiplier: resource.TenantMultiplier, PriceBookID: resource.PriceBookID,
 			PriceBookName: resource.PriceBookName, PriceBookRevision: resource.PriceBookRevision,
-			Models: make([]tenantUpstreamModelDTO, 0, len(resource.Models)),
+			APIFormats: append([]string(nil), resource.APIFormats...),
+			Models:     make([]tenantUpstreamModelDTO, 0, len(resource.Models)),
 		}
 		for _, source := range resource.Models {
 			model := tenantUpstreamModelDTO{
 				ModelCode: source.ModelCode, CapabilityType: source.CapabilityType,
-				APIFormat: source.APIFormat, Availability: "no_price_configured",
+				Availability: "no_price_configured",
 			}
 			if source.Price != nil {
 				price := priceBookEntryToDTO(*source.Price)

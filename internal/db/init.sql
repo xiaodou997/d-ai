@@ -989,18 +989,16 @@ CREATE INDEX idx_ledger_credit_leases_account
   CREATE INDEX IF NOT EXISTS idx_ai_api_keys_tenant_status       ON ai_api_keys (tenant_id, status);
 
   -- ============================================================================
-  -- AI Upstream Accounts (上游账号，API Key 型上游；原 ai_providers + ai_provider_endpoints 合并)
-  -- 顶级实体，不再有「厂商」父层。OAuth 池型上游见 ai_credential_pools。
+  -- AI Upstream Accounts (上游账号，API Key 型上游)
+  -- 一个账号表示一个供应商和一把 API Key；实际支持的请求格式由子表
+  -- ai_upstream_account_endpoints 显式声明。OAuth 池型上游见 ai_credential_pools。
   -- ============================================================================
   CREATE TABLE IF NOT EXISTS ai_upstream_accounts (
     id                 UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
     name               TEXT        NOT NULL UNIQUE,
     tenant_display_name TEXT       NOT NULL,
     tenant_access_mode  TEXT       NOT NULL DEFAULT 'public',
-    base_url           TEXT        NOT NULL,
     api_key_ciphertext TEXT        NOT NULL,
-    extra_headers      JSONB       NOT NULL DEFAULT '{}',
-    default_protocol   TEXT        NOT NULL DEFAULT 'openai_compatible',
     -- 该账号允许同时在飞的出站请求数上限；NULL = 不限制。
     -- 刻意用并发而非 RPM：LLM 请求时长跨数量级（短问答 800ms / 生图 30s / 长流式 3min），
     -- 每分钟请求数与上游真实资源占用不成正比，而并发数直接对应上游占用、长短请求自适应。
@@ -1022,6 +1020,35 @@ CREATE INDEX idx_ledger_credit_leases_account
   );
 
   CREATE INDEX IF NOT EXISTS idx_ai_upstream_accounts_status   ON ai_upstream_accounts (status);
+
+  -- ============================================================================
+  -- AI Upstream Account Endpoints（直连账号支持的真实请求端点）
+  -- Endpoint 是 API 格式、URL、认证形态和附加请求头的事实源。一个账号可以支持
+  -- 多种格式，但同一格式只能配置一次；模型属于账号，不按 Endpoint 重复维护。
+  -- ============================================================================
+  CREATE TABLE IF NOT EXISTS ai_upstream_account_endpoints (
+    id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    account_id      UUID        NOT NULL REFERENCES ai_upstream_accounts(id) ON DELETE CASCADE,
+	api_format      TEXT        NOT NULL,
+    base_url        TEXT        NOT NULL CHECK (btrim(base_url) <> ''),
+    path_override   TEXT        NOT NULL DEFAULT '',
+    auth_scheme     TEXT        NOT NULL DEFAULT 'format_default' CHECK (auth_scheme IN (
+      'format_default', 'bearer', 'anthropic_api_key', 'gemini_api_key', 'custom_header'
+    )),
+    auth_header     TEXT        NOT NULL DEFAULT '',
+	extra_headers   JSONB       NOT NULL DEFAULT '{}' CHECK (jsonb_typeof(extra_headers) = 'object'),
+	status          TEXT        NOT NULL DEFAULT 'active',
+    health_status   TEXT        NOT NULL DEFAULT 'unknown' CHECK (health_status IN ('unknown', 'healthy', 'unhealthy')),
+    last_error      TEXT        NOT NULL DEFAULT '',
+    last_checked_at TIMESTAMPTZ,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+	UNIQUE (account_id, api_format),
+	CHECK (auth_scheme <> 'custom_header' OR btrim(auth_header) <> '')
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_ai_upstream_account_endpoints_account
+    ON ai_upstream_account_endpoints (account_id, status, api_format);
 
   -- ============================================================================
   -- AI Credential Pools (OAuth 账号池，对应 Codex/Claude OAuth/Gemini CLI 等固定厂商)
@@ -1097,16 +1124,16 @@ CREATE INDEX idx_ledger_credit_leases_account
 
   -- ============================================================================
   -- AI Upstream Models（显式上游模型绑定）
-  -- 一行显式表达“哪个上游目标，可服务哪个对外模型，实际走哪个上游协议/模型名”。
+  -- 一行显式表达“哪个上游目标，可服务哪个对外模型、使用哪个上游模型名”。
   -- 说明：
-  --   1. api_format 使用运行时协议名（openai_chat / gemini_generate / ...）。
-  --   2. 不使用外键，由业务层保证关联关系。
-  --   3. request/response 协议已合并为单一 api_format——实际使用中两者永远相同。
-  --   4. weight 已移除——运行时路由不使用 binding 级 weight；分组策略和运行时
+  --   1. 不使用外键，由业务层保证关联关系。
+  --   2. 直连账号的可用协议来自 ai_upstream_account_endpoints；OAuth 池协议来自
+  --      fixed_provider_type。模型不按请求格式重复维护。
+  --   3. weight 已移除——运行时路由不使用 binding 级 weight；分组策略和运行时
   --      健康/性能信号负责选择，失败目标自动故障转移。
-  --   5. priority 已移除——每个 model_code + capability_type 在同一上游上只有
+  --   4. priority 已移除——每个 model_code + capability_type 在同一上游上只有
   --      一条绑定，binding 级 priority 作为次级排序键从未实际生效。
-  --   6. 唯一约束已收紧为 (upstream_kind, upstream_id, model_code, capability_type)——
+  --   5. 唯一约束为 (upstream_kind, upstream_id, model_code, capability_type)——
   --      从 DB 层面保证每个模型只有一条绑定，消除多协议选择逻辑。
   -- ============================================================================
   CREATE TABLE IF NOT EXISTS ai_upstream_models (
@@ -1116,7 +1143,6 @@ CREATE INDEX idx_ledger_credit_leases_account
     upstream_id         UUID        NOT NULL,
     model_code          TEXT        NOT NULL,
     capability_type     TEXT        NOT NULL,
-    api_format          TEXT        NOT NULL,
     upstream_model_name TEXT        NOT NULL,
     status              TEXT        NOT NULL DEFAULT 'active',
     config_json         JSONB       NOT NULL DEFAULT '{}',
@@ -1128,7 +1154,7 @@ CREATE INDEX idx_ledger_credit_leases_account
   CREATE INDEX IF NOT EXISTS idx_ai_upstream_models_lookup
     ON ai_upstream_models (upstream_kind, upstream_id, model_code, capability_type, status);
   CREATE INDEX IF NOT EXISTS idx_ai_upstream_models_model
-    ON ai_upstream_models (model_code, capability_type, api_format, status);
+    ON ai_upstream_models (model_code, capability_type, status);
 
   -- ============================================================================
   -- AI Provider OAuth Credentials (Pool 内的 OAuth Token 账号)
@@ -1337,7 +1363,8 @@ CREATE INDEX idx_ledger_credit_leases_account
   -- AI Usage Logs (请求明细日志)
   -- provider_format: 实际使用的上游协议（同 upstream_protocol）
   -- cache_write / cache_read / reasoning tokens 独立记录，计费按 input 价格
-  -- 说明：group_target_id 记录命中的 ai_group_targets.id；endpoint_id 记录命中的上游账号 id；
+  -- 说明：group_target_id 记录命中的 ai_group_targets.id；upstream_account_id 记录直连账号；
+  -- endpoint_id 记录命中的 ai_upstream_account_endpoints.id；
   -- credential_pool_id / oauth_credential_id 记录池与实际凭证。group_id 记录候选所属分组。
   -- ============================================================================
   CREATE TABLE IF NOT EXISTS ai_usage_logs (
@@ -1366,6 +1393,7 @@ CREATE INDEX idx_ledger_credit_leases_account
     resolved_provider_family TEXT,
     capability_type        TEXT        NOT NULL DEFAULT 'chat',
     group_target_id         UUID,
+    upstream_account_id     UUID,
     endpoint_id            UUID,
     provider_code          TEXT,
     upstream_model         TEXT,
@@ -1481,6 +1509,10 @@ CREATE INDEX idx_ledger_credit_leases_account
   CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_subscription      ON ai_usage_logs (subscription_id, created_at DESC) WHERE subscription_id IS NOT NULL;
   CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_billing_status ON ai_usage_logs (billing_status, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_route             ON ai_usage_logs (group_target_id);
+  CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_upstream_account  ON ai_usage_logs (upstream_account_id, created_at DESC)
+    WHERE upstream_account_id IS NOT NULL;
+  CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_endpoint          ON ai_usage_logs (endpoint_id, created_at DESC)
+    WHERE endpoint_id IS NOT NULL;
   CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_tenant_error_time ON ai_usage_logs (tenant_id, created_at DESC)
     WHERE request_status = 'failed';
   CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_oauth_cred ON ai_usage_logs (oauth_credential_id)
@@ -2712,6 +2744,6 @@ CREATE TABLE dai_schema_metadata (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 31);
+INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 32);
 
 COMMIT;

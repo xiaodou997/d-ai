@@ -35,8 +35,10 @@ func TestListGroupTargetDetailsAvailability(t *testing.T) {
 		args []any
 	}{
 		{`INSERT INTO ai_groups (id, tenant_id, name, retail_price_book_id) VALUES ($1::uuid, $2, 'g', $3::uuid)`, []any{groupID, tenantID, priceBook}},
-		{`INSERT INTO ai_upstream_accounts (id, name, tenant_display_name, tenant_access_mode, base_url, api_key_ciphertext, status)
-		  VALUES ($1::uuid, 'acct', 'Acct', 'public', 'https://u', 'x', 'active')`, []any{accountID}},
+		{`INSERT INTO ai_upstream_accounts (id, name, tenant_display_name, tenant_access_mode, api_key_ciphertext, status)
+		  VALUES ($1::uuid, 'acct', 'Acct', 'public', 'x', 'active')`, []any{accountID}},
+		{`INSERT INTO ai_upstream_account_endpoints (account_id, api_format, base_url, status)
+		  VALUES ($1::uuid, 'openai_responses', 'https://u', 'active')`, []any{accountID}},
 		{`INSERT INTO ai_group_targets (id, group_id, target_kind, target_id, status)
 		  VALUES ($1::uuid, $2::uuid, 'direct_upstream', $3::uuid, 'active')`, []any{bindingID, groupID, accountID}},
 	}

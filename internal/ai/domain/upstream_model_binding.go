@@ -18,7 +18,6 @@ type UpstreamModelBinding struct {
 	ID                string
 	ModelCode         string
 	CapabilityType    string
-	APIFormat         string
 	UpstreamModelName string
 	Status            string
 	ConfigJSON        []byte
@@ -29,7 +28,6 @@ type UpstreamModelBinding struct {
 type UpstreamModelBindingWrite struct {
 	ModelCode         string
 	CapabilityType    string
-	APIFormat         string
 	UpstreamModelName string
 	Status            string
 	ConfigJSON        []byte

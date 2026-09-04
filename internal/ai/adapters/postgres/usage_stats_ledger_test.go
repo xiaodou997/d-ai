@@ -221,20 +221,20 @@ func TestUpstreamSummaryReportsOutputPerResource(t *testing.T) {
 	const tenantID = "tenant-upstream-summary"
 	var accountID string
 	if err := pool.QueryRow(ctx, `
-		INSERT INTO ai_upstream_accounts (name, tenant_display_name, base_url, api_key_ciphertext, default_protocol)
-		VALUES ('acct-live', 'acct-live', 'https://example.test', 'cipher', 'openai_compatible')
+		INSERT INTO ai_upstream_accounts (name, tenant_display_name, api_key_ciphertext)
+		VALUES ('acct-live', 'acct-live', 'cipher')
 		RETURNING id::text
 	`).Scan(&accountID); err != nil {
 		t.Fatalf("seed account: %v", err)
 	}
 
 	// A chat row and an image row on the live account, plus one row whose
-	// account no longer exists (endpoint_id has no FK, mirroring a deletion).
+	// account no longer exists (upstream_account_id has no FK, preserving history).
 	const goneID = "99999999-9999-9999-9999-999999999999"
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO ai_usage_logs (
 		  request_id, key_owner_type, auth_method, request_source, tenant_id, user_id,
-		  model_code, endpoint_id, provider_code,
+		  model_code, upstream_account_id, provider_code,
 		  prompt_tokens, completion_tokens, total_tokens,
 		  billable_unit_type, billable_units,
 		  catalog_base, tenant_payable, retail_base, user_payable, user_charged,

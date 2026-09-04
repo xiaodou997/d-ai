@@ -25,7 +25,6 @@ func (s *UpstreamModelBindingStore) List(ctx context.Context, scope domain.Upstr
 			id::text,
 			model_code,
 			capability_type,
-			api_format,
 			upstream_model_name,
 			status,
 			config_json,
@@ -33,7 +32,7 @@ func (s *UpstreamModelBindingStore) List(ctx context.Context, scope domain.Upstr
 			updated_at
 		FROM ai_upstream_models
 		WHERE upstream_kind = $1 AND upstream_id = $2::uuid
-		ORDER BY model_code ASC, api_format ASC, upstream_model_name ASC
+		ORDER BY model_code ASC, upstream_model_name ASC
 	`, string(scope.Kind), scope.ID)
 	if err != nil {
 		return nil, fmt.Errorf("list upstream model bindings: %w", err)
@@ -85,7 +84,6 @@ func (s *UpstreamModelBindingStore) FindByModel(ctx context.Context, scope domai
 			id::text,
 			model_code,
 			capability_type,
-			api_format,
 			upstream_model_name,
 			status,
 			config_json,
@@ -112,7 +110,6 @@ func (s *UpstreamModelBindingStore) Get(ctx context.Context, scope domain.Upstre
 			id::text,
 			model_code,
 			capability_type,
-			api_format,
 			upstream_model_name,
 			status,
 			config_json,
@@ -132,16 +129,23 @@ func (s *UpstreamModelBindingStore) Get(ctx context.Context, scope domain.Upstre
 }
 
 func (s *UpstreamModelBindingStore) Create(ctx context.Context, scope domain.UpstreamModelBindingScope, write domain.UpstreamModelBindingWrite) (domain.UpstreamModelBinding, error) {
-	item, err := scanManagementBinding(s.pool.QueryRow(ctx, `
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return domain.UpstreamModelBinding{}, fmt.Errorf("begin create upstream model binding: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := validateActiveModelBindingWrite(ctx, tx, scope, write); err != nil {
+		return domain.UpstreamModelBinding{}, err
+	}
+	item, err := scanManagementBinding(tx.QueryRow(ctx, `
 		INSERT INTO ai_upstream_models (
 			upstream_kind, upstream_id, model_code, capability_type,
-			api_format, upstream_model_name, status, config_json
-		) VALUES ($1, $2::uuid, $3, $4, $5, $6, $7, $8::jsonb)
+			upstream_model_name, status, config_json
+		) VALUES ($1, $2::uuid, $3, $4, $5, $6, $7::jsonb)
 		RETURNING
 			id::text,
 			model_code,
 			capability_type,
-			api_format,
 			upstream_model_name,
 			status,
 			config_json,
@@ -149,30 +153,39 @@ func (s *UpstreamModelBindingStore) Create(ctx context.Context, scope domain.Ups
 			updated_at
 	`,
 		string(scope.Kind), scope.ID, write.ModelCode, write.CapabilityType,
-		write.APIFormat, write.UpstreamModelName, write.Status, nonEmptyBindingConfig(write.ConfigJSON),
+		write.UpstreamModelName, write.Status, nonEmptyBindingConfig(write.ConfigJSON),
 	).Scan)
 	if err != nil {
 		return domain.UpstreamModelBinding{}, fmt.Errorf("create upstream model binding: %w", translatePersistenceError(err))
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return domain.UpstreamModelBinding{}, fmt.Errorf("commit create upstream model binding: %w", err)
 	}
 	return item, nil
 }
 
 func (s *UpstreamModelBindingStore) Update(ctx context.Context, scope domain.UpstreamModelBindingScope, bindingID string, write domain.UpstreamModelBindingWrite) (domain.UpstreamModelBinding, error) {
-	item, err := scanManagementBinding(s.pool.QueryRow(ctx, `
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return domain.UpstreamModelBinding{}, fmt.Errorf("begin update upstream model binding: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := validateActiveModelBindingWrite(ctx, tx, scope, write); err != nil {
+		return domain.UpstreamModelBinding{}, err
+	}
+	item, err := scanManagementBinding(tx.QueryRow(ctx, `
 		UPDATE ai_upstream_models
 		SET model_code = $4,
 			capability_type = $5,
-			api_format = $6,
-			upstream_model_name = $7,
-			status = $8,
-			config_json = $9::jsonb,
+			upstream_model_name = $6,
+			status = $7,
+			config_json = $8::jsonb,
 			updated_at = now()
 		WHERE id = $1::uuid AND upstream_kind = $2 AND upstream_id = $3::uuid
 		RETURNING
 			id::text,
 			model_code,
 			capability_type,
-			api_format,
 			upstream_model_name,
 			status,
 			config_json,
@@ -180,7 +193,7 @@ func (s *UpstreamModelBindingStore) Update(ctx context.Context, scope domain.Ups
 			updated_at
 	`,
 		bindingID, string(scope.Kind), scope.ID, write.ModelCode, write.CapabilityType,
-		write.APIFormat, write.UpstreamModelName, write.Status, nonEmptyBindingConfig(write.ConfigJSON),
+		write.UpstreamModelName, write.Status, nonEmptyBindingConfig(write.ConfigJSON),
 	).Scan)
 	err = translatePersistenceError(err)
 	if errors.Is(err, domain.ErrNotFound) {
@@ -188,6 +201,9 @@ func (s *UpstreamModelBindingStore) Update(ctx context.Context, scope domain.Ups
 	}
 	if err != nil {
 		return domain.UpstreamModelBinding{}, fmt.Errorf("update upstream model binding: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return domain.UpstreamModelBinding{}, fmt.Errorf("commit update upstream model binding: %w", err)
 	}
 	return item, nil
 }
@@ -234,9 +250,14 @@ func (s *UpstreamModelBindingStore) Import(ctx context.Context, scope domain.Ups
 		return result, fmt.Errorf("begin upstream model import: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if len(writes) > 0 {
+		if err := validateActiveModelBindingWrite(ctx, tx, scope, writes[0]); err != nil {
+			return result, err
+		}
+	}
 
 	rows, err := tx.Query(ctx, `
-		SELECT model_code
+		SELECT model_code, capability_type
 		FROM ai_upstream_models
 		WHERE upstream_kind = $1 AND upstream_id = $2::uuid
 	`, string(scope.Kind), scope.ID)
@@ -245,12 +266,12 @@ func (s *UpstreamModelBindingStore) Import(ctx context.Context, scope domain.Ups
 	}
 	existing := make(map[string]struct{})
 	for rows.Next() {
-		var code string
-		if err := rows.Scan(&code); err != nil {
+		var code, capability string
+		if err := rows.Scan(&code, &capability); err != nil {
 			rows.Close()
 			return result, fmt.Errorf("scan existing upstream model: %w", err)
 		}
-		existing[code] = struct{}{}
+		existing[modelBindingImportKey(code, capability)] = struct{}{}
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
@@ -258,20 +279,24 @@ func (s *UpstreamModelBindingStore) Import(ctx context.Context, scope domain.Ups
 	}
 
 	for _, write := range writes {
-		if _, ok := existing[write.ModelCode]; ok {
+		if err := validateActiveModelBindingWrite(ctx, tx, scope, write); err != nil {
+			return result, err
+		}
+		key := modelBindingImportKey(write.ModelCode, write.CapabilityType)
+		if _, ok := existing[key]; ok {
 			result.Skipped = append(result.Skipped, write.ModelCode)
 			continue
 		}
 		if _, err := tx.Exec(ctx, `
 			INSERT INTO ai_upstream_models (
 				upstream_kind, upstream_id, model_code, capability_type,
-				api_format, upstream_model_name, status
-			) VALUES ($1, $2::uuid, $3, $4, $5, $6, $7)
+				upstream_model_name, status
+			) VALUES ($1, $2::uuid, $3, $4, $5, $6)
 		`, string(scope.Kind), scope.ID, write.ModelCode, write.CapabilityType,
-			write.APIFormat, write.UpstreamModelName, write.Status); err != nil {
+			write.UpstreamModelName, write.Status); err != nil {
 			return result, fmt.Errorf("insert imported upstream model: %w", translatePersistenceError(err))
 		}
-		existing[write.ModelCode] = struct{}{}
+		existing[key] = struct{}{}
 		result.Created = append(result.Created, write.ModelCode)
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -280,13 +305,16 @@ func (s *UpstreamModelBindingStore) Import(ctx context.Context, scope domain.Ups
 	return result, nil
 }
 
+func modelBindingImportKey(modelCode, capability string) string {
+	return modelCode + "\x00" + capability
+}
+
 func scanManagementBinding(scan func(dest ...any) error) (domain.UpstreamModelBinding, error) {
 	var item domain.UpstreamModelBinding
 	err := scan(
 		&item.ID,
 		&item.ModelCode,
 		&item.CapabilityType,
-		&item.APIFormat,
 		&item.UpstreamModelName,
 		&item.Status,
 		&item.ConfigJSON,

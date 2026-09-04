@@ -107,13 +107,28 @@ func BuildHeaders(c *domain.RouteCandidate, meta RequestMeta) map[string]string 
 	if cred != nil {
 		headers["Authorization"] = "Bearer " + cred.AccessToken
 	} else {
-		switch c.Protocol {
-		case domain.ProtocolAnthropicMessages:
+		scheme := c.EndpointAuthScheme
+		if scheme == "" || scheme == domain.EndpointAuthFormatDefault {
+			switch c.Protocol {
+			case domain.ProtocolAnthropicMessages:
+				scheme = domain.EndpointAuthAnthropicAPIKey
+			case domain.ProtocolGeminiGenerate, domain.ProtocolGeminiEmbeddings:
+				scheme = domain.EndpointAuthGeminiAPIKey
+			default:
+				scheme = domain.EndpointAuthBearer
+			}
+		}
+		switch scheme {
+		case domain.EndpointAuthAnthropicAPIKey:
 			for key, value := range AnthropicAPIKeyHeaders(c.APIKeyCiphertext) {
 				headers[key] = value
 			}
-		case domain.ProtocolGeminiGenerate, domain.ProtocolGeminiEmbeddings:
-			headers["x-gemini-api-key"] = c.APIKeyCiphertext
+		case domain.EndpointAuthGeminiAPIKey:
+			headers["x-goog-api-key"] = c.APIKeyCiphertext
+		case domain.EndpointAuthCustomHeader:
+			if c.EndpointAuthHeader != "" {
+				headers[c.EndpointAuthHeader] = c.APIKeyCiphertext
+			}
 		default:
 			headers["Authorization"] = "Bearer " + c.APIKeyCiphertext
 		}

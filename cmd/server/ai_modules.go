@@ -130,7 +130,8 @@ func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisCl
 	usageSvc := observabilitycontrol.NewUsageService(aiadapters.NewUsageRepo(q, pool))
 	auditSvc := observabilitycontrol.NewAuditService(aiadapters.NewAuditRepo(q))
 
-	accountSvc := upstreamcontrol.New(aiadapters.NewAccountRepo(q, pool), providerSecrets.Encrypt)
+	accountRepo := aiadapters.NewAccountRepo(q, pool)
+	accountSvc := upstreamcontrol.New(accountRepo, providerSecrets.Encrypt)
 	modelBindings := aiadapters.NewUpstreamModelBindingStore(pool)
 	modelCatalog := aiadapters.NewModelCatalogReader(pool)
 	upstreamAccessSvc := upstreamaccess.New(aiadapters.NewUpstreamAccessRepo(pool))
@@ -422,21 +423,25 @@ func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisCl
 			},
 			UpstreamDiagnostics: transport.AIUpstreamDiagnosticsHTTPDeps{
 				AccountReader:     accountSvc,
+				EndpointManager:   accountSvc,
 				ModelBindings:     modelBindings,
 				ProviderSecrets:   providerSecrets,
 				HTTPClient:        managementHTTPClient,
 				AccountHealth:     accountSvc,
 				ModelCapabilities: modelCapabilities,
+				RuntimeHealth:     healthTracker,
 				BanChecker:        banChecker,
 			},
 			UpstreamAccounts: transport.AIUpstreamAccountManagementHTTPDeps{
 				Accounts:        accountSvc,
 				AccountManager:  accountSvc,
 				AccountReader:   accountSvc,
+				EndpointManager: accountSvc,
 				ProviderSecrets: providerSecrets,
 				ModelBindings:   modelBindings,
 				PriceBooks:      priceBookSvc,
 				AdminAudit:      auditSvc,
+				RuntimeHealth:   healthTracker,
 				BanChecker:      banChecker,
 			},
 			UpstreamAccess: transport.AIUpstreamAccessManagementHTTPDeps{

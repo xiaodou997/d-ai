@@ -43,7 +43,7 @@ func groupTargetDetailToCommercial(item domain.GroupTargetDetail) commercial.Gro
 	return commercial.GroupTargetDetail{
 		GroupTarget:       groupTargetBindingToCommercial(item.GroupTargetBinding),
 		AccountName:       item.AccountName,
-		DefaultProtocol:   item.DefaultProtocol,
+		APIFormats:        item.APIFormats,
 		PoolName:          item.PoolName,
 		FixedProviderType: item.FixedProviderType,
 		Available:         item.Available,

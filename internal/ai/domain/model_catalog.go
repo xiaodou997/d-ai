@@ -28,12 +28,12 @@ type TenantUpstreamResource struct {
 	PriceBookID       string
 	PriceBookName     string
 	PriceBookRevision int64
+	APIFormats        []string
 	Models            []TenantUpstreamModel
 }
 
 type TenantUpstreamModel struct {
 	ModelCode      string
 	CapabilityType string
-	APIFormat      string
 	Price          *PriceBookEntry
 }

@@ -493,25 +493,19 @@ INSERT INTO ai_upstream_accounts (
   name,
   tenant_display_name,
   tenant_access_mode,
-  base_url,
   api_key_ciphertext,
-  extra_headers,
-  default_protocol,
   concurrency_limit,
   price_book_id,
   tenant_multiplier,
   status
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+  $1, $2, $3, $4, $5, $6, $7, $8
 )
 RETURNING
   id,
   name,
   tenant_display_name,
   tenant_access_mode,
-  base_url,
-  extra_headers,
-  default_protocol,
   concurrency_limit,
   price_book_id,
   tenant_multiplier,
@@ -526,10 +520,7 @@ type CreateUpstreamAccountParams struct {
 	Name              string         `json:"name"`
 	TenantDisplayName string         `json:"tenant_display_name"`
 	TenantAccessMode  string         `json:"tenant_access_mode"`
-	BaseUrl           string         `json:"base_url"`
 	ApiKeyCiphertext  string         `json:"api_key_ciphertext"`
-	ExtraHeaders      []byte         `json:"extra_headers"`
-	DefaultProtocol   string         `json:"default_protocol"`
 	ConcurrencyLimit  pgtype.Int4    `json:"concurrency_limit"`
 	PriceBookID       pgtype.UUID    `json:"price_book_id"`
 	TenantMultiplier  pgtype.Numeric `json:"tenant_multiplier"`
@@ -541,9 +532,6 @@ type CreateUpstreamAccountRow struct {
 	Name              string             `json:"name"`
 	TenantDisplayName string             `json:"tenant_display_name"`
 	TenantAccessMode  string             `json:"tenant_access_mode"`
-	BaseUrl           string             `json:"base_url"`
-	ExtraHeaders      []byte             `json:"extra_headers"`
-	DefaultProtocol   string             `json:"default_protocol"`
 	ConcurrencyLimit  pgtype.Int4        `json:"concurrency_limit"`
 	PriceBookID       pgtype.UUID        `json:"price_book_id"`
 	TenantMultiplier  pgtype.Numeric     `json:"tenant_multiplier"`
@@ -555,17 +543,14 @@ type CreateUpstreamAccountRow struct {
 }
 
 // ============================================================================
-// Upstream Account CRUD (上游账号；原 Provider + Endpoint 合并为顶级实体)
+// Upstream Account CRUD (一个供应商账号 + 一把 API Key)
 // ============================================================================
 func (q *Queries) CreateUpstreamAccount(ctx context.Context, arg CreateUpstreamAccountParams) (CreateUpstreamAccountRow, error) {
 	row := q.db.QueryRow(ctx, createUpstreamAccount,
 		arg.Name,
 		arg.TenantDisplayName,
 		arg.TenantAccessMode,
-		arg.BaseUrl,
 		arg.ApiKeyCiphertext,
-		arg.ExtraHeaders,
-		arg.DefaultProtocol,
 		arg.ConcurrencyLimit,
 		arg.PriceBookID,
 		arg.TenantMultiplier,
@@ -577,15 +562,64 @@ func (q *Queries) CreateUpstreamAccount(ctx context.Context, arg CreateUpstreamA
 		&i.Name,
 		&i.TenantDisplayName,
 		&i.TenantAccessMode,
-		&i.BaseUrl,
-		&i.ExtraHeaders,
-		&i.DefaultProtocol,
 		&i.ConcurrencyLimit,
 		&i.PriceBookID,
 		&i.TenantMultiplier,
 		&i.Status,
 		&i.InvalidReason,
 		&i.InvalidAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const createUpstreamAccountEndpoint = `-- name: CreateUpstreamAccountEndpoint :one
+INSERT INTO ai_upstream_account_endpoints (
+  account_id, api_format, base_url, path_override, auth_scheme, auth_header,
+  extra_headers, status
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, account_id, api_format, base_url, path_override, auth_scheme,
+          auth_header, extra_headers, status, health_status, last_error,
+          last_checked_at, created_at, updated_at
+`
+
+type CreateUpstreamAccountEndpointParams struct {
+	AccountID    pgtype.UUID `json:"account_id"`
+	ApiFormat    string      `json:"api_format"`
+	BaseUrl      string      `json:"base_url"`
+	PathOverride string      `json:"path_override"`
+	AuthScheme   string      `json:"auth_scheme"`
+	AuthHeader   string      `json:"auth_header"`
+	ExtraHeaders []byte      `json:"extra_headers"`
+	Status       string      `json:"status"`
+}
+
+func (q *Queries) CreateUpstreamAccountEndpoint(ctx context.Context, arg CreateUpstreamAccountEndpointParams) (AiUpstreamAccountEndpoint, error) {
+	row := q.db.QueryRow(ctx, createUpstreamAccountEndpoint,
+		arg.AccountID,
+		arg.ApiFormat,
+		arg.BaseUrl,
+		arg.PathOverride,
+		arg.AuthScheme,
+		arg.AuthHeader,
+		arg.ExtraHeaders,
+		arg.Status,
+	)
+	var i AiUpstreamAccountEndpoint
+	err := row.Scan(
+		&i.ID,
+		&i.AccountID,
+		&i.ApiFormat,
+		&i.BaseUrl,
+		&i.PathOverride,
+		&i.AuthScheme,
+		&i.AuthHeader,
+		&i.ExtraHeaders,
+		&i.Status,
+		&i.HealthStatus,
+		&i.LastError,
+		&i.LastCheckedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -659,6 +693,23 @@ DELETE FROM ai_upstream_accounts WHERE id = $1
 func (q *Queries) DeleteUpstreamAccount(ctx context.Context, id pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, deleteUpstreamAccount, id)
 	return err
+}
+
+const deleteUpstreamAccountEndpoint = `-- name: DeleteUpstreamAccountEndpoint :execrows
+DELETE FROM ai_upstream_account_endpoints WHERE id = $1 AND account_id = $2
+`
+
+type DeleteUpstreamAccountEndpointParams struct {
+	ID        pgtype.UUID `json:"id"`
+	AccountID pgtype.UUID `json:"account_id"`
+}
+
+func (q *Queries) DeleteUpstreamAccountEndpoint(ctx context.Context, arg DeleteUpstreamAccountEndpointParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteUpstreamAccountEndpoint, arg.ID, arg.AccountID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const deleteUserGroup = `-- name: DeleteUserGroup :exec
@@ -847,10 +898,7 @@ SELECT
   name,
   tenant_display_name,
   tenant_access_mode,
-  base_url,
   api_key_ciphertext,
-  extra_headers,
-  default_protocol,
   concurrency_limit,
   price_book_id,
   tenant_multiplier,
@@ -871,16 +919,48 @@ func (q *Queries) GetUpstreamAccount(ctx context.Context, id pgtype.UUID) (AiUps
 		&i.Name,
 		&i.TenantDisplayName,
 		&i.TenantAccessMode,
-		&i.BaseUrl,
 		&i.ApiKeyCiphertext,
-		&i.ExtraHeaders,
-		&i.DefaultProtocol,
 		&i.ConcurrencyLimit,
 		&i.PriceBookID,
 		&i.TenantMultiplier,
 		&i.Status,
 		&i.InvalidReason,
 		&i.InvalidAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getUpstreamAccountEndpoint = `-- name: GetUpstreamAccountEndpoint :one
+SELECT id, account_id, api_format, base_url, path_override, auth_scheme,
+       auth_header, extra_headers, status, health_status, last_error,
+       last_checked_at, created_at, updated_at
+FROM ai_upstream_account_endpoints
+WHERE id = $1 AND account_id = $2
+`
+
+type GetUpstreamAccountEndpointParams struct {
+	ID        pgtype.UUID `json:"id"`
+	AccountID pgtype.UUID `json:"account_id"`
+}
+
+func (q *Queries) GetUpstreamAccountEndpoint(ctx context.Context, arg GetUpstreamAccountEndpointParams) (AiUpstreamAccountEndpoint, error) {
+	row := q.db.QueryRow(ctx, getUpstreamAccountEndpoint, arg.ID, arg.AccountID)
+	var i AiUpstreamAccountEndpoint
+	err := row.Scan(
+		&i.ID,
+		&i.AccountID,
+		&i.ApiFormat,
+		&i.BaseUrl,
+		&i.PathOverride,
+		&i.AuthScheme,
+		&i.AuthHeader,
+		&i.ExtraHeaders,
+		&i.Status,
+		&i.HealthStatus,
+		&i.LastError,
+		&i.LastCheckedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -921,6 +1001,7 @@ SELECT
   resolved_provider_family,
   capability_type,
   group_target_id,
+  upstream_account_id,
   endpoint_id,
   credential_pool_id,
   provider_code,
@@ -1005,6 +1086,7 @@ type GetUsageLogByRequestIDRow struct {
 	ResolvedProviderFamily             pgtype.Text        `json:"resolved_provider_family"`
 	CapabilityType                     string             `json:"capability_type"`
 	GroupTargetID                      pgtype.UUID        `json:"group_target_id"`
+	UpstreamAccountID                  pgtype.UUID        `json:"upstream_account_id"`
 	EndpointID                         pgtype.UUID        `json:"endpoint_id"`
 	CredentialPoolID                   pgtype.UUID        `json:"credential_pool_id"`
 	ProviderCode                       pgtype.Text        `json:"provider_code"`
@@ -1090,6 +1172,7 @@ func (q *Queries) GetUsageLogByRequestID(ctx context.Context, requestID string) 
 		&i.ResolvedProviderFamily,
 		&i.CapabilityType,
 		&i.GroupTargetID,
+		&i.UpstreamAccountID,
 		&i.EndpointID,
 		&i.CredentialPoolID,
 		&i.ProviderCode,
@@ -1235,6 +1318,53 @@ func (q *Queries) ListActiveRuntimeLimitPolicies(ctx context.Context, arg ListAc
 			&i.ConcurrencyLimit,
 			&i.Status,
 			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAllUpstreamAccountEndpoints = `-- name: ListAllUpstreamAccountEndpoints :many
+
+SELECT id, account_id, api_format, base_url, path_override, auth_scheme,
+       auth_header, extra_headers, status, health_status, last_error,
+       last_checked_at, created_at, updated_at
+FROM ai_upstream_account_endpoints
+ORDER BY account_id, api_format
+`
+
+// ============================================================================
+// Upstream Account Endpoint CRUD
+// ============================================================================
+func (q *Queries) ListAllUpstreamAccountEndpoints(ctx context.Context) ([]AiUpstreamAccountEndpoint, error) {
+	rows, err := q.db.Query(ctx, listAllUpstreamAccountEndpoints)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AiUpstreamAccountEndpoint
+	for rows.Next() {
+		var i AiUpstreamAccountEndpoint
+		if err := rows.Scan(
+			&i.ID,
+			&i.AccountID,
+			&i.ApiFormat,
+			&i.BaseUrl,
+			&i.PathOverride,
+			&i.AuthScheme,
+			&i.AuthHeader,
+			&i.ExtraHeaders,
+			&i.Status,
+			&i.HealthStatus,
+			&i.LastError,
+			&i.LastCheckedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -1722,7 +1852,17 @@ SELECT
   gt.created_at,
   gt.updated_at,
   COALESCE(a.tenant_display_name, '')  AS account_name,
-  COALESCE(a.default_protocol, '')     AS default_protocol,
+  CASE WHEN a.id IS NOT NULL THEN ARRAY(
+    SELECT ae.api_format
+    FROM ai_upstream_account_endpoints ae
+    WHERE ae.account_id = a.id AND ae.status = 'active'
+    ORDER BY ae.api_format
+  ) WHEN cp.id IS NOT NULL THEN ARRAY[CASE
+    WHEN cp.fixed_provider_type = 'codex' THEN 'openai_responses'
+    WHEN cp.fixed_provider_type = 'claude_oauth' THEN 'anthropic_messages'
+    WHEN cp.fixed_provider_type IN ('gemini_cli', 'antigravity') THEN 'gemini_generate'
+    ELSE 'openai_chat'
+  END] ELSE ARRAY[]::text[] END AS api_formats,
   COALESCE(cp.tenant_display_name, '') AS pool_name,
   COALESCE(cp.fixed_provider_type, '') AS fixed_provider_type
 FROM ai_group_targets gt
@@ -1749,7 +1889,7 @@ type ListGroupTargetsRow struct {
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
 	AccountName       string             `json:"account_name"`
-	DefaultProtocol   string             `json:"default_protocol"`
+	ApiFormats        []string           `json:"api_formats"`
 	PoolName          string             `json:"pool_name"`
 	FixedProviderType string             `json:"fixed_provider_type"`
 }
@@ -1773,7 +1913,7 @@ func (q *Queries) ListGroupTargets(ctx context.Context, arg ListGroupTargetsPara
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.AccountName,
-			&i.DefaultProtocol,
+			&i.ApiFormats,
 			&i.PoolName,
 			&i.FixedProviderType,
 		); err != nil {
@@ -1897,15 +2037,56 @@ func (q *Queries) ListLimitPolicies(ctx context.Context) ([]AiRuntimeLimitPolicy
 	return items, nil
 }
 
+const listUpstreamAccountEndpoints = `-- name: ListUpstreamAccountEndpoints :many
+SELECT id, account_id, api_format, base_url, path_override, auth_scheme,
+       auth_header, extra_headers, status, health_status, last_error,
+       last_checked_at, created_at, updated_at
+FROM ai_upstream_account_endpoints
+WHERE account_id = $1
+ORDER BY api_format ASC
+`
+
+func (q *Queries) ListUpstreamAccountEndpoints(ctx context.Context, accountID pgtype.UUID) ([]AiUpstreamAccountEndpoint, error) {
+	rows, err := q.db.Query(ctx, listUpstreamAccountEndpoints, accountID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AiUpstreamAccountEndpoint
+	for rows.Next() {
+		var i AiUpstreamAccountEndpoint
+		if err := rows.Scan(
+			&i.ID,
+			&i.AccountID,
+			&i.ApiFormat,
+			&i.BaseUrl,
+			&i.PathOverride,
+			&i.AuthScheme,
+			&i.AuthHeader,
+			&i.ExtraHeaders,
+			&i.Status,
+			&i.HealthStatus,
+			&i.LastError,
+			&i.LastCheckedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUpstreamAccounts = `-- name: ListUpstreamAccounts :many
 SELECT
   id,
   name,
   tenant_display_name,
   tenant_access_mode,
-  base_url,
-  extra_headers,
-  default_protocol,
   concurrency_limit,
   price_book_id,
   tenant_multiplier,
@@ -1923,9 +2104,6 @@ type ListUpstreamAccountsRow struct {
 	Name              string             `json:"name"`
 	TenantDisplayName string             `json:"tenant_display_name"`
 	TenantAccessMode  string             `json:"tenant_access_mode"`
-	BaseUrl           string             `json:"base_url"`
-	ExtraHeaders      []byte             `json:"extra_headers"`
-	DefaultProtocol   string             `json:"default_protocol"`
 	ConcurrencyLimit  pgtype.Int4        `json:"concurrency_limit"`
 	PriceBookID       pgtype.UUID        `json:"price_book_id"`
 	TenantMultiplier  pgtype.Numeric     `json:"tenant_multiplier"`
@@ -1950,9 +2128,6 @@ func (q *Queries) ListUpstreamAccounts(ctx context.Context) ([]ListUpstreamAccou
 			&i.Name,
 			&i.TenantDisplayName,
 			&i.TenantAccessMode,
-			&i.BaseUrl,
-			&i.ExtraHeaders,
-			&i.DefaultProtocol,
 			&i.ConcurrencyLimit,
 			&i.PriceBookID,
 			&i.TenantMultiplier,
@@ -2007,6 +2182,7 @@ SELECT
   resolved_provider_family,
   capability_type,
   group_target_id,
+  upstream_account_id,
   endpoint_id,
   credential_pool_id,
   provider_code,
@@ -2112,6 +2288,7 @@ type ListUsageLogsRow struct {
 	ResolvedProviderFamily             pgtype.Text        `json:"resolved_provider_family"`
 	CapabilityType                     string             `json:"capability_type"`
 	GroupTargetID                      pgtype.UUID        `json:"group_target_id"`
+	UpstreamAccountID                  pgtype.UUID        `json:"upstream_account_id"`
 	EndpointID                         pgtype.UUID        `json:"endpoint_id"`
 	CredentialPoolID                   pgtype.UUID        `json:"credential_pool_id"`
 	ProviderCode                       pgtype.Text        `json:"provider_code"`
@@ -2217,6 +2394,7 @@ func (q *Queries) ListUsageLogs(ctx context.Context, arg ListUsageLogsParams) ([
 			&i.ResolvedProviderFamily,
 			&i.CapabilityType,
 			&i.GroupTargetID,
+			&i.UpstreamAccountID,
 			&i.EndpointID,
 			&i.CredentialPoolID,
 			&i.ProviderCode,
@@ -2887,9 +3065,6 @@ RETURNING
   name,
   tenant_display_name,
   tenant_access_mode,
-  base_url,
-  extra_headers,
-  default_protocol,
   concurrency_limit,
   price_book_id,
   tenant_multiplier,
@@ -2910,9 +3085,6 @@ type MarkUpstreamAccountInvalidRow struct {
 	Name              string             `json:"name"`
 	TenantDisplayName string             `json:"tenant_display_name"`
 	TenantAccessMode  string             `json:"tenant_access_mode"`
-	BaseUrl           string             `json:"base_url"`
-	ExtraHeaders      []byte             `json:"extra_headers"`
-	DefaultProtocol   string             `json:"default_protocol"`
 	ConcurrencyLimit  pgtype.Int4        `json:"concurrency_limit"`
 	PriceBookID       pgtype.UUID        `json:"price_book_id"`
 	TenantMultiplier  pgtype.Numeric     `json:"tenant_multiplier"`
@@ -2931,9 +3103,6 @@ func (q *Queries) MarkUpstreamAccountInvalid(ctx context.Context, arg MarkUpstre
 		&i.Name,
 		&i.TenantDisplayName,
 		&i.TenantAccessMode,
-		&i.BaseUrl,
-		&i.ExtraHeaders,
-		&i.DefaultProtocol,
 		&i.ConcurrencyLimit,
 		&i.PriceBookID,
 		&i.TenantMultiplier,
@@ -3300,16 +3469,13 @@ UPDATE ai_upstream_accounts
 SET name = $2,
     tenant_display_name = $3,
     tenant_access_mode = $4,
-    base_url = $5,
-    api_key_ciphertext = $6,
-    extra_headers = $7,
-    default_protocol = $8,
-    concurrency_limit = $9,
-    price_book_id = $10,
-    tenant_multiplier = $11,
-    status = $12,
-    invalid_reason = CASE WHEN $12 = 'invalid' THEN invalid_reason ELSE '' END,
-    invalid_at = CASE WHEN $12 = 'invalid' THEN invalid_at ELSE NULL END,
+    api_key_ciphertext = $5,
+    concurrency_limit = $6,
+    price_book_id = $7,
+    tenant_multiplier = $8,
+    status = $9,
+    invalid_reason = CASE WHEN $9 = 'invalid' THEN invalid_reason ELSE '' END,
+    invalid_at = CASE WHEN $9 = 'invalid' THEN invalid_at ELSE NULL END,
     updated_at = now()
 WHERE id = $1
 RETURNING
@@ -3317,9 +3483,6 @@ RETURNING
   name,
   tenant_display_name,
   tenant_access_mode,
-  base_url,
-  extra_headers,
-  default_protocol,
   concurrency_limit,
   price_book_id,
   tenant_multiplier,
@@ -3335,10 +3498,7 @@ type UpdateUpstreamAccountParams struct {
 	Name              string         `json:"name"`
 	TenantDisplayName string         `json:"tenant_display_name"`
 	TenantAccessMode  string         `json:"tenant_access_mode"`
-	BaseUrl           string         `json:"base_url"`
 	ApiKeyCiphertext  string         `json:"api_key_ciphertext"`
-	ExtraHeaders      []byte         `json:"extra_headers"`
-	DefaultProtocol   string         `json:"default_protocol"`
 	ConcurrencyLimit  pgtype.Int4    `json:"concurrency_limit"`
 	PriceBookID       pgtype.UUID    `json:"price_book_id"`
 	TenantMultiplier  pgtype.Numeric `json:"tenant_multiplier"`
@@ -3350,9 +3510,6 @@ type UpdateUpstreamAccountRow struct {
 	Name              string             `json:"name"`
 	TenantDisplayName string             `json:"tenant_display_name"`
 	TenantAccessMode  string             `json:"tenant_access_mode"`
-	BaseUrl           string             `json:"base_url"`
-	ExtraHeaders      []byte             `json:"extra_headers"`
-	DefaultProtocol   string             `json:"default_protocol"`
 	ConcurrencyLimit  pgtype.Int4        `json:"concurrency_limit"`
 	PriceBookID       pgtype.UUID        `json:"price_book_id"`
 	TenantMultiplier  pgtype.Numeric     `json:"tenant_multiplier"`
@@ -3369,10 +3526,7 @@ func (q *Queries) UpdateUpstreamAccount(ctx context.Context, arg UpdateUpstreamA
 		arg.Name,
 		arg.TenantDisplayName,
 		arg.TenantAccessMode,
-		arg.BaseUrl,
 		arg.ApiKeyCiphertext,
-		arg.ExtraHeaders,
-		arg.DefaultProtocol,
 		arg.ConcurrencyLimit,
 		arg.PriceBookID,
 		arg.TenantMultiplier,
@@ -3384,15 +3538,121 @@ func (q *Queries) UpdateUpstreamAccount(ctx context.Context, arg UpdateUpstreamA
 		&i.Name,
 		&i.TenantDisplayName,
 		&i.TenantAccessMode,
-		&i.BaseUrl,
-		&i.ExtraHeaders,
-		&i.DefaultProtocol,
 		&i.ConcurrencyLimit,
 		&i.PriceBookID,
 		&i.TenantMultiplier,
 		&i.Status,
 		&i.InvalidReason,
 		&i.InvalidAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateUpstreamAccountEndpoint = `-- name: UpdateUpstreamAccountEndpoint :one
+UPDATE ai_upstream_account_endpoints
+SET api_format = $3,
+    base_url = $4,
+    path_override = $5,
+    auth_scheme = $6,
+    auth_header = $7,
+    extra_headers = $8,
+    status = $9,
+    health_status = 'unknown',
+    last_error = '',
+    last_checked_at = NULL,
+    updated_at = now()
+WHERE id = $1 AND account_id = $2
+RETURNING id, account_id, api_format, base_url, path_override, auth_scheme,
+          auth_header, extra_headers, status, health_status, last_error,
+          last_checked_at, created_at, updated_at
+`
+
+type UpdateUpstreamAccountEndpointParams struct {
+	ID           pgtype.UUID `json:"id"`
+	AccountID    pgtype.UUID `json:"account_id"`
+	ApiFormat    string      `json:"api_format"`
+	BaseUrl      string      `json:"base_url"`
+	PathOverride string      `json:"path_override"`
+	AuthScheme   string      `json:"auth_scheme"`
+	AuthHeader   string      `json:"auth_header"`
+	ExtraHeaders []byte      `json:"extra_headers"`
+	Status       string      `json:"status"`
+}
+
+func (q *Queries) UpdateUpstreamAccountEndpoint(ctx context.Context, arg UpdateUpstreamAccountEndpointParams) (AiUpstreamAccountEndpoint, error) {
+	row := q.db.QueryRow(ctx, updateUpstreamAccountEndpoint,
+		arg.ID,
+		arg.AccountID,
+		arg.ApiFormat,
+		arg.BaseUrl,
+		arg.PathOverride,
+		arg.AuthScheme,
+		arg.AuthHeader,
+		arg.ExtraHeaders,
+		arg.Status,
+	)
+	var i AiUpstreamAccountEndpoint
+	err := row.Scan(
+		&i.ID,
+		&i.AccountID,
+		&i.ApiFormat,
+		&i.BaseUrl,
+		&i.PathOverride,
+		&i.AuthScheme,
+		&i.AuthHeader,
+		&i.ExtraHeaders,
+		&i.Status,
+		&i.HealthStatus,
+		&i.LastError,
+		&i.LastCheckedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateUpstreamAccountEndpointHealth = `-- name: UpdateUpstreamAccountEndpointHealth :one
+UPDATE ai_upstream_account_endpoints
+SET health_status = $3,
+    last_error = $4,
+    last_checked_at = now(),
+    updated_at = now()
+WHERE id = $1 AND account_id = $2
+RETURNING id, account_id, api_format, base_url, path_override, auth_scheme,
+          auth_header, extra_headers, status, health_status, last_error,
+          last_checked_at, created_at, updated_at
+`
+
+type UpdateUpstreamAccountEndpointHealthParams struct {
+	ID           pgtype.UUID `json:"id"`
+	AccountID    pgtype.UUID `json:"account_id"`
+	HealthStatus string      `json:"health_status"`
+	LastError    string      `json:"last_error"`
+}
+
+func (q *Queries) UpdateUpstreamAccountEndpointHealth(ctx context.Context, arg UpdateUpstreamAccountEndpointHealthParams) (AiUpstreamAccountEndpoint, error) {
+	row := q.db.QueryRow(ctx, updateUpstreamAccountEndpointHealth,
+		arg.ID,
+		arg.AccountID,
+		arg.HealthStatus,
+		arg.LastError,
+	)
+	var i AiUpstreamAccountEndpoint
+	err := row.Scan(
+		&i.ID,
+		&i.AccountID,
+		&i.ApiFormat,
+		&i.BaseUrl,
+		&i.PathOverride,
+		&i.AuthScheme,
+		&i.AuthHeader,
+		&i.ExtraHeaders,
+		&i.Status,
+		&i.HealthStatus,
+		&i.LastError,
+		&i.LastCheckedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -3411,9 +3671,6 @@ RETURNING
   name,
   tenant_display_name,
   tenant_access_mode,
-  base_url,
-  extra_headers,
-  default_protocol,
   concurrency_limit,
   price_book_id,
   tenant_multiplier,
@@ -3434,9 +3691,6 @@ type UpdateUpstreamAccountStatusRow struct {
 	Name              string             `json:"name"`
 	TenantDisplayName string             `json:"tenant_display_name"`
 	TenantAccessMode  string             `json:"tenant_access_mode"`
-	BaseUrl           string             `json:"base_url"`
-	ExtraHeaders      []byte             `json:"extra_headers"`
-	DefaultProtocol   string             `json:"default_protocol"`
 	ConcurrencyLimit  pgtype.Int4        `json:"concurrency_limit"`
 	PriceBookID       pgtype.UUID        `json:"price_book_id"`
 	TenantMultiplier  pgtype.Numeric     `json:"tenant_multiplier"`
@@ -3455,9 +3709,6 @@ func (q *Queries) UpdateUpstreamAccountStatus(ctx context.Context, arg UpdateUps
 		&i.Name,
 		&i.TenantDisplayName,
 		&i.TenantAccessMode,
-		&i.BaseUrl,
-		&i.ExtraHeaders,
-		&i.DefaultProtocol,
 		&i.ConcurrencyLimit,
 		&i.PriceBookID,
 		&i.TenantMultiplier,

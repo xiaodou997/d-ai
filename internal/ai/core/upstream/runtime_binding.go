@@ -68,16 +68,20 @@ type RuntimeBindingRequest struct {
 // RuntimeBinding is the upstream-layer result returned to the runtime kernel
 // before actual bridge execution starts.
 type RuntimeBinding struct {
-	Upstream          Upstream
-	ModelBinding      ModelBinding
-	ConversionBucket  int
-	APIKeyCiphertext  string
-	ExtraHeaders      map[string]string
-	FixedProviderType FixedProviderType
-	SelectionStrategy SelectionStrategy
-	CostPriceBookID   string
-	TenantMultiplier  float64
-	CostPer1kTokens   float64
+	Upstream           Upstream
+	ModelBinding       ModelBinding
+	EndpointID         string
+	RequestPath        string
+	EndpointAuthScheme string
+	EndpointAuthHeader string
+	ConversionBucket   int
+	APIKeyCiphertext   string
+	ExtraHeaders       map[string]string
+	FixedProviderType  FixedProviderType
+	SelectionStrategy  SelectionStrategy
+	CostPriceBookID    string
+	TenantMultiplier   float64
+	CostPer1kTokens    float64
 }
 
 // RuntimeBindingResolver resolves one commercial target into a concrete

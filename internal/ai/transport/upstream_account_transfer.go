@@ -15,7 +15,7 @@ import (
 	"xiaodou/dai/libs/go/httpx"
 )
 
-const upstreamAccountTransferSchemaVersion = 4
+const upstreamAccountTransferSchemaVersion = 5
 
 type upstreamAccountExportInput struct {
 	Body struct {
@@ -27,7 +27,6 @@ type upstreamAccountExportInput struct {
 type upstreamAccountTransferBindingDTO struct {
 	ModelCode                   string `json:"model_code"`
 	CapabilityType              string `json:"capability_type"`
-	APIFormat                   string `json:"api_format"`
 	UpstreamModelName           string `json:"upstream_model_name"`
 	Status                      string `json:"status"`
 	ImageStreamMode             string `json:"image_stream_mode,omitempty"`
@@ -37,17 +36,25 @@ type upstreamAccountTransferBindingDTO struct {
 	ImageEditMaxOutputCount     int    `json:"image_edit_max_output_count,omitempty"`
 }
 
+type upstreamAccountTransferEndpointDTO struct {
+	APIFormat    string          `json:"api_format"`
+	BaseURL      string          `json:"base_url"`
+	PathOverride string          `json:"path_override,omitempty"`
+	AuthScheme   string          `json:"auth_scheme,omitempty"`
+	AuthHeader   string          `json:"auth_header,omitempty"`
+	ExtraHeaders json.RawMessage `json:"extra_headers,omitempty"`
+	Status       string          `json:"status"`
+}
+
 type upstreamAccountTransferAccountDTO struct {
-	Name                  string                              `json:"name"`
-	TenantDisplayName     string                              `json:"tenant_display_name"`
-	TenantAccessMode      string                              `json:"tenant_access_mode"`
-	BaseURL               string                              `json:"base_url"`
-	APIKey                string                              `json:"api_key"`
-	DefaultProviderFamily string                              `json:"default_provider_family"`
-	ConcurrencyLimit      *int32                              `json:"concurrency_limit,omitempty" minimum:"1"`
-	Status                string                              `json:"status"`
-	ExtraHeaders          json.RawMessage                     `json:"extra_headers,omitempty"`
-	ModelBindings         []upstreamAccountTransferBindingDTO `json:"model_bindings,omitempty"`
+	Name              string                               `json:"name"`
+	TenantDisplayName string                               `json:"tenant_display_name"`
+	TenantAccessMode  string                               `json:"tenant_access_mode"`
+	APIKey            string                               `json:"api_key"`
+	ConcurrencyLimit  *int32                               `json:"concurrency_limit,omitempty" minimum:"1"`
+	Status            string                               `json:"status"`
+	Endpoints         []upstreamAccountTransferEndpointDTO `json:"endpoints"`
+	ModelBindings     []upstreamAccountTransferBindingDTO  `json:"model_bindings,omitempty"`
 }
 
 type upstreamAccountExportOutput struct {
@@ -77,7 +84,7 @@ type upstreamAccountImportRequest struct {
 
 type upstreamAccountImportPreviewItemDTO struct {
 	Name                   string   `json:"name"`
-	BaseURL                string   `json:"base_url"`
+	EndpointCount          int      `json:"endpoint_count"`
 	Action                 string   `json:"action"`
 	Reason                 string   `json:"reason,omitempty"`
 	ModelBindingCount      int      `json:"model_binding_count"`
@@ -229,15 +236,24 @@ func exportUpstreamAccounts(ctx context.Context, d UpstreamAccountManagementHTTP
 			return nil, httpx.ErrInternal.WithDetail("decrypt provider key failed for account " + id)
 		}
 		item := upstreamAccountTransferAccountDTO{
-			Name:                  account.Name,
-			TenantDisplayName:     account.TenantDisplayName,
-			TenantAccessMode:      account.TenantAccessMode,
-			BaseURL:               account.BaseURL,
-			APIKey:                apiKey,
-			DefaultProviderFamily: account.DefaultProtocol,
-			ConcurrencyLimit:      intPtrToInt32Ptr(account.ConcurrencyLimit),
-			Status:                portableUpstreamAccountStatus(account.Status),
-			ExtraHeaders:          copyRawJSONOrObject(account.ExtraHeaders),
+			Name:              account.Name,
+			TenantDisplayName: account.TenantDisplayName,
+			TenantAccessMode:  account.TenantAccessMode,
+			APIKey:            apiKey,
+			ConcurrencyLimit:  intPtrToInt32Ptr(account.ConcurrencyLimit),
+			Status:            portableUpstreamAccountStatus(account.Status),
+			Endpoints:         make([]upstreamAccountTransferEndpointDTO, 0, len(account.Endpoints)),
+		}
+		for _, endpoint := range account.Endpoints {
+			item.Endpoints = append(item.Endpoints, upstreamAccountTransferEndpointDTO{
+				APIFormat:    string(endpoint.APIFormat),
+				BaseURL:      endpoint.BaseURL,
+				PathOverride: endpoint.PathOverride,
+				AuthScheme:   endpoint.AuthScheme,
+				AuthHeader:   endpoint.AuthHeader,
+				ExtraHeaders: copyRawJSONOrObject(endpoint.ExtraHeaders),
+				Status:       endpoint.Status,
+			})
 		}
 		if includeBindings {
 			bindings, err := listUpstreamModelBindings(ctx, d.ModelBindings, "direct_upstream", id)
@@ -319,10 +335,8 @@ func importUpstreamAccounts(ctx context.Context, d UpstreamAccountManagementHTTP
 			Name:              strings.TrimSpace(account.Name),
 			TenantDisplayName: strings.TrimSpace(account.TenantDisplayName),
 			TenantAccessMode:  strings.TrimSpace(account.TenantAccessMode),
-			BaseURL:           strings.TrimSpace(account.BaseURL),
 			APIKey:            strings.TrimSpace(account.APIKey),
-			ExtraHeaders:      normalizedRawJSONBytes(account.ExtraHeaders),
-			DefaultProtocol:   strings.TrimSpace(account.DefaultProviderFamily),
+			Endpoints:         transferEndpointsToWrites(account.Endpoints),
 			ConcurrencyLimit:  int32PtrToIntPtr(account.ConcurrencyLimit),
 			PriceBookID:       strings.TrimSpace(req.DefaultPriceBookID),
 			TenantMultiplier:  &multiplier,
@@ -346,7 +360,14 @@ func importUpstreamAccounts(ctx context.Context, d UpstreamAccountManagementHTTP
 				continue
 			}
 			createdBindingKeys[key] = struct{}{}
-			createdBinding, err := createUpstreamModelBinding(ctx, d.ModelBindings, "direct_upstream", created.ID, fixedProviderEndpointProtocolFromAccount(created.DefaultProtocol), nil, transferBindingToWriteRequest(binding))
+			createdBinding, err := createUpstreamModelBinding(
+				ctx,
+				d.ModelBindings,
+				"direct_upstream",
+				created.ID,
+				transferBindingToWriteRequest(binding),
+				modelBindingPolicyForAccount(upstreamcontrol.AccountSecret{Status: created.Status, Endpoints: created.Endpoints}),
+			)
 			if err != nil {
 				out.Body.SkippedModelBindings = append(out.Body.SkippedModelBindings, upstreamAccountImportSkippedDTO{Name: binding.ModelCode, Reason: err.Error()})
 				out.Body.Summary.SkipModelBindings++
@@ -368,7 +389,6 @@ func bindingRecordToTransferDTO(item domain.UpstreamModelBinding) upstreamAccoun
 	return upstreamAccountTransferBindingDTO{
 		ModelCode:                   item.ModelCode,
 		CapabilityType:              item.CapabilityType,
-		APIFormat:                   item.APIFormat,
 		UpstreamModelName:           item.UpstreamModelName,
 		Status:                      item.Status,
 		ImageStreamMode:             imagePolicy.StreamMode,
@@ -383,7 +403,6 @@ func transferBindingToWriteRequest(item upstreamAccountTransferBindingDTO) upstr
 	return upstreamModelBindingWriteRequest{
 		ModelCode:                   item.ModelCode,
 		CapabilityType:              item.CapabilityType,
-		APIFormat:                   item.APIFormat,
 		UpstreamModelName:           item.UpstreamModelName,
 		Status:                      item.Status,
 		ImageStreamMode:             item.ImageStreamMode,
@@ -413,13 +432,18 @@ func previewImportAccount(account upstreamAccountTransferAccountDTO, existingNam
 	name := strings.TrimSpace(account.Name)
 	item := upstreamAccountImportPreviewItemDTO{
 		Name:              name,
-		BaseURL:           strings.TrimSpace(account.BaseURL),
+		EndpointCount:     len(account.Endpoints),
 		Action:            "create",
 		ModelBindingCount: len(account.ModelBindings),
 	}
-	if name == "" || strings.TrimSpace(account.BaseURL) == "" || strings.TrimSpace(account.APIKey) == "" {
+	if name == "" || strings.TrimSpace(account.APIKey) == "" || len(account.Endpoints) == 0 {
 		item.Action = "error"
-		item.Reason = "name, base_url and api_key are required"
+		item.Reason = "name, api_key and at least one endpoint are required"
+		return item
+	}
+	if _, err := upstreamcontrol.NormalizeEndpointWrites(transferEndpointsToWrites(account.Endpoints)); err != nil {
+		item.Action = "error"
+		item.Reason = err.Error()
 		return item
 	}
 	if _, ok := existingNames[name]; ok {
@@ -528,15 +552,11 @@ func uniqueNonEmptyStrings(values []string) []string {
 	return out
 }
 
-// transferBindingDuplicateKey 用 (model_code, capability_type) 做去重键——这与
-// ai_upstream_models 的唯一约束 (upstream_kind, upstream_id, model_code, capability_type)
-// 语义一致：同一账号下一个 model_code+capability_type 只能有一条绑定，api_format 只是
-// 这条绑定的属性而非独立识别键，不应参与去重判断。
+// transferBindingDuplicateKey 与 ai_upstream_models 的账号级唯一语义保持一致。
 func transferBindingDuplicateKey(item upstreamAccountTransferBindingDTO) string {
 	return strings.Join([]string{
 		strings.TrimSpace(item.ModelCode),
 		strings.TrimSpace(item.CapabilityType),
-		strings.TrimSpace(item.UpstreamModelName),
 	}, "\x00")
 }
 
@@ -552,6 +572,22 @@ func countDuplicateTransferBindings(items []upstreamAccountTransferBindingDTO) i
 		seen[key] = struct{}{}
 	}
 	return duplicates
+}
+
+func transferEndpointsToWrites(items []upstreamAccountTransferEndpointDTO) []domain.UpstreamAccountEndpointWrite {
+	writes := make([]domain.UpstreamAccountEndpointWrite, 0, len(items))
+	for _, item := range items {
+		writes = append(writes, domain.UpstreamAccountEndpointWrite{
+			APIFormat:    domain.UpstreamProtocol(strings.TrimSpace(item.APIFormat)),
+			BaseURL:      strings.TrimSpace(item.BaseURL),
+			PathOverride: strings.TrimSpace(item.PathOverride),
+			AuthScheme:   strings.TrimSpace(item.AuthScheme),
+			AuthHeader:   strings.TrimSpace(item.AuthHeader),
+			ExtraHeaders: normalizedRawJSONBytes(item.ExtraHeaders),
+			Status:       strings.TrimSpace(item.Status),
+		})
+	}
+	return writes
 }
 
 func hasTransferModelBindings(accounts []upstreamAccountTransferAccountDTO) bool {

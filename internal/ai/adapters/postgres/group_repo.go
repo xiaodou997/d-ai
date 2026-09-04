@@ -281,7 +281,15 @@ func (r *GroupRepo) ListGroupTargetDetails(ctx context.Context, tenantID, groupI
 			gt.created_at,
 			gt.updated_at,
 			COALESCE(a.tenant_display_name, '')  AS account_name,
-			COALESCE(a.default_protocol, '')     AS default_protocol,
+			CASE WHEN a.id IS NOT NULL THEN ARRAY(
+			  SELECT ae.api_format FROM ai_upstream_account_endpoints ae
+			  WHERE ae.account_id = a.id AND ae.status = 'active' ORDER BY ae.api_format
+			) WHEN cp.id IS NOT NULL THEN ARRAY[CASE
+			  WHEN cp.fixed_provider_type = 'codex' THEN 'openai_responses'
+			  WHEN cp.fixed_provider_type = 'claude_oauth' THEN 'anthropic_messages'
+			  WHEN cp.fixed_provider_type IN ('gemini_cli', 'antigravity') THEN 'gemini_generate'
+			  ELSE 'openai_chat'
+			END] ELSE ARRAY[]::text[] END AS api_formats,
 			COALESCE(cp.tenant_display_name, '') AS pool_name,
 			COALESCE(cp.fixed_provider_type, '') AS fixed_provider_type,
 			COALESCE(a.status, cp.status, '')                          AS target_status,
@@ -305,16 +313,17 @@ func (r *GroupRepo) ListGroupTargetDetails(ctx context.Context, tenantID, groupI
 	out := make([]domain.GroupTargetDetail, 0)
 	for rows.Next() {
 		var (
-			id, groupIDText, tKind, tID                           string
-			status                                                string
-			createdAt, updatedAt                                  time.Time
-			accountName, defaultProtocol, poolName, fixedProvider string
-			targetStatus, accessMode                              string
-			accessGranted                                         bool
+			id, groupIDText, tKind, tID          string
+			status                               string
+			createdAt, updatedAt                 time.Time
+			accountName, poolName, fixedProvider string
+			apiFormats                           []string
+			targetStatus, accessMode             string
+			accessGranted                        bool
 		)
 		if err := rows.Scan(
 			&id, &groupIDText, &tKind, &tID, &status, &createdAt, &updatedAt,
-			&accountName, &defaultProtocol, &poolName, &fixedProvider,
+			&accountName, &apiFormats, &poolName, &fixedProvider,
 			&targetStatus, &accessMode, &accessGranted,
 		); err != nil {
 			return nil, err
@@ -323,7 +332,7 @@ func (r *GroupRepo) ListGroupTargetDetails(ctx context.Context, tenantID, groupI
 		out = append(out, domain.GroupTargetDetail{
 			GroupTargetBinding: groupTargetBindingFromRow(id, groupIDText, tKind, tID, status, createdAt, updatedAt),
 			AccountName:        accountName,
-			DefaultProtocol:    defaultProtocol,
+			APIFormats:         apiFormats,
 			PoolName:           poolName,
 			FixedProviderType:  fixedProvider,
 			Available:          available,
@@ -349,7 +358,15 @@ func (r *GroupRepo) ListGroupTargetsByTarget(ctx context.Context, targetKind, ta
 			gt.created_at,
 			gt.updated_at,
 			COALESCE(a.tenant_display_name, '')  AS account_name,
-			COALESCE(a.default_protocol, '')     AS default_protocol,
+			CASE WHEN a.id IS NOT NULL THEN ARRAY(
+			  SELECT ae.api_format FROM ai_upstream_account_endpoints ae
+			  WHERE ae.account_id = a.id AND ae.status = 'active' ORDER BY ae.api_format
+			) WHEN cp.id IS NOT NULL THEN ARRAY[CASE
+			  WHEN cp.fixed_provider_type = 'codex' THEN 'openai_responses'
+			  WHEN cp.fixed_provider_type = 'claude_oauth' THEN 'anthropic_messages'
+			  WHEN cp.fixed_provider_type IN ('gemini_cli', 'antigravity') THEN 'gemini_generate'
+			  ELSE 'openai_chat'
+			END] ELSE ARRAY[]::text[] END AS api_formats,
 			COALESCE(cp.tenant_display_name, '') AS pool_name,
 			COALESCE(cp.fixed_provider_type, '') AS fixed_provider_type
 		FROM ai_group_targets gt
@@ -367,21 +384,22 @@ func (r *GroupRepo) ListGroupTargetsByTarget(ctx context.Context, targetKind, ta
 	out := make([]domain.GroupTargetDetail, 0)
 	for rows.Next() {
 		var (
-			id, groupID, tKind, tID                               string
-			status                                                string
-			createdAt, updatedAt                                  time.Time
-			accountName, defaultProtocol, poolName, fixedProvider string
+			id, groupID, tKind, tID              string
+			status                               string
+			createdAt, updatedAt                 time.Time
+			accountName, poolName, fixedProvider string
+			apiFormats                           []string
 		)
 		if err := rows.Scan(
 			&id, &groupID, &tKind, &tID, &status, &createdAt, &updatedAt,
-			&accountName, &defaultProtocol, &poolName, &fixedProvider,
+			&accountName, &apiFormats, &poolName, &fixedProvider,
 		); err != nil {
 			return nil, err
 		}
 		item := domain.GroupTargetDetail{
 			GroupTargetBinding: groupTargetBindingFromRow(id, groupID, tKind, tID, status, createdAt, updatedAt),
 			AccountName:        accountName,
-			DefaultProtocol:    defaultProtocol,
+			APIFormats:         apiFormats,
 			PoolName:           poolName,
 			FixedProviderType:  fixedProvider,
 		}
@@ -403,12 +421,13 @@ func (r *GroupRepo) GetGroupTargetDetail(ctx context.Context, tenantID, groupID,
 		return domain.GroupTargetDetail{}, err
 	}
 	var (
-		targetID, targetGroupID, targetKind                       string
-		status                                                    string
-		createdAt, updatedAt                                      time.Time
-		accountName, defaultProtocol, poolName, fixedProviderType string
-		targetStatus, accessMode                                  string
-		accessGranted                                             bool
+		targetID, targetGroupID, targetKind      string
+		status                                   string
+		createdAt, updatedAt                     time.Time
+		accountName, poolName, fixedProviderType string
+		apiFormats                               []string
+		targetStatus, accessMode                 string
+		accessGranted                            bool
 	)
 	if err := r.pool.QueryRow(ctx, `
 		SELECT
@@ -419,7 +438,15 @@ func (r *GroupRepo) GetGroupTargetDetail(ctx context.Context, tenantID, groupID,
 			gt.created_at,
 			gt.updated_at,
 			COALESCE(a.tenant_display_name, '')  AS account_name,
-			COALESCE(a.default_protocol, '')     AS default_protocol,
+			CASE WHEN a.id IS NOT NULL THEN ARRAY(
+			  SELECT ae.api_format FROM ai_upstream_account_endpoints ae
+			  WHERE ae.account_id = a.id AND ae.status = 'active' ORDER BY ae.api_format
+			) WHEN cp.id IS NOT NULL THEN ARRAY[CASE
+			  WHEN cp.fixed_provider_type = 'codex' THEN 'openai_responses'
+			  WHEN cp.fixed_provider_type = 'claude_oauth' THEN 'anthropic_messages'
+			  WHEN cp.fixed_provider_type IN ('gemini_cli', 'antigravity') THEN 'gemini_generate'
+			  ELSE 'openai_chat'
+			END] ELSE ARRAY[]::text[] END AS api_formats,
 			COALESCE(cp.tenant_display_name, '') AS pool_name,
 			COALESCE(cp.fixed_provider_type, '') AS fixed_provider_type,
 			COALESCE(a.status, cp.status, '')                          AS target_status,
@@ -436,7 +463,7 @@ func (r *GroupRepo) GetGroupTargetDetail(ctx context.Context, tenantID, groupID,
 		WHERE gt.group_id = $1 AND gt.id = $2
 	`, gid, rid, tenantID).Scan(
 		&targetID, &targetGroupID, &targetKind, &status, &createdAt, &updatedAt,
-		&accountName, &defaultProtocol, &poolName, &fixedProviderType,
+		&accountName, &apiFormats, &poolName, &fixedProviderType,
 		&targetStatus, &accessMode, &accessGranted,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -448,7 +475,7 @@ func (r *GroupRepo) GetGroupTargetDetail(ctx context.Context, tenantID, groupID,
 	return domain.GroupTargetDetail{
 		GroupTargetBinding: groupTargetBindingFromRow(id, targetGroupID, targetKind, targetID, status, createdAt, updatedAt),
 		AccountName:        accountName,
-		DefaultProtocol:    defaultProtocol,
+		APIFormats:         apiFormats,
 		PoolName:           poolName,
 		FixedProviderType:  fixedProviderType,
 		Available:          available,

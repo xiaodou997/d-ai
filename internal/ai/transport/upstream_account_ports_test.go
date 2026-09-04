@@ -7,8 +7,10 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"xiaodou/dai/internal/ai/domain"
+	"xiaodou/dai/internal/ai/routing"
 	"xiaodou/dai/internal/ai/upstreamcontrol"
 	"xiaodou/dai/libs/go/server"
 )
@@ -79,10 +81,14 @@ func (s *upstreamAccountPortsStub) MarkAccountInvalid(_ context.Context, id, rea
 func TestUpstreamAccountRoutesUseSeparatedPorts(t *testing.T) {
 	stub := &upstreamAccountPortsStub{
 		accounts: []domain.UpstreamAccount{{
-			ID:           "account-list",
-			Name:         "Listed",
-			ExtraHeaders: []byte(`{"Authorization":"secret","X-Trace":"visible"}`),
-			Status:       domain.UpstreamAccountStatusActive,
+			ID:   "account-list",
+			Name: "Listed",
+			Endpoints: []domain.UpstreamAccountEndpoint{{
+				ID: "endpoint-list", APIFormat: domain.ProtocolOpenAIResponses, BaseURL: "https://list.example",
+				AuthScheme: domain.EndpointAuthFormatDefault, ExtraHeaders: []byte(`{"Authorization":"secret","X-Trace":"visible"}`),
+				Status: domain.EndpointStatusActive,
+			}},
+			Status: domain.UpstreamAccountStatusActive,
 		}},
 		createResult: domain.UpstreamAccount{ID: "account-created", Name: "Created", Status: domain.UpstreamAccountStatusDisabled},
 		updateResult: domain.UpstreamAccount{ID: "account-update", Name: "Updated", Status: domain.UpstreamAccountStatusActive},
@@ -105,7 +111,7 @@ func TestUpstreamAccountRoutesUseSeparatedPorts(t *testing.T) {
 		t.Fatalf("list calls = %d, response = %#v", stub.listCalls, listBody)
 	}
 	var headers map[string]string
-	if err := json.Unmarshal(listBody.Items[0].ExtraHeaders, &headers); err != nil {
+	if err := json.Unmarshal(listBody.Items[0].Endpoints[0].ExtraHeaders, &headers); err != nil {
 		t.Fatalf("decode redacted headers: %v", err)
 	}
 	if headers["Authorization"] != "***REDACTED***" || headers["X-Trace"] != "visible" {
@@ -114,8 +120,8 @@ func TestUpstreamAccountRoutesUseSeparatedPorts(t *testing.T) {
 
 	createRecorder := performUpstreamAccountRequest(router, http.MethodPost, "/api/v1/upstream-accounts", `{
 		"name":"Created","tenant_display_name":"Tenant created","tenant_access_mode":"public",
-		"base_url":"https://create.example","api_key":"create-secret","extra_headers":{"X-Trace":"create"},
-		"default_provider_family":"anthropic","concurrency_limit":4,"price_book_id":"price-1","tenant_multiplier":1.25
+		"api_key":"create-secret","endpoints":[{"api_format":"anthropic_messages","base_url":"https://create.example","extra_headers":{"X-Trace":"create"}}],
+		"concurrency_limit":4,"price_book_id":"price-1","tenant_multiplier":1.25
 	}`)
 	requireUpstreamAccountStatus(t, createRecorder, http.StatusOK)
 	if stub.createInput.Name != "Created" || stub.createInput.APIKey != "create-secret" || stub.createInput.ConcurrencyLimit == nil || *stub.createInput.ConcurrencyLimit != 4 {
@@ -124,8 +130,7 @@ func TestUpstreamAccountRoutesUseSeparatedPorts(t *testing.T) {
 
 	updateRecorder := performUpstreamAccountRequest(router, http.MethodPatch, "/api/v1/upstream-accounts/account-update", `{
 		"name":"Updated","tenant_display_name":"Tenant updated","tenant_access_mode":"restricted",
-		"base_url":"https://update.example","api_key":"update-secret","extra_headers":{"X-Trace":"update"},
-		"default_provider_family":"gemini","concurrency_limit":6,"price_book_id":"price-2","tenant_multiplier":1.5
+		"api_key":"update-secret","concurrency_limit":6,"price_book_id":"price-2","tenant_multiplier":1.5
 	}`)
 	requireUpstreamAccountStatus(t, updateRecorder, http.StatusOK)
 	if stub.updateInput.ID != "account-update" || stub.updateInput.Name != "Updated" || stub.updateInput.APIKey != "update-secret" || stub.updateInput.ConcurrencyLimit == nil || *stub.updateInput.ConcurrencyLimit != 6 {
@@ -155,8 +160,8 @@ func TestUpstreamAccountRoutesRequireSeparatedPorts(t *testing.T) {
 		body   string
 	}{
 		{http.MethodGet, "/api/v1/upstream-accounts", ""},
-		{http.MethodPost, "/api/v1/upstream-accounts", `{"name":"a","base_url":"https://example","api_key":"secret"}`},
-		{http.MethodPatch, "/api/v1/upstream-accounts/a", `{"name":"a","base_url":"https://example"}`},
+		{http.MethodPost, "/api/v1/upstream-accounts", `{"name":"a","api_key":"secret","endpoints":[{"api_format":"openai_responses","base_url":"https://example"}]}`},
+		{http.MethodPatch, "/api/v1/upstream-accounts/a", `{"name":"a"}`},
 		{http.MethodPatch, "/api/v1/upstream-accounts/a/status", `{"status":"active"}`},
 		{http.MethodDelete, "/api/v1/upstream-accounts/a", ""},
 	}
@@ -174,14 +179,15 @@ func TestUpstreamAccountTransferComposesCatalogReaderAndManager(t *testing.T) {
 			Name:              "Exported",
 			TenantDisplayName: "Tenant exported",
 			TenantAccessMode:  "public",
-			BaseURL:           "https://export.example",
-			ExtraHeaders:      []byte(`{"X-Trace":"export"}`),
-			DefaultProtocol:   "anthropic",
-			ConcurrencyLimit:  &concurrency,
-			Status:            domain.UpstreamAccountStatusActive,
+			Endpoints: []domain.UpstreamAccountEndpoint{{
+				ID: "endpoint-export", APIFormat: domain.ProtocolAnthropicMessages, BaseURL: "https://export.example",
+				ExtraHeaders: []byte(`{"X-Trace":"export"}`), Status: domain.EndpointStatusActive,
+			}},
+			ConcurrencyLimit: &concurrency,
+			Status:           domain.UpstreamAccountStatusActive,
 		}},
 		secret:       upstreamcontrol.AccountSecret{Ciphertext: "ciphertext"},
-		createResult: domain.UpstreamAccount{ID: "account-import", DefaultProtocol: "gemini"},
+		createResult: domain.UpstreamAccount{ID: "account-import"},
 	}
 	codec := &providerSecretCodecStub{plaintext: "plaintext-key"}
 	d := UpstreamAccountManagementHTTPDeps{
@@ -207,14 +213,15 @@ func TestUpstreamAccountTransferComposesCatalogReaderAndManager(t *testing.T) {
 	limit := int32(5)
 	imported, err := importUpstreamAccounts(t.Context(), d, upstreamAccountImportRequest{
 		Accounts: []upstreamAccountTransferAccountDTO{{
-			Name:                  " Imported ",
-			TenantDisplayName:     " Tenant imported ",
-			TenantAccessMode:      "public",
-			BaseURL:               " https://import.example ",
-			APIKey:                " import-secret ",
-			DefaultProviderFamily: "gemini",
-			ConcurrencyLimit:      &limit,
-			ExtraHeaders:          json.RawMessage(`{"X-Trace":"import"}`),
+			Name:              " Imported ",
+			TenantDisplayName: " Tenant imported ",
+			TenantAccessMode:  "public",
+			APIKey:            " import-secret ",
+			ConcurrencyLimit:  &limit,
+			Endpoints: []upstreamAccountTransferEndpointDTO{{
+				APIFormat: "gemini_generate", BaseURL: " https://import.example ",
+				ExtraHeaders: json.RawMessage(`{"X-Trace":"import"}`), Status: "active",
+			}},
 		}},
 		DefaultTenantMultiplier:  &multiplier,
 		DuplicateAccountStrategy: "skip",
@@ -237,14 +244,14 @@ func TestUpstreamAccountTransferComposesCatalogReaderAndManager(t *testing.T) {
 func TestReconcileUpstreamAccountStatusUsesHealthWriter(t *testing.T) {
 	stub := &upstreamAccountPortsStub{}
 
-	if err := reconcileUpstreamAccountTestStatus(t.Context(), stub, "recovered", domain.UpstreamAccountStatusInvalid, upstreamTestResult{OK: true}); err != nil {
+	if err := reconcileUpstreamAccountTestStatus(t.Context(), stub, nil, nil, "recovered", "endpoint-1", domain.UpstreamAccountStatusInvalid, upstreamTestResult{OK: true}); err != nil {
 		t.Fatalf("reconcile recovered account: %v", err)
 	}
 	if stub.statusID != "recovered" || stub.status != domain.UpstreamAccountStatusActive {
 		t.Fatalf("recovered command = id %q status %q", stub.statusID, stub.status)
 	}
 
-	if err := reconcileUpstreamAccountTestStatus(t.Context(), stub, "rejected", domain.UpstreamAccountStatusActive, upstreamTestResult{HTTPStatus: http.StatusUnauthorized}); err != nil {
+	if err := reconcileUpstreamAccountTestStatus(t.Context(), stub, nil, nil, "rejected", "endpoint-1", domain.UpstreamAccountStatusActive, upstreamTestResult{HTTPStatus: http.StatusUnauthorized}); err != nil {
 		t.Fatalf("reconcile rejected account: %v", err)
 	}
 	if stub.invalidID != "rejected" || !strings.Contains(stub.invalidReason, "401") {
@@ -253,11 +260,38 @@ func TestReconcileUpstreamAccountStatusUsesHealthWriter(t *testing.T) {
 
 	stub.statusID = ""
 	stub.invalidID = ""
-	if err := reconcileUpstreamAccountTestStatus(t.Context(), stub, "disabled", domain.UpstreamAccountStatusDisabled, upstreamTestResult{HTTPStatus: http.StatusUnauthorized}); err != nil {
+	if err := reconcileUpstreamAccountTestStatus(t.Context(), stub, nil, nil, "disabled", "endpoint-1", domain.UpstreamAccountStatusDisabled, upstreamTestResult{HTTPStatus: http.StatusUnauthorized}); err != nil {
 		t.Fatalf("reconcile disabled account: %v", err)
 	}
 	if stub.statusID != "" || stub.invalidID != "" {
 		t.Fatalf("disabled account changed: status ID %q invalid ID %q", stub.statusID, stub.invalidID)
+	}
+}
+
+func TestSuccessfulConnectivityTestClosesEndpointCircuit(t *testing.T) {
+	tracker := routing.NewInMemoryTracker(1, time.Hour)
+	tracker.RecordFailure("endpoint-1", routing.TargetEndpoint)
+	if tracker.StateOf("endpoint-1") != routing.StateOpen {
+		t.Fatal("endpoint circuit should start open")
+	}
+	if err := reconcileUpstreamAccountTestStatus(t.Context(), nil, nil, tracker, "account-1", "endpoint-1", domain.UpstreamAccountStatusDisabled, upstreamTestResult{OK: true}); err != nil {
+		t.Fatalf("reconcile successful test: %v", err)
+	}
+	if tracker.StateOf("endpoint-1") != routing.StateClosed {
+		t.Fatal("successful connectivity test did not close endpoint circuit")
+	}
+}
+
+func TestEndpointConfigSyncResetsOrForgetsRuntimeCircuit(t *testing.T) {
+	tracker := routing.NewInMemoryTracker(1, time.Hour)
+	tracker.RecordFailure("endpoint-1", routing.TargetEndpoint)
+	syncEndpointRuntimeHealth(tracker, domain.UpstreamAccountEndpoint{ID: "endpoint-1", Status: domain.EndpointStatusActive})
+	if tracker.StateOf("endpoint-1") != routing.StateClosed {
+		t.Fatal("active endpoint update did not reset runtime circuit")
+	}
+	syncEndpointRuntimeHealth(tracker, domain.UpstreamAccountEndpoint{ID: "endpoint-1", Status: domain.EndpointStatusDisabled})
+	if records := tracker.Snapshot(); len(records) != 0 {
+		t.Fatalf("disabled endpoint remained in runtime health snapshot: %+v", records)
 	}
 }
 

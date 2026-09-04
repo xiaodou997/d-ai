@@ -4,12 +4,8 @@ import "strings"
 
 // 模型能力命名识别 —— 单一事实源。
 //
-// 这里只做"按模型名给出默认能力/协议建议"，用于导入发现与创建 binding 时的
-// 默认值；capability_type 在 DB 上是显式列，最终以显式值为准，命名识别仅兜底。
-//
-// 关键点：Gemini 原生生图走 generateContent（gemini_generate 格式），配合
-// responseModalities:["TEXT","IMAGE"]，因此 Gemini 生图模型的协议是
-// ProtocolGeminiGenerate 而非独立端点；OpenAI 系生图走 openai_images。
+// 这里只按模型名给出能力建议，用于导入发现与创建 binding 时的默认值；
+// capability_type 在 DB 上是显式列，最终以显式值为准。API 格式不从模型名推断。
 
 // openAIImageModelFragments 是 OpenAI 系生图模型命名片段。
 var openAIImageModelFragments = []string{
@@ -58,14 +54,36 @@ func InferModelCapability(modelID string) CapabilityType {
 	return inferCapabilityFromName(modelID)
 }
 
-// InferModelCapabilityAndProtocol 按模型名（结合上游端点协议家族）推断默认能力与上游协议。
-// endpointProtocol 取 EndpointProtocol 值（openai_compatible/anthropic/gemini），可为空。
-//
-// 判定顺序：embedding → image → audio → rerank → 家族默认 chat。
-// 生图判定必须早于通用 gemini-/claude-/默认 chat 判定，否则生图模型会被误判为 chat。
-func InferModelCapabilityAndProtocol(modelID, endpointProtocol string) (CapabilityType, UpstreamProtocol) {
-	capability := inferCapabilityFromName(modelID)
-	return capability, DefaultProtocolForCapability(capability, modelID, endpointProtocol)
+// ProtocolSupportsCapability reports whether an exact upstream wire protocol
+// can serve a model capability without relying on a different endpoint format.
+// Model bindings remain account/pool scoped; this function only validates that
+// an active target has at least one usable request endpoint for the binding.
+func ProtocolSupportsCapability(protocol UpstreamProtocol, capability CapabilityType) bool {
+	switch capability {
+	case CapabilityEmbedding:
+		return protocol == ProtocolOpenAIEmbeddings || protocol == ProtocolGeminiEmbeddings
+	case CapabilityImage:
+		return protocol == ProtocolOpenAIImages || protocol == ProtocolGeminiGenerate
+	case CapabilityChat:
+		return protocol == ProtocolOpenAIChat ||
+			protocol == ProtocolOpenAIResponses ||
+			protocol == ProtocolAnthropicMessages ||
+			protocol == ProtocolGeminiGenerate
+	default:
+		// The gateway currently carries video/audio/rerank over provider-specific
+		// payloads without a dedicated wire-protocol enum. Keep those capabilities
+		// eligible whenever the target has an active endpoint.
+		return protocol != ""
+	}
+}
+
+func AnyProtocolSupportsCapability(protocols []UpstreamProtocol, capability CapabilityType) bool {
+	for _, protocol := range protocols {
+		if ProtocolSupportsCapability(protocol, capability) {
+			return true
+		}
+	}
+	return false
 }
 
 // inferCapabilityFromName 仅按模型名判定能力类型，不涉及协议选择。
@@ -86,40 +104,6 @@ func inferCapabilityFromName(modelID string) CapabilityType {
 		return CapabilityRerank
 	default:
 		return CapabilityChat
-	}
-}
-
-// DefaultProtocolForCapability 在已知能力的前提下，按账号协议家族 + 模型名给出默认协议。
-// modelID 仅用于 image 能力下细分"是否走 Gemini 原生生图"、chat 能力下细分 claude-/gemini- 家族，可传空串（此时按通用默认值处理）。
-// 供外部能力数据源（如 external models 目录）命中能力但仍需要选协议时复用，避免重复维护一份协议选择规则。
-func DefaultProtocolForCapability(capability CapabilityType, modelID, endpointProtocol string) UpstreamProtocol {
-	lower := strings.ToLower(strings.TrimSpace(modelID))
-	switch capability {
-	case CapabilityEmbedding:
-		if endpointProtocol == string(EndpointProtocolGemini) {
-			return ProtocolGeminiEmbeddings
-		}
-		return ProtocolOpenAIEmbeddings
-	case CapabilityImage:
-		if IsGeminiImageModel(lower) {
-			// Gemini 原生生图：generateContent + responseModalities。
-			return ProtocolGeminiGenerate
-		}
-		return ProtocolOpenAIImages
-	case CapabilityChat:
-		if strings.HasPrefix(lower, "claude-") {
-			if endpointProtocol == string(EndpointProtocolAnthropic) {
-				return ProtocolAnthropicMessages
-			}
-			return ProtocolOpenAIResponses
-		}
-		if strings.HasPrefix(lower, "gemini-") || strings.HasPrefix(lower, "gemma-") {
-			return ProtocolGeminiGenerate
-		}
-		return ProtocolOpenAIResponses
-	default:
-		// video/audio_tts/audio_stt/rerank 暂无专属协议，占位使用 openai_chat。
-		return ProtocolOpenAIChat
 	}
 }
 

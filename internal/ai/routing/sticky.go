@@ -4,11 +4,12 @@ import "context"
 
 // StickyBinding describes which upstream target a conversation is pinned to.
 type StickyBinding struct {
-	// TargetKind is "account" or "credential".
+	// TargetKind is "endpoint" or "credential". "account" is accepted only
+	// when reading bindings written by older releases.
 	TargetKind string
 
-	// Account route field (valid when TargetKind == "account"): the upstream
-	// account id (= RouteCandidate.EndpointID).
+	// Direct route field (valid when TargetKind == "endpoint"): the selected
+	// ai_upstream_account_endpoints.id.
 	EndpointID string
 
 	// Pool route field (valid when TargetKind == "credential").

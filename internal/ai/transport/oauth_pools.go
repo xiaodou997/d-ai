@@ -542,7 +542,6 @@ func registerOAuthPools(api huma.API, d OAuthManagementHTTPDeps) {
 			allowedModels[modelCode] = struct{}{}
 		}
 
-		endpointProtocol := fixedProviderEndpointProtocol(pool.FixedProviderType)
 		writes := make([]domain.UpstreamModelBindingWrite, 0, len(in.Body.Models))
 		for _, modelCode := range in.Body.Models {
 			modelCode = strings.TrimSpace(modelCode)
@@ -552,14 +551,19 @@ func registerOAuthPools(api huma.API, d OAuthManagementHTTPDeps) {
 			if _, ok := allowedModels[modelCode]; !ok {
 				return nil, httpx.ErrBadRequest.WithDetail("model is not present in the current pool catalog: " + modelCode)
 			}
-			capType, proto := inferCapabilityAndProtocol(modelCode, endpointProtocol)
+			capType := domain.InferModelCapability(modelCode)
 			writes = append(writes, domain.UpstreamModelBindingWrite{
 				ModelCode:         modelCode,
-				CapabilityType:    capType,
-				APIFormat:         proto,
+				CapabilityType:    string(capType),
 				UpstreamModelName: modelCode,
 				Status:            "active",
 			})
+		}
+		policy := modelBindingPolicyForPool(pool)
+		for _, write := range writes {
+			if err := validateModelBindingProtocolPolicy(write, policy); err != nil {
+				return nil, mapServiceError(err)
+			}
 		}
 		result, err := d.ModelBindings.Import(ctx, domain.UpstreamModelBindingScope{Kind: domain.UpstreamKindPool, ID: in.PoolID}, writes)
 		if err != nil {
@@ -695,17 +699,6 @@ func credentialPoolUpdateInput(current domain.CredentialPool, req credentialPool
 		PriceBookID:       priceBookID,
 		TenantMultiplier:  &multiplier,
 	}, nil
-}
-
-func fixedProviderEndpointProtocol(providerType domain.FixedProviderType) string {
-	switch providerType {
-	case domain.FixedProviderClaudeOAuth:
-		return string(domain.EndpointProtocolAnthropic)
-	case domain.FixedProviderGeminiCLI, domain.FixedProviderAntigravity:
-		return string(domain.EndpointProtocolGemini)
-	default:
-		return string(domain.EndpointProtocolOpenAICompatible)
-	}
 }
 
 func credentialPoolStrategyOrDefault(strategy string) (string, error) {

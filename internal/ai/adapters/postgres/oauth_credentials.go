@@ -153,6 +153,15 @@ func (s *OAuthCredentialStore) UpdatePool(ctx context.Context, poolID string, in
 	if tag.RowsAffected() == 0 {
 		return domain.ErrNotFound
 	}
+	if in.Status == "active" {
+		_, providerType, err := lockOAuthPoolState(ctx, tx, poolID)
+		if err != nil {
+			return err
+		}
+		if err := validateActiveOAuthPoolConfiguration(ctx, tx, poolID, providerType); err != nil {
+			return err
+		}
+	}
 	if in.TenantAccessMode == "public" {
 		if _, err := tx.Exec(ctx, `
 			UPDATE ai_upstream_resource_tenant_policies
@@ -169,7 +178,15 @@ func (s *OAuthCredentialStore) UpdatePool(ctx context.Context, poolID string, in
 }
 
 func (s *OAuthCredentialStore) UpdatePoolStatus(ctx context.Context, poolID, status string) error {
-	tag, err := s.pool.Exec(ctx, `
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	if _, _, err := lockOAuthPoolState(ctx, tx, poolID); err != nil {
+		return err
+	}
+	tag, err := tx.Exec(ctx, `
 		UPDATE ai_credential_pools
 		SET status = $2, updated_at = now()
 		WHERE id = $1
@@ -180,7 +197,16 @@ func (s *OAuthCredentialStore) UpdatePoolStatus(ctx context.Context, poolID, sta
 	if tag.RowsAffected() == 0 {
 		return domain.ErrNotFound
 	}
-	return nil
+	if status == "active" {
+		_, providerType, err := lockOAuthPoolState(ctx, tx, poolID)
+		if err != nil {
+			return err
+		}
+		if err := validateActiveOAuthPoolConfiguration(ctx, tx, poolID, providerType); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
 }
 
 func requirePlatformPriceBook(ctx context.Context, tx pgx.Tx, priceBookID string) error {
@@ -199,9 +225,18 @@ func requirePlatformPriceBook(ctx context.Context, tx pgx.Tx, priceBookID string
 	return nil
 }
 
-// DeletePool removes a pool (cascades to credentials).
+// DeletePool removes an unreferenced pool and its dependent configuration.
 func (s *OAuthCredentialStore) DeletePool(ctx context.Context, poolID string) error {
-	refs, err := countOne(ctx, s.pool, `
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	if _, _, err := lockOAuthPoolState(ctx, tx, poolID); err != nil {
+		return err
+	}
+	refs, err := countOne(ctx, tx, `
 		SELECT
 			(SELECT COUNT(*) FROM ai_provider_oauth_credentials WHERE pool_id = $1) +
 			(SELECT COUNT(*) FROM ai_group_targets WHERE target_kind = 'oauth_pool' AND target_id = $1)
@@ -212,11 +247,12 @@ func (s *OAuthCredentialStore) DeletePool(ctx context.Context, poolID string) er
 	if refs > 0 {
 		return fmt.Errorf("credential pool is still referenced by %d resource(s), clear credentials/bindings before deleting: %w", refs, domain.ErrConflict)
 	}
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
+	if _, err := tx.Exec(ctx, `
+		DELETE FROM ai_upstream_models
+		WHERE upstream_kind = 'oauth_pool' AND upstream_id = $1
+	`, poolID); err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
 	if _, err := tx.Exec(ctx, `
 		DELETE FROM ai_upstream_resource_tenant_policies
 		WHERE resource_kind = 'oauth_pool' AND resource_id = $1

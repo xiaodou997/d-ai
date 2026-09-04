@@ -139,15 +139,18 @@ func seedModelCatalog(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 		         ($3::uuid, 'chat-model', 'chat', $4::jsonb),
 		         ($5::uuid, 'chat-model', 'chat', $2::jsonb)`, []any{catalogRetailBookOne, tokenTiersOne, catalogRetailBookTwo, tokenTiersTwo, catalogUpstreamBook}},
 		{`INSERT INTO ai_upstream_accounts (
-			id, name, tenant_display_name, tenant_access_mode, base_url,
+			id, name, tenant_display_name, tenant_access_mode,
 			api_key_ciphertext, price_book_id, tenant_multiplier, status
-		  ) VALUES ($1::uuid, 'catalog-account', 'Catalog Account', 'public', 'https://upstream.example',
+		  ) VALUES ($1::uuid, 'catalog-account', 'Catalog Account', 'public',
 			'x', $2::uuid, 1.25, 'active')`, []any{catalogAccountID, catalogUpstreamBook}},
+		{`INSERT INTO ai_upstream_account_endpoints (account_id, api_format, base_url, status)
+		  VALUES ($1::uuid, 'openai_chat', 'https://upstream.example', 'active'),
+		         ($1::uuid, 'openai_images', 'https://upstream.example', 'active')`, []any{catalogAccountID}},
 		{`INSERT INTO ai_upstream_models (
-			upstream_kind, upstream_id, model_code, capability_type, api_format, upstream_model_name, status
+			upstream_kind, upstream_id, model_code, capability_type, upstream_model_name, status
 		  ) VALUES
-			('direct_upstream', $1::uuid, 'chat-model', 'chat', 'openai_chat', 'vendor-chat', 'active'),
-			('direct_upstream', $1::uuid, 'image-without-price', 'image', 'openai_images', 'vendor-image', 'active')`, []any{catalogAccountID}},
+			('direct_upstream', $1::uuid, 'chat-model', 'chat', 'vendor-chat', 'active'),
+			('direct_upstream', $1::uuid, 'image-without-price', 'image', 'vendor-image', 'active')`, []any{catalogAccountID}},
 		{`INSERT INTO ai_groups (
 			id, tenant_id, name, retail_price_book_id, user_default_visible, status
 		  ) VALUES

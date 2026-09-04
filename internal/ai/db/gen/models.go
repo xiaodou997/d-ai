@@ -557,10 +557,7 @@ type AiUpstreamAccount struct {
 	Name              string             `json:"name"`
 	TenantDisplayName string             `json:"tenant_display_name"`
 	TenantAccessMode  string             `json:"tenant_access_mode"`
-	BaseUrl           string             `json:"base_url"`
 	ApiKeyCiphertext  string             `json:"api_key_ciphertext"`
-	ExtraHeaders      []byte             `json:"extra_headers"`
-	DefaultProtocol   string             `json:"default_protocol"`
 	ConcurrencyLimit  pgtype.Int4        `json:"concurrency_limit"`
 	PriceBookID       pgtype.UUID        `json:"price_book_id"`
 	TenantMultiplier  pgtype.Numeric     `json:"tenant_multiplier"`
@@ -571,13 +568,29 @@ type AiUpstreamAccount struct {
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
 }
 
+type AiUpstreamAccountEndpoint struct {
+	ID            pgtype.UUID        `json:"id"`
+	AccountID     pgtype.UUID        `json:"account_id"`
+	ApiFormat     string             `json:"api_format"`
+	BaseUrl       string             `json:"base_url"`
+	PathOverride  string             `json:"path_override"`
+	AuthScheme    string             `json:"auth_scheme"`
+	AuthHeader    string             `json:"auth_header"`
+	ExtraHeaders  []byte             `json:"extra_headers"`
+	Status        string             `json:"status"`
+	HealthStatus  string             `json:"health_status"`
+	LastError     string             `json:"last_error"`
+	LastCheckedAt pgtype.Timestamptz `json:"last_checked_at"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
 type AiUpstreamModel struct {
 	ID                pgtype.UUID        `json:"id"`
 	UpstreamKind      string             `json:"upstream_kind"`
 	UpstreamID        pgtype.UUID        `json:"upstream_id"`
 	ModelCode         string             `json:"model_code"`
 	CapabilityType    string             `json:"capability_type"`
-	ApiFormat         string             `json:"api_format"`
 	UpstreamModelName string             `json:"upstream_model_name"`
 	Status            string             `json:"status"`
 	ConfigJson        []byte             `json:"config_json"`
@@ -634,6 +647,7 @@ type AiUsageLog struct {
 	ResolvedProviderFamily             pgtype.Text        `json:"resolved_provider_family"`
 	CapabilityType                     string             `json:"capability_type"`
 	GroupTargetID                      pgtype.UUID        `json:"group_target_id"`
+	UpstreamAccountID                  pgtype.UUID        `json:"upstream_account_id"`
 	EndpointID                         pgtype.UUID        `json:"endpoint_id"`
 	ProviderCode                       pgtype.Text        `json:"provider_code"`
 	UpstreamModel                      pgtype.Text        `json:"upstream_model"`
@@ -1272,6 +1286,7 @@ type SysDataCleanupRun struct {
 	RequestedBy pgtype.Text        `json:"requested_by"`
 	Targets     []byte             `json:"targets"`
 	Summary     []byte             `json:"summary"`
+	Progress    []byte             `json:"progress"`
 	Error       pgtype.Text        `json:"error"`
 	OwnerID     pgtype.Text        `json:"owner_id"`
 	HeartbeatAt pgtype.Timestamptz `json:"heartbeat_at"`

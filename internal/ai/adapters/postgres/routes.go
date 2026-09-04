@@ -18,10 +18,8 @@ import (
 // client 协议。client↔provider 的落差就是中继要做的协议转换（internal/formats）：
 //
 //  1. 候选拉取（listRoutesForGroups）：SQL 直接按 ai_upstream_models 显式绑定
-//     拉取本组内 model_code/capability 命中的 active 目标，回带 binding 的
-//     api_format，以及池的 fixed_provider_type。
-//     Go 端 buildCandidate 仅按显式 binding protocol 做协议匹配；pool 在
-//     异常缺失 binding protocol 时，才按 fixed provider 协议兜底。
+//     拉取本组内 model_code/capability 命中的 active 目标。直连账号由 endpoint
+//     行提供 api_format，OAuth 池由 fixed_provider_type 提供固有协议。
 //
 //  2. 协议匹配 + 偏好桶（chooseProviderProtocol）：对每个候选，在其「真实支持的
 //     provider 协议集」里挑一个作为 c.Protocol：
@@ -48,8 +46,6 @@ func chooseProviderProtocol(capType domain.CapabilityType, clientProtocol domain
 }
 
 // candidateSupportedProtocols 解出一个候选行真实接受的细粒度 provider 协议集。
-// 显式 binding api_format 是主事实源；pool 仅在异常缺失 binding protocol 时，
-// 才回退到 fixed provider 的固有协议。
 func candidateSupportedProtocols(row routeRow) []domain.UpstreamProtocol {
 	if protocol := domain.UpstreamProtocol(row.strVal(row.APIFormat)); protocol != "" {
 		return []domain.UpstreamProtocol{protocol}
@@ -92,7 +88,7 @@ type routeRow struct {
 	BaseURL          *string
 	APIKeyCiphertext *string
 	ExtraHeaders     []byte
-	APIFormat        *string // explicit binding api_format
+	APIFormat        *string // direct endpoint api_format
 	ConfigJSON       []byte
 
 	// Pool fields — nil for account targets
@@ -131,8 +127,8 @@ func (s *RouteInspector) listRoutesForGroups(ctx context.Context, modelCode stri
 		      AND e.model_code    = um.model_code
 		      AND e.capability_type = um.capability_type
 		  ), 0) * COALESCE(tp.tenant_multiplier_override, a.tenant_multiplier, cp.tenant_multiplier, 1) AS cost_per_1k,
-			  a.id::text, a.name, a.base_url, a.api_key_ciphertext, a.extra_headers,
-			  um.api_format, um.config_json,
+			  a.id::text, a.name, ae.base_url, a.api_key_ciphertext, ae.extra_headers,
+			  ae.api_format, um.config_json,
 			  cp.id::text, cp.fixed_provider_type, cp.oauth_strategy,
 			  g.id::text, g.name, g.retail_price_book_id::text, g.default_user_multiplier, g.allow_protocol_conversion,
 			  g.route_policy
@@ -146,6 +142,8 @@ func (s *RouteInspector) listRoutesForGroups(ctx context.Context, modelCode stri
 		 AND um.status = 'active'
 		LEFT JOIN ai_upstream_accounts a
 		  ON gt.target_kind = 'direct_upstream' AND a.id = gt.target_id
+		LEFT JOIN ai_upstream_account_endpoints ae
+		  ON gt.target_kind = 'direct_upstream' AND ae.account_id = a.id AND ae.status = 'active'
 		LEFT JOIN ai_credential_pools cp
 		  ON gt.target_kind = 'oauth_pool' AND cp.id = gt.target_id
 		LEFT JOIN ai_upstream_resource_tenant_policies tp
@@ -164,7 +162,7 @@ func (s *RouteInspector) listRoutesForGroups(ctx context.Context, modelCode stri
 		  AND gt.status = 'active'
 		  AND g.status  = 'active'
 		  AND (
-		    (gt.target_kind = 'direct_upstream' AND a.status = 'active')
+		    (gt.target_kind = 'direct_upstream' AND a.status = 'active' AND ae.id IS NOT NULL)
 		    OR
 		    (gt.target_kind = 'oauth_pool' AND cp.status = 'active')
 		  )
@@ -220,7 +218,13 @@ func (s *RouteInspector) ModelsWithProtocolRoute(
 	// 流式转换暂未实现的格式对而误判不可用。
 	const q = `
 		SELECT mc.code,
-		       um.api_format,
+		       CASE
+		         WHEN gt.target_kind = 'direct_upstream' THEN ae.api_format
+		         WHEN cp.fixed_provider_type = 'codex' THEN 'openai_responses'
+		         WHEN cp.fixed_provider_type = 'claude_oauth' THEN 'anthropic_messages'
+		         WHEN cp.fixed_provider_type IN ('gemini_cli', 'antigravity') THEN 'gemini_generate'
+		         ELSE 'openai_chat'
+		       END AS api_format,
 		       g.allow_protocol_conversion
 		FROM unnest($1::text[]) AS mc(code)
 		JOIN ai_group_targets gt ON gt.status = 'active'
@@ -231,7 +235,13 @@ func (s *RouteInspector) ModelsWithProtocolRoute(
 		 AND um.model_code = mc.code
 		 AND um.capability_type = $2
 		 AND um.status = 'active'
-		WHERE gt.target_kind IN ('direct_upstream', 'oauth_pool')`
+		LEFT JOIN ai_upstream_accounts a
+		  ON gt.target_kind = 'direct_upstream' AND a.id = gt.target_id AND a.status = 'active'
+		LEFT JOIN ai_upstream_account_endpoints ae
+		  ON gt.target_kind = 'direct_upstream' AND ae.account_id = a.id AND ae.status = 'active'
+		LEFT JOIN ai_credential_pools cp
+		  ON gt.target_kind = 'oauth_pool' AND cp.id = gt.target_id AND cp.status = 'active'
+		WHERE (a.id IS NOT NULL AND ae.id IS NOT NULL) OR cp.id IS NOT NULL`
 
 	rows, err := s.pool.Query(ctx, q, modelCodes, string(capType))
 	if err != nil {

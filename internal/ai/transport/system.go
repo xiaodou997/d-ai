@@ -35,7 +35,7 @@ type healthSummaryDTO struct {
 
 type healthRecordDTO struct {
 	TargetID    string `json:"target_id" doc:"目标 ID"`
-	Kind        string `json:"kind" enum:"account,pool,unknown" doc:"目标类型"`
+	Kind        string `json:"kind" enum:"account,endpoint,pool,unknown" doc:"目标类型"`
 	State       string `json:"state" enum:"closed,open,half_open,unknown" doc:"健康状态"`
 	ConsecFail  int    `json:"consecutive_failures" doc:"连续失败次数"`
 	OpenedAt    *int64 `json:"opened_at,omitempty" doc:"打开时间，Unix 毫秒"`
@@ -108,6 +108,8 @@ func healthTargetKindToString(kind routing.TargetKind) string {
 		return "account"
 	case routing.TargetPool:
 		return "pool"
+	case routing.TargetEndpoint:
+		return "endpoint"
 	default:
 		return "unknown"
 	}

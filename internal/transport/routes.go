@@ -99,11 +99,13 @@ type AIModelBindingHTTPDeps struct {
 // independently registered upstream discovery and connectivity HTTP module.
 type AIUpstreamDiagnosticsHTTPDeps struct {
 	AccountReader     aitransport.UpstreamAccountReader
+	EndpointManager   aitransport.UpstreamAccountEndpointManager
 	ModelBindings     aitransport.UpstreamModelBindingStore
 	ProviderSecrets   aitransport.ProviderSecretCodec
 	HTTPClient        aitransport.HTTPDoer
 	AccountHealth     aitransport.UpstreamAccountHealthWriter
 	ModelCapabilities aitransport.ModelCapabilityResolver
+	RuntimeHealth     routing.HealthTracker
 	BanChecker        aitransport.HumaBanChecker
 }
 
@@ -114,10 +116,12 @@ type AIUpstreamAccountManagementHTTPDeps struct {
 	Accounts        aitransport.UpstreamAccountCatalog
 	AccountManager  aitransport.UpstreamAccountManager
 	AccountReader   aitransport.UpstreamAccountReader
+	EndpointManager aitransport.UpstreamAccountEndpointManager
 	ProviderSecrets aitransport.ProviderSecretCodec
 	ModelBindings   aitransport.UpstreamModelBindingStore
 	PriceBooks      aitransport.PriceBookReader
 	AdminAudit      aitransport.AdminAuditRecorder
+	RuntimeHealth   routing.HealthTracker
 	BanChecker      aitransport.HumaBanChecker
 }
 
@@ -564,10 +568,12 @@ func buildUpstreamAccountManagementHTTPDeps(platform aiPlatformDeps, d AIUpstrea
 		Accounts:        d.Accounts,
 		AccountManager:  d.AccountManager,
 		AccountReader:   d.AccountReader,
+		EndpointManager: d.EndpointManager,
 		ProviderSecrets: d.ProviderSecrets,
 		ModelBindings:   d.ModelBindings,
 		PriceBooks:      d.PriceBooks,
 		AdminAudit:      d.AdminAudit,
+		RuntimeHealth:   d.RuntimeHealth,
 	}
 }
 
@@ -769,11 +775,13 @@ func buildUpstreamDiagnosticsHTTPDeps(platform aiPlatformDeps, d AIUpstreamDiagn
 	return aitransport.UpstreamDiagnosticsHTTPDeps{
 		Auth:              buildAIHTTPAuthDeps(platform, d.BanChecker),
 		AccountReader:     d.AccountReader,
+		EndpointManager:   d.EndpointManager,
 		ModelBindings:     d.ModelBindings,
 		ProviderSecrets:   d.ProviderSecrets,
 		HTTPClient:        d.HTTPClient,
 		AccountHealth:     d.AccountHealth,
 		ModelCapabilities: d.ModelCapabilities,
+		RuntimeHealth:     d.RuntimeHealth,
 	}
 }
 

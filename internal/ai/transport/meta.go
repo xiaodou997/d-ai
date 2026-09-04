@@ -211,6 +211,17 @@ type UpstreamAccountManager interface {
 	DeleteAccount(ctx context.Context, id string) error
 }
 
+// UpstreamAccountEndpointManager owns the exact request endpoints exposed by
+// one direct API-key account. OAuth pools use fixed provider runtimes instead.
+type UpstreamAccountEndpointManager interface {
+	ListEndpoints(ctx context.Context, accountID string) ([]domain.UpstreamAccountEndpoint, error)
+	GetEndpoint(ctx context.Context, accountID, endpointID string) (domain.UpstreamAccountEndpoint, error)
+	CreateEndpoint(ctx context.Context, accountID string, write domain.UpstreamAccountEndpointWrite) (domain.UpstreamAccountEndpoint, error)
+	UpdateEndpoint(ctx context.Context, accountID, endpointID string, write domain.UpstreamAccountEndpointWrite) (domain.UpstreamAccountEndpoint, error)
+	UpdateEndpointHealth(ctx context.Context, accountID, endpointID string, health domain.HealthStatus, lastError string) (domain.UpstreamAccountEndpoint, error)
+	DeleteEndpoint(ctx context.Context, accountID, endpointID string) error
+}
+
 // UpstreamAccountHealthWriter owns runtime status reconciliation after a
 // connectivity probe. It cannot edit account configuration or delete rows.
 type UpstreamAccountHealthWriter interface {

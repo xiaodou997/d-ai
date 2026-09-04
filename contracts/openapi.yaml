@@ -36,9 +36,6 @@ components:
           format: uri
           readOnly: true
           type: string
-        base_url:
-          description: 上游基础 URL
-          type: string
         concurrency_limit:
           description: 最大并发请求数；为空表示不限制
           format: int32
@@ -47,11 +44,13 @@ components:
           description: 创建时间，Unix 毫秒
           format: int64
           type: integer
-        default_provider_family:
-          description: 默认上游家族
-          type: string
-        extra_headers:
-          description: 附加请求头 JSON
+        endpoints:
+          description: 账号支持的请求端点；同一 API 格式至多一个
+          items:
+            $ref: "#/components/schemas/AccountEndpointDTO"
+          type:
+            - array
+            - "null"
         id:
           description: 上游账号 ID
           type: string
@@ -97,10 +96,158 @@ components:
         - name
         - tenant_display_name
         - tenant_access_mode
-        - base_url
-        - extra_headers
-        - default_provider_family
+        - endpoints
         - status
+      type: object
+    AccountEndpointDTO:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/AccountEndpointDTO.json
+          format: uri
+          readOnly: true
+          type: string
+        account_id:
+          description: 上游账号 ID
+          type: string
+        api_format:
+          description: 精确 API 格式
+          enum:
+            - openai_chat
+            - openai_responses
+            - openai_embeddings
+            - openai_images
+            - anthropic_messages
+            - gemini_generate
+            - gemini_embeddings
+          type: string
+        auth_header:
+          description: custom_header 使用的请求头名称
+          type: string
+        auth_scheme:
+          description: API Key 注入方式
+          enum:
+            - format_default
+            - bearer
+            - anthropic_api_key
+            - gemini_api_key
+            - custom_header
+          type: string
+        base_url:
+          description: 端点基础 URL
+          type: string
+        created_at:
+          description: 创建时间，Unix 毫秒
+          format: int64
+          type: integer
+        extra_headers:
+          description: 端点附加请求头 JSON；敏感值返回 ***REDACTED***
+        health_status:
+          enum:
+            - unknown
+            - healthy
+            - unhealthy
+          type: string
+        id:
+          description: 请求端点 ID
+          type: string
+        last_checked_at:
+          description: 最后检查时间，Unix 毫秒
+          format: int64
+          type: integer
+        last_error:
+          type: string
+        path_override:
+          description: 自定义请求路径；为空使用格式默认路径
+          type: string
+        status:
+          enum:
+            - active
+            - disabled
+          type: string
+        updated_at:
+          description: 更新时间，Unix 毫秒
+          format: int64
+          type: integer
+      required:
+        - id
+        - account_id
+        - api_format
+        - base_url
+        - auth_scheme
+        - extra_headers
+        - status
+        - health_status
+      type: object
+    AccountEndpointWriteRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/AccountEndpointWriteRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        api_format:
+          enum:
+            - openai_chat
+            - openai_responses
+            - openai_embeddings
+            - openai_images
+            - anthropic_messages
+            - gemini_generate
+            - gemini_embeddings
+          type: string
+        auth_header:
+          type: string
+        auth_scheme:
+          enum:
+            - format_default
+            - bearer
+            - anthropic_api_key
+            - gemini_api_key
+            - custom_header
+          type: string
+        base_url:
+          type: string
+        extra_headers:
+          description: 端点附加请求头；编辑时敏感字段值为 ***REDACTED*** 表示保留原值，删除字段表示删除请求头
+        path_override:
+          type: string
+        status:
+          enum:
+            - active
+            - disabled
+          type: string
+      required:
+        - api_format
+        - base_url
+      type: object
+    AccountEndpointsOutputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/AccountEndpointsOutputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        items:
+          items:
+            $ref: "#/components/schemas/AccountEndpointDTO"
+          type:
+            - array
+            - "null"
+        total:
+          format: int64
+          type: integer
+      required:
+        - items
+        - total
       type: object
     AccountStatsResult:
       additionalProperties: false
@@ -1800,23 +1947,19 @@ components:
         api_key:
           description: 上游 API key 明文；仅写入时接收，响应不返回
           type: string
-        base_url:
-          description: 上游基础 URL
-          type: string
         concurrency_limit:
           description: 最大并发请求数；为空表示不限制
           format: int32
           minimum: 1
           type: integer
-        default_provider_family:
-          description: 默认上游家族；为空默认 openai_compatible
-          enum:
-            - openai_compatible
-            - anthropic
-            - gemini
-          type: string
-        extra_headers:
-          description: 附加请求头 JSON；为空默认 {}
+        endpoints:
+          description: 账号支持的请求端点；同一 API 格式至多一个
+          items:
+            $ref: "#/components/schemas/AccountEndpointWriteRequest"
+          minItems: 1
+          type:
+            - array
+            - "null"
         name:
           description: 账号名称
           type: string
@@ -1838,8 +1981,8 @@ components:
           type: number
       required:
         - name
-        - base_url
         - api_key
+        - endpoints
       type: object
     CreateEndUserInputBody:
       additionalProperties: false
@@ -2906,9 +3049,13 @@ components:
     DiscoveredModelDTO:
       additionalProperties: false
       properties:
-        api_format:
-          description: 推断的上游 API 格式
-          type: string
+        api_formats:
+          description: 成功发现该模型的请求端点格式
+          items:
+            type: string
+          type:
+            - array
+            - "null"
         capability_type:
           description: 推断的能力类型
           type: string
@@ -2925,7 +3072,7 @@ components:
         - id
         - name
         - capability_type
-        - api_format
+        - api_formats
         - exists
       type: object
     DispatchModelDTO:
@@ -3805,14 +3952,18 @@ components:
           type: string
         account_name:
           type: string
+        api_formats:
+          items:
+            type: string
+          type:
+            - array
+            - "null"
         available:
           type: boolean
         created_at:
           format: int64
           type: integer
         credential_pool_id:
-          type: string
-        default_provider_family:
           type: string
         fixed_provider_type:
           type: string
@@ -4134,6 +4285,7 @@ components:
           description: 目标类型
           enum:
             - account
+            - endpoint
             - pool
             - unknown
           type: string
@@ -4245,17 +4397,6 @@ components:
             - https://example.com/schemas/ImportEndpointUpstreamModelsInputBody.json
           format: uri
           readOnly: true
-          type: string
-        api_format:
-          description: 导入时使用的上游 API 格式；为空按模型和账号默认家族推断
-          enum:
-            - openai_chat
-            - openai_responses
-            - openai_embeddings
-            - openai_images
-            - anthropic_messages
-            - gemini_generate
-            - gemini_embeddings
           type: string
         models:
           description: 待导入的对外 model_code 列表
@@ -4412,9 +4553,6 @@ components:
           format: uri
           readOnly: true
           type: string
-        api_format:
-          description: 推断的上游 API 格式
-          type: string
         capability_type:
           description: 推断的能力类型
           type: string
@@ -4426,7 +4564,6 @@ components:
           type: string
       required:
         - capability_type
-        - api_format
         - source
       type: object
     InfoOutputBody:
@@ -8504,8 +8641,6 @@ components:
     TenantUpstreamModelDTO:
       additionalProperties: false
       properties:
-        api_format:
-          type: string
         availability:
           enum:
             - available
@@ -8520,12 +8655,17 @@ components:
       required:
         - model_code
         - capability_type
-        - api_format
         - availability
       type: object
     TenantUpstreamResourceDTO:
       additionalProperties: false
       properties:
+        api_formats:
+          items:
+            type: string
+          type:
+            - array
+            - "null"
         id:
           type: string
         models:
@@ -8556,6 +8696,7 @@ components:
         - resource_kind
         - name
         - tenant_multiplier
+        - api_formats
         - models
       type: object
     TenantUpstreamResourcesOutputBody:
@@ -9165,23 +9306,11 @@ components:
         api_key:
           description: 上游 API key 明文；为空保留原密文
           type: string
-        base_url:
-          description: 上游基础 URL
-          type: string
         concurrency_limit:
           description: 最大并发请求数；为空表示不限制
           format: int32
           minimum: 1
           type: integer
-        default_provider_family:
-          description: 默认上游家族；为空保留原值
-          enum:
-            - openai_compatible
-            - anthropic
-            - gemini
-          type: string
-        extra_headers:
-          description: 附加请求头 JSON；为空默认 {}
         name:
           description: 账号名称
           type: string
@@ -9203,7 +9332,6 @@ components:
           type: number
       required:
         - name
-        - base_url
       type: object
     UpdateCredentialPoolStatusInputBody:
       additionalProperties: false
@@ -9666,9 +9794,10 @@ components:
       properties:
         action:
           type: string
-        base_url:
-          type: string
         duplicate_model_bindings:
+          format: int64
+          type: integer
+        endpoint_count:
           format: int64
           type: integer
         model_binding_count:
@@ -9686,7 +9815,7 @@ components:
             - "null"
       required:
         - name
-        - base_url
+        - endpoint_count
         - action
         - model_binding_count
       type: object
@@ -9807,6 +9936,9 @@ components:
           format: uri
           readOnly: true
           type: string
+        api_format:
+          description: 要测试的账号端点 API 格式
+          type: string
         image:
           $ref: "#/components/schemas/UpstreamAccountTestImageInput"
           description: 图片编辑测试使用的真实参考图片；image_edit=true 时必填
@@ -9821,6 +9953,7 @@ components:
           type: string
       required:
         - model_code
+        - api_format
       type: object
     UpstreamAccountTestOutputBody:
       additionalProperties: false
@@ -9839,7 +9972,7 @@ components:
           description: 使用的上游 API 格式
           type: string
         capability:
-          description: 测试能力：chat / image
+          description: 测试能力：chat / image / embedding
           type: string
         error:
           description: 失败原因(上游报错/解析失败)
@@ -9904,15 +10037,16 @@ components:
       properties:
         api_key:
           type: string
-        base_url:
-          type: string
         concurrency_limit:
           format: int32
           minimum: 1
           type: integer
-        default_provider_family:
-          type: string
-        extra_headers: {}
+        endpoints:
+          items:
+            $ref: "#/components/schemas/UpstreamAccountTransferEndpointDTO"
+          type:
+            - array
+            - "null"
         model_bindings:
           items:
             $ref: "#/components/schemas/UpstreamAccountTransferBindingDTO"
@@ -9931,16 +10065,13 @@ components:
         - name
         - tenant_display_name
         - tenant_access_mode
-        - base_url
         - api_key
-        - default_provider_family
         - status
+        - endpoints
       type: object
     UpstreamAccountTransferBindingDTO:
       additionalProperties: false
       properties:
-        api_format:
-          type: string
         capability_type:
           type: string
         image_edit_max_output_count:
@@ -9964,8 +10095,28 @@ components:
       required:
         - model_code
         - capability_type
-        - api_format
         - upstream_model_name
+        - status
+      type: object
+    UpstreamAccountTransferEndpointDTO:
+      additionalProperties: false
+      properties:
+        api_format:
+          type: string
+        auth_header:
+          type: string
+        auth_scheme:
+          type: string
+        base_url:
+          type: string
+        extra_headers: {}
+        path_override:
+          type: string
+        status:
+          type: string
+      required:
+        - api_format
+        - base_url
         - status
       type: object
     UpstreamModelBindingDTO:
@@ -9977,9 +10128,6 @@ components:
             - https://example.com/schemas/UpstreamModelBindingDTO.json
           format: uri
           readOnly: true
-          type: string
-        api_format:
-          description: 上游 API 格式
           type: string
         capability_type:
           description: 能力类型
@@ -10039,7 +10187,6 @@ components:
         - id
         - model_code
         - capability_type
-        - api_format
         - upstream_model_name
         - status
         - image_max_output_count
@@ -10054,17 +10201,6 @@ components:
             - https://example.com/schemas/UpstreamModelBindingWriteRequest.json
           format: uri
           readOnly: true
-          type: string
-        api_format:
-          description: 上游 API 格式
-          enum:
-            - openai_chat
-            - openai_responses
-            - openai_embeddings
-            - openai_images
-            - anthropic_messages
-            - gemini_generate
-            - gemini_embeddings
           type: string
         capability_type:
           description: 能力类型；为空时按 model_code 推断
@@ -10371,6 +10507,9 @@ components:
         trace_id:
           description: Trace ID
           type: string
+        upstream_account_id:
+          description: 命中的上游账号 ID
+          type: string
         upstream_model:
           description: 上游模型
           type: string
@@ -10491,6 +10630,8 @@ components:
         effective_user_multiplier_snapshot:
           format: double
           type: number
+        endpoint_id:
+          type: string
         error_code:
           type: string
         error_message:
@@ -10624,6 +10765,8 @@ components:
           format: int32
           type: integer
         trace_id:
+          type: string
+        upstream_account_id:
           type: string
         upstream_model:
           description: 上游模型
@@ -15242,26 +15385,15 @@ paths:
         - limit-policies
   /api/v1/model-capability/infer:
     get:
-      description: 优先查 models.dev 缓存目录，按模态结构判断 image/audio_tts/audio_stt；未命中或模态无法区分 chat/embedding/rerank 时回退本地模型名规则。仅用于表单默认值建议，不做任何写入，也不影响提交时的合法性校验。
+      description: 优先查 models.dev 缓存目录，未命中时按模型名建议能力类型。API 格式由账号请求端点显式声明，绝不从模型名推断。
       operationId: ai-infer-model-capability
       parameters:
-        - description: 对外/上游模型名，用于推断能力与协议
+        - description: 对外/上游模型名，用于建议能力类型
           explode: false
           in: query
           name: model_code
           schema:
-            description: 对外/上游模型名，用于推断能力与协议
-            type: string
-        - description: 账号默认上游家族；留空按 openai_compatible 处理
-          explode: false
-          in: query
-          name: endpoint_protocol
-          schema:
-            description: 账号默认上游家族；留空按 openai_compatible 处理
-            enum:
-              - openai_compatible
-              - anthropic
-              - gemini
+            description: 对外/上游模型名，用于建议能力类型
             type: string
       responses:
         "200":
@@ -15276,7 +15408,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/AppError"
           description: Error
-      summary: 推断模型能力与协议
+      summary: 推断模型能力
       tags:
         - upstream-accounts
   /api/v1/notifications:
@@ -20259,7 +20391,7 @@ paths:
       tags:
         - upstream-accounts
     post:
-      description: 创建上游账号；可服务模型和上游协议由显式上游模型绑定维护。
+      description: 创建一个供应商账号和一把 API Key；可支持多个不同 API 格式的请求端点。
       operationId: ai-create-upstream-account
       requestBody:
         content:
@@ -20388,7 +20520,7 @@ paths:
       tags:
         - upstream-accounts
     patch:
-      description: 更新上游账号；可服务模型和上游协议由显式上游模型绑定维护。
+      description: 更新上游账号元数据或 API Key；请求端点通过独立 Endpoint API 管理。
       operationId: ai-update-upstream-account
       parameters:
         - description: 上游账号 ID
@@ -20418,6 +20550,138 @@ paths:
                 $ref: "#/components/schemas/AppError"
           description: Error
       summary: 更新上游账号
+      tags:
+        - upstream-accounts
+  /api/v1/upstream-accounts/{accountID}/endpoints:
+    get:
+      operationId: ai-list-upstream-account-endpoints
+      parameters:
+        - description: 上游账号 ID
+          in: path
+          name: accountID
+          required: true
+          schema:
+            description: 上游账号 ID
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountEndpointsOutputBody"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 上游账号请求端点列表
+      tags:
+        - upstream-accounts
+    post:
+      operationId: ai-create-upstream-account-endpoint
+      parameters:
+        - description: 上游账号 ID
+          in: path
+          name: accountID
+          required: true
+          schema:
+            description: 上游账号 ID
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccountEndpointWriteRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountEndpointDTO"
+          description: Created
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 创建上游账号请求端点
+      tags:
+        - upstream-accounts
+  /api/v1/upstream-accounts/{accountID}/endpoints/{endpointID}:
+    delete:
+      operationId: ai-delete-upstream-account-endpoint
+      parameters:
+        - description: 上游账号 ID
+          in: path
+          name: accountID
+          required: true
+          schema:
+            description: 上游账号 ID
+            type: string
+        - description: 请求端点 ID
+          in: path
+          name: endpointID
+          required: true
+          schema:
+            description: 请求端点 ID
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteAccountOutputBody"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 删除上游账号请求端点
+      tags:
+        - upstream-accounts
+    patch:
+      operationId: ai-update-upstream-account-endpoint
+      parameters:
+        - description: 上游账号 ID
+          in: path
+          name: accountID
+          required: true
+          schema:
+            description: 上游账号 ID
+            type: string
+        - description: 请求端点 ID
+          in: path
+          name: endpointID
+          required: true
+          schema:
+            description: 请求端点 ID
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccountEndpointWriteRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountEndpointDTO"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 更新上游账号请求端点
       tags:
         - upstream-accounts
   /api/v1/upstream-accounts/{accountID}/import-upstream-models:
@@ -20692,7 +20956,7 @@ paths:
         - upstream-accounts
   /api/v1/upstream-accounts/{accountID}/upstream-models:
     get:
-      description: 调用上游 /v1/models 并推断能力与协议，不落库。
+      description: 调用账号所有启用请求端点的模型目录并按模型 ID 合并，不落库。
       operationId: ai-fetch-account-upstream-models
       parameters:
         - description: 上游账号 ID

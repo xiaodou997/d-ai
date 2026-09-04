@@ -240,13 +240,14 @@ func TestBuildAICoreHTTPDepsWiresRuntimeManagementDependencies(t *testing.T) {
 			HTTPClient:        httpClient,
 			AccountHealth:     accountPorts,
 			ModelCapabilities: modelCapabilities,
+			RuntimeHealth:     health,
 			BanChecker:        banChecker,
 		},
 	)
 	if diagnostics.Auth.TokenVerifier != jwt || diagnostics.Auth.TokenRevocations != blacklist || diagnostics.Auth.BanChecker != banChecker {
 		t.Fatal("upstream diagnostics auth dependencies were not preserved")
 	}
-	if diagnostics.AccountReader != accountReader || diagnostics.ModelBindings != modelBindings || diagnostics.ProviderSecrets != providerSecrets || diagnostics.HTTPClient != httpClient || diagnostics.AccountHealth != accountPorts || diagnostics.ModelCapabilities != modelCapabilities {
+	if diagnostics.AccountReader != accountReader || diagnostics.ModelBindings != modelBindings || diagnostics.ProviderSecrets != providerSecrets || diagnostics.HTTPClient != httpClient || diagnostics.AccountHealth != accountPorts || diagnostics.ModelCapabilities != modelCapabilities || diagnostics.RuntimeHealth != health {
 		t.Fatal("upstream diagnostics dependencies were not preserved")
 	}
 
@@ -260,13 +261,14 @@ func TestBuildAICoreHTTPDepsWiresRuntimeManagementDependencies(t *testing.T) {
 			ModelBindings:   modelBindings,
 			PriceBooks:      priceBooks,
 			AdminAudit:      adminAudit,
+			RuntimeHealth:   health,
 			BanChecker:      banChecker,
 		},
 	)
 	if accountManagement.Auth.TokenVerifier != jwt || accountManagement.Auth.TokenRevocations != blacklist || accountManagement.Auth.BanChecker != banChecker {
 		t.Fatal("upstream account management auth dependencies were not preserved")
 	}
-	if accountManagement.Accounts != accountPorts || accountManagement.AccountManager != accountPorts || accountManagement.AccountReader != accountReader || accountManagement.ProviderSecrets != providerSecrets || accountManagement.ModelBindings != modelBindings || accountManagement.PriceBooks != priceBooks || accountManagement.AdminAudit != adminAudit {
+	if accountManagement.Accounts != accountPorts || accountManagement.AccountManager != accountPorts || accountManagement.AccountReader != accountReader || accountManagement.ProviderSecrets != providerSecrets || accountManagement.ModelBindings != modelBindings || accountManagement.PriceBooks != priceBooks || accountManagement.AdminAudit != adminAudit || accountManagement.RuntimeHealth != health {
 		t.Fatal("upstream account management dependencies were not preserved")
 	}
 

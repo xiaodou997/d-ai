@@ -2,7 +2,10 @@ package postgres
 
 import (
 	"context"
+	"errors"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	dbgen "xiaodou/dai/internal/ai/db/gen"
@@ -43,10 +46,7 @@ func (r *AccountRepo) CreateAccount(ctx context.Context, e upstreamcontrol.Accou
 		Name:              e.Name,
 		TenantDisplayName: e.TenantDisplayName,
 		TenantAccessMode:  e.TenantAccessMode,
-		BaseUrl:           e.BaseURL,
 		ApiKeyCiphertext:  e.Ciphertext,
-		ExtraHeaders:      pvJSONObjectOrDefault(e.ExtraHeaders),
-		DefaultProtocol:   e.DefaultProtocol,
 		ConcurrencyLimit:  akInt4Ptr(intPtrToInt32Ptr(e.ConcurrencyLimit)),
 		PriceBookID:       nullableUUID(e.PriceBookID),
 		TenantMultiplier:  floatPtrToNumeric(e.TenantMultiplier),
@@ -54,6 +54,11 @@ func (r *AccountRepo) CreateAccount(ctx context.Context, e upstreamcontrol.Accou
 	})
 	if err != nil {
 		return domain.UpstreamAccount{}, err
+	}
+	for _, endpoint := range e.Endpoints {
+		if _, err := qtx.CreateUpstreamAccountEndpoint(ctx, endpointCreateParams(row.ID, endpoint)); err != nil {
+			return domain.UpstreamAccount{}, err
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return domain.UpstreamAccount{}, err
@@ -66,16 +71,22 @@ func (r *AccountRepo) ListAccounts(ctx context.Context) ([]domain.UpstreamAccoun
 	if err != nil {
 		return nil, err
 	}
+	endpointRows, err := r.q.ListAllUpstreamAccountEndpoints(ctx)
+	if err != nil {
+		return nil, err
+	}
+	endpointsByAccount := make(map[string][]domain.UpstreamAccountEndpoint)
+	for _, row := range endpointRows {
+		endpoint := endpointFromRow(row)
+		endpointsByAccount[endpoint.AccountID] = append(endpointsByAccount[endpoint.AccountID], endpoint)
+	}
 	out := make([]domain.UpstreamAccount, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, domain.UpstreamAccount{
+		account := domain.UpstreamAccount{
 			ID:                uuidToString(row.ID),
 			Name:              row.Name,
 			TenantDisplayName: row.TenantDisplayName,
 			TenantAccessMode:  row.TenantAccessMode,
-			BaseURL:           row.BaseUrl,
-			ExtraHeaders:      row.ExtraHeaders,
-			DefaultProtocol:   row.DefaultProtocol,
 			ConcurrencyLimit:  int32PtrToIntPtr(akInt4StrPtr(row.ConcurrencyLimit)),
 			PriceBookID:       uuidToString(row.PriceBookID),
 			TenantMultiplier:  numericToFloatPtr(row.TenantMultiplier),
@@ -84,7 +95,9 @@ func (r *AccountRepo) ListAccounts(ctx context.Context) ([]domain.UpstreamAccoun
 			InvalidAt:         akTimePtr(row.InvalidAt),
 			CreatedAt:         row.CreatedAt.Time,
 			UpdatedAt:         row.UpdatedAt.Time,
-		})
+		}
+		account.Endpoints = endpointsByAccount[account.ID]
+		out = append(out, account)
 	}
 	return out, nil
 }
@@ -98,14 +111,11 @@ func (r *AccountRepo) GetAccount(ctx context.Context, id string) (domain.Upstrea
 	if err != nil {
 		return domain.UpstreamAccount{}, err
 	}
-	return domain.UpstreamAccount{
+	account := domain.UpstreamAccount{
 		ID:                uuidToString(row.ID),
 		Name:              row.Name,
 		TenantDisplayName: row.TenantDisplayName,
 		TenantAccessMode:  row.TenantAccessMode,
-		BaseURL:           row.BaseUrl,
-		ExtraHeaders:      row.ExtraHeaders,
-		DefaultProtocol:   row.DefaultProtocol,
 		ConcurrencyLimit:  int32PtrToIntPtr(akInt4StrPtr(row.ConcurrencyLimit)),
 		PriceBookID:       uuidToString(row.PriceBookID),
 		TenantMultiplier:  numericToFloatPtr(row.TenantMultiplier),
@@ -114,7 +124,9 @@ func (r *AccountRepo) GetAccount(ctx context.Context, id string) (domain.Upstrea
 		InvalidAt:         akTimePtr(row.InvalidAt),
 		CreatedAt:         row.CreatedAt.Time,
 		UpdatedAt:         row.UpdatedAt.Time,
-	}, nil
+	}
+	account.Endpoints, err = r.ListEndpoints(ctx, account.ID)
+	return account, err
 }
 
 func (r *AccountRepo) GetAccountSecret(ctx context.Context, id string) (upstreamcontrol.AccountSecret, error) {
@@ -126,15 +138,14 @@ func (r *AccountRepo) GetAccountSecret(ctx context.Context, id string) (upstream
 	if err != nil {
 		return upstreamcontrol.AccountSecret{}, err
 	}
-	return accountSecretFromRow(row), nil
+	secret := accountSecretFromRow(row)
+	secret.Endpoints, err = r.ListEndpoints(ctx, id)
+	return secret, err
 }
 
 func accountSecretFromRow(row dbgen.AiUpstreamAccount) upstreamcontrol.AccountSecret {
 	return upstreamcontrol.AccountSecret{
 		Ciphertext:        row.ApiKeyCiphertext,
-		BaseURL:           row.BaseUrl,
-		ExtraHeaders:      row.ExtraHeaders,
-		DefaultProtocol:   row.DefaultProtocol,
 		TenantDisplayName: row.TenantDisplayName,
 		TenantAccessMode:  row.TenantAccessMode,
 		Status:            row.Status,
@@ -158,10 +169,7 @@ func (r *AccountRepo) UpdateAccount(ctx context.Context, e upstreamcontrol.Accou
 		Name:              e.Name,
 		TenantDisplayName: e.TenantDisplayName,
 		TenantAccessMode:  e.TenantAccessMode,
-		BaseUrl:           e.BaseURL,
 		ApiKeyCiphertext:  e.Ciphertext,
-		ExtraHeaders:      pvJSONObjectOrDefault(e.ExtraHeaders),
-		DefaultProtocol:   e.DefaultProtocol,
 		ConcurrencyLimit:  akInt4Ptr(intPtrToInt32Ptr(e.ConcurrencyLimit)),
 		PriceBookID:       nullableUUID(e.PriceBookID),
 		TenantMultiplier:  floatPtrToNumeric(e.TenantMultiplier),
@@ -169,6 +177,11 @@ func (r *AccountRepo) UpdateAccount(ctx context.Context, e upstreamcontrol.Accou
 	})
 	if err != nil {
 		return domain.UpstreamAccount{}, err
+	}
+	if e.Status == domain.UpstreamAccountStatusActive {
+		if err := validateActiveDirectAccountConfiguration(ctx, tx, e.ID); err != nil {
+			return domain.UpstreamAccount{}, err
+		}
 	}
 	if e.TenantAccessMode == "public" {
 		if _, err := tx.Exec(ctx, `
@@ -185,13 +198,220 @@ func (r *AccountRepo) UpdateAccount(ctx context.Context, e upstreamcontrol.Accou
 	return r.GetAccount(ctx, uuidToString(row.ID))
 }
 
+func endpointCreateParams(accountID pgtype.UUID, write domain.UpstreamAccountEndpointWrite) dbgen.CreateUpstreamAccountEndpointParams {
+	return dbgen.CreateUpstreamAccountEndpointParams{
+		AccountID:    accountID,
+		ApiFormat:    string(write.APIFormat),
+		BaseUrl:      write.BaseURL,
+		PathOverride: write.PathOverride,
+		AuthScheme:   write.AuthScheme,
+		AuthHeader:   write.AuthHeader,
+		ExtraHeaders: pvJSONObjectOrDefault(write.ExtraHeaders),
+		Status:       write.Status,
+	}
+}
+
+func endpointFromRow(row dbgen.AiUpstreamAccountEndpoint) domain.UpstreamAccountEndpoint {
+	return domain.UpstreamAccountEndpoint{
+		ID:            uuidToString(row.ID),
+		AccountID:     uuidToString(row.AccountID),
+		APIFormat:     domain.UpstreamProtocol(row.ApiFormat),
+		BaseURL:       row.BaseUrl,
+		PathOverride:  row.PathOverride,
+		AuthScheme:    row.AuthScheme,
+		AuthHeader:    row.AuthHeader,
+		ExtraHeaders:  row.ExtraHeaders,
+		Status:        row.Status,
+		HealthStatus:  domain.HealthStatus(row.HealthStatus),
+		LastError:     row.LastError,
+		LastCheckedAt: akTimePtr(row.LastCheckedAt),
+		CreatedAt:     row.CreatedAt.Time,
+		UpdatedAt:     row.UpdatedAt.Time,
+	}
+}
+
+func (r *AccountRepo) ListEndpoints(ctx context.Context, accountID string) ([]domain.UpstreamAccountEndpoint, error) {
+	aid, err := akUUID(accountID)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := r.q.ListUpstreamAccountEndpoints(ctx, aid)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.UpstreamAccountEndpoint, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, endpointFromRow(row))
+	}
+	return out, nil
+}
+
+func (r *AccountRepo) GetEndpoint(ctx context.Context, accountID, endpointID string) (domain.UpstreamAccountEndpoint, error) {
+	aid, err := akUUID(accountID)
+	if err != nil {
+		return domain.UpstreamAccountEndpoint{}, err
+	}
+	eid, err := akUUID(endpointID)
+	if err != nil {
+		return domain.UpstreamAccountEndpoint{}, err
+	}
+	row, err := r.q.GetUpstreamAccountEndpoint(ctx, dbgen.GetUpstreamAccountEndpointParams{ID: eid, AccountID: aid})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.UpstreamAccountEndpoint{}, domain.ErrNotFound
+	}
+	if err != nil {
+		return domain.UpstreamAccountEndpoint{}, err
+	}
+	return endpointFromRow(row), nil
+}
+
+func (r *AccountRepo) CreateEndpoint(ctx context.Context, accountID string, write domain.UpstreamAccountEndpointWrite) (domain.UpstreamAccountEndpoint, error) {
+	aid, err := akUUID(accountID)
+	if err != nil {
+		return domain.UpstreamAccountEndpoint{}, err
+	}
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return domain.UpstreamAccountEndpoint{}, err
+	}
+	defer tx.Rollback(ctx)
+	if _, err := lockDirectAccountStatus(ctx, tx, accountID); err != nil {
+		return domain.UpstreamAccountEndpoint{}, err
+	}
+	row, err := queriesWithTx(tx).CreateUpstreamAccountEndpoint(ctx, endpointCreateParams(aid, write))
+	if err != nil {
+		return domain.UpstreamAccountEndpoint{}, translatePersistenceError(err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return domain.UpstreamAccountEndpoint{}, err
+	}
+	return endpointFromRow(row), nil
+}
+
+func (r *AccountRepo) UpdateEndpoint(ctx context.Context, accountID, endpointID string, write domain.UpstreamAccountEndpointWrite) (domain.UpstreamAccountEndpoint, error) {
+	aid, err := akUUID(accountID)
+	if err != nil {
+		return domain.UpstreamAccountEndpoint{}, err
+	}
+	eid, err := akUUID(endpointID)
+	if err != nil {
+		return domain.UpstreamAccountEndpoint{}, err
+	}
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return domain.UpstreamAccountEndpoint{}, err
+	}
+	defer tx.Rollback(ctx)
+	accountStatus, err := lockDirectAccountStatus(ctx, tx, accountID)
+	if err != nil {
+		return domain.UpstreamAccountEndpoint{}, err
+	}
+	row, err := queriesWithTx(tx).UpdateUpstreamAccountEndpoint(ctx, dbgen.UpdateUpstreamAccountEndpointParams{
+		ID: eid, AccountID: aid, ApiFormat: string(write.APIFormat), BaseUrl: write.BaseURL,
+		PathOverride: write.PathOverride, AuthScheme: write.AuthScheme, AuthHeader: write.AuthHeader,
+		ExtraHeaders: pvJSONObjectOrDefault(write.ExtraHeaders), Status: write.Status,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.UpstreamAccountEndpoint{}, domain.ErrNotFound
+	}
+	if err != nil {
+		return domain.UpstreamAccountEndpoint{}, translatePersistenceError(err)
+	}
+	if accountStatus == domain.UpstreamAccountStatusActive {
+		if err := validateActiveDirectAccountConfiguration(ctx, tx, accountID); err != nil {
+			return domain.UpstreamAccountEndpoint{}, err
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return domain.UpstreamAccountEndpoint{}, err
+	}
+	return endpointFromRow(row), nil
+}
+
+func (r *AccountRepo) UpdateEndpointHealth(ctx context.Context, accountID, endpointID string, health domain.HealthStatus, lastError string) (domain.UpstreamAccountEndpoint, error) {
+	aid, err := akUUID(accountID)
+	if err != nil {
+		return domain.UpstreamAccountEndpoint{}, err
+	}
+	eid, err := akUUID(endpointID)
+	if err != nil {
+		return domain.UpstreamAccountEndpoint{}, err
+	}
+	row, err := r.q.UpdateUpstreamAccountEndpointHealth(ctx, dbgen.UpdateUpstreamAccountEndpointHealthParams{
+		ID: eid, AccountID: aid, HealthStatus: string(health), LastError: lastError,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.UpstreamAccountEndpoint{}, domain.ErrNotFound
+	}
+	if err != nil {
+		return domain.UpstreamAccountEndpoint{}, err
+	}
+	return endpointFromRow(row), nil
+}
+
+func (r *AccountRepo) DeleteEndpoint(ctx context.Context, accountID, endpointID string) error {
+	aid, err := akUUID(accountID)
+	if err != nil {
+		return err
+	}
+	eid, err := akUUID(endpointID)
+	if err != nil {
+		return err
+	}
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	accountStatus, err := lockDirectAccountStatus(ctx, tx, accountID)
+	if err != nil {
+		return err
+	}
+	count, err := queriesWithTx(tx).DeleteUpstreamAccountEndpoint(ctx, dbgen.DeleteUpstreamAccountEndpointParams{ID: eid, AccountID: aid})
+	if err != nil {
+		return err
+	}
+	if count == 0 {
+		return domain.ErrNotFound
+	}
+	var remaining int
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM ai_upstream_account_endpoints WHERE account_id = $1::uuid`, accountID).Scan(&remaining); err != nil {
+		return err
+	}
+	if remaining == 0 {
+		return domain.NewValidationError("endpoint_id", "account must keep at least one endpoint")
+	}
+	if accountStatus == domain.UpstreamAccountStatusActive {
+		if err := validateActiveDirectAccountConfiguration(ctx, tx, accountID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
+}
+
 func (r *AccountRepo) UpdateAccountStatus(ctx context.Context, id, status string) (domain.UpstreamAccount, error) {
 	aid, err := akUUID(id)
 	if err != nil {
 		return domain.UpstreamAccount{}, err
 	}
-	row, err := r.q.UpdateUpstreamAccountStatus(ctx, dbgen.UpdateUpstreamAccountStatusParams{ID: aid, Status: status})
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
+		return domain.UpstreamAccount{}, err
+	}
+	defer tx.Rollback(ctx)
+	if _, err := lockDirectAccountStatus(ctx, tx, id); err != nil {
+		return domain.UpstreamAccount{}, err
+	}
+	row, err := queriesWithTx(tx).UpdateUpstreamAccountStatus(ctx, dbgen.UpdateUpstreamAccountStatusParams{ID: aid, Status: status})
+	if err != nil {
+		return domain.UpstreamAccount{}, err
+	}
+	if status == domain.UpstreamAccountStatusActive {
+		if err := validateActiveDirectAccountConfiguration(ctx, tx, id); err != nil {
+			return domain.UpstreamAccount{}, err
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
 		return domain.UpstreamAccount{}, err
 	}
 	return r.GetAccount(ctx, uuidToString(row.ID))
@@ -231,6 +451,9 @@ func (r *AccountRepo) DeleteAccount(ctx context.Context, id string) error {
 		return err
 	}
 	defer tx.Rollback(ctx)
+	if _, err := lockDirectAccountStatus(ctx, tx, id); err != nil {
+		return err
+	}
 
 	groupRows, err := tx.Query(ctx, `
 		SELECT g.id::text

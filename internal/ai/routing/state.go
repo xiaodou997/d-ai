@@ -76,6 +76,15 @@ func (t *InMemoryTracker) RecordFailure(targetID string, kind TargetKind) {
 	t.applyFailure(t.getOrCreate(targetID, kind))
 }
 
+func (t *InMemoryTracker) Forget(targetID string) {
+	if targetID == "" {
+		return
+	}
+	t.mu.Lock()
+	delete(t.entries, targetID)
+	t.mu.Unlock()
+}
+
 // applyFailure drives the FSM forward on a failure event. Caller must hold mu.
 func (t *InMemoryTracker) applyFailure(e *targetEntry) {
 	switch e.state {

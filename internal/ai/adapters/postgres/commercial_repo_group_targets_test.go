@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -68,9 +69,13 @@ func openCommercialGroupTestPool(t *testing.T) (*pgxpool.Pool, context.Context) 
 			name TEXT NOT NULL,
 			tenant_display_name TEXT NOT NULL DEFAULT '',
 			tenant_access_mode TEXT NOT NULL DEFAULT 'public',
-			base_url TEXT NOT NULL DEFAULT '',
-			default_protocol TEXT NOT NULL DEFAULT '',
 			tenant_multiplier NUMERIC,
+			status TEXT NOT NULL DEFAULT 'active'
+		);
+		CREATE TEMP TABLE ai_upstream_account_endpoints (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			account_id UUID NOT NULL,
+			api_format TEXT NOT NULL,
 			status TEXT NOT NULL DEFAULT 'active'
 		);
 		CREATE TEMP TABLE ai_credential_pools (
@@ -387,7 +392,7 @@ func TestGroupTargetDetailToCommercial(t *testing.T) {
 			Status:     "active",
 		},
 		AccountName:       "OpenAI Primary",
-		DefaultProtocol:   "openai_compatible",
+		APIFormats:        []string{"openai_chat", "openai_responses"},
 		PoolName:          "",
 		FixedProviderType: "",
 	}
@@ -396,7 +401,7 @@ func TestGroupTargetDetailToCommercial(t *testing.T) {
 	if got.TargetKind != commercial.TargetKindDirectUpstream || got.TargetID != "account-2" {
 		t.Fatalf("group target mismatch: %+v", got.GroupTarget)
 	}
-	if got.AccountName != "OpenAI Primary" || got.DefaultProtocol != "openai_compatible" {
+	if got.AccountName != "OpenAI Primary" || !reflect.DeepEqual(got.APIFormats, []string{"openai_chat", "openai_responses"}) {
 		t.Fatalf("display fields mismatch: %+v", got)
 	}
 }

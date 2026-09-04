@@ -9,7 +9,7 @@ import (
 
 func TestEnsureDirectUpstreamExistsUsesAccountReader(t *testing.T) {
 	reader := &recordingUpstreamAccountReader{
-		account: upstreamcontrol.AccountSecret{DefaultProtocol: "anthropic"},
+		account: upstreamcontrol.AccountSecret{Ciphertext: "cipher"},
 	}
 	const accountID = "6f8f5771-b98c-44d4-997d-fd4848ce5d2d"
 
@@ -20,9 +20,7 @@ func TestEnsureDirectUpstreamExistsUsesAccountReader(t *testing.T) {
 	if reader.accountID != accountID {
 		t.Fatalf("reader account ID = %q, want %q", reader.accountID, accountID)
 	}
-	if got.DefaultProtocol != "anthropic" {
-		t.Fatalf("default protocol = %q, want anthropic", got.DefaultProtocol)
-	}
+	_ = got
 }
 
 func TestEnsureDirectUpstreamExistsRejectsInvalidIDBeforeReader(t *testing.T) {

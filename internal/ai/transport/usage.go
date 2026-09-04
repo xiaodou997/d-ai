@@ -79,6 +79,7 @@ type usageLogDTO struct {
 	ResolvedProviderFamily             *string  `json:"resolved_provider_family,omitempty" doc:"最终实际选中的上游协议家族"`
 	CapabilityType                     string   `json:"capability_type" doc:"能力类型"`
 	GroupTargetID                      string   `json:"group_target_id,omitempty" doc:"命中的分组上游目标 ID"`
+	UpstreamAccountID                  string   `json:"upstream_account_id,omitempty" doc:"命中的上游账号 ID"`
 	EndpointID                         string   `json:"endpoint_id,omitempty" doc:"供应商端点 ID"`
 	ProviderCode                       *string  `json:"provider_code,omitempty" doc:"供应商编码"`
 	UpstreamModel                      *string  `json:"upstream_model,omitempty" doc:"上游模型"`
@@ -158,6 +159,8 @@ type usageLogDetailDTO struct {
 	Username                           *string         `json:"username,omitempty"`
 	ExternalUserID                     *string         `json:"external_user_id,omitempty"`
 	GroupID                            *string         `json:"group_id,omitempty"`
+	UpstreamAccountID                  *string         `json:"upstream_account_id,omitempty"`
+	EndpointID                         *string         `json:"endpoint_id,omitempty"`
 	GroupNameSnapshot                  *string         `json:"group_name_snapshot,omitempty"`
 	GroupDefaultUserMultiplierSnapshot float64         `json:"group_default_user_multiplier_snapshot,omitempty"`
 	UserMultiplierOverrideSnapshot     *float64        `json:"user_multiplier_override_snapshot,omitempty"`
@@ -796,6 +799,7 @@ func usageLogToDTO(log domain.UsageLog) usageLogDTO {
 		ResolvedProviderFamily:             stringPtrOrNil(log.ResolvedProviderFamily),
 		CapabilityType:                     log.CapabilityType,
 		GroupTargetID:                      log.GroupTargetID,
+		UpstreamAccountID:                  log.UpstreamAccountID,
 		EndpointID:                         log.EndpointID,
 		ProviderCode:                       stringPtrOrNil(log.ProviderCode),
 		UpstreamModel:                      stringPtrOrNil(log.UpstreamModel),
@@ -882,6 +886,8 @@ func usageLogDetailToDTO(detail domain.UsageLogDetail) usageLogDetailDTO {
 		UserID:                             stringPtrOrNil(detail.UserID),
 		ExternalUserID:                     stringPtrOrNil(detail.ExternalUserID),
 		GroupID:                            stringPtrOrNil(detail.GroupID),
+		UpstreamAccountID:                  stringPtrOrNil(detail.UpstreamAccountID),
+		EndpointID:                         stringPtrOrNil(detail.EndpointID),
 		GroupNameSnapshot:                  stringPtrOrNil(detail.GroupNameSnapshot),
 		GroupDefaultUserMultiplierSnapshot: detail.GroupDefaultUserMultiplierSnapshot,
 		UserMultiplierOverrideSnapshot:     detail.UserMultiplierOverrideSnapshot,

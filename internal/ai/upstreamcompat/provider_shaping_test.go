@@ -27,3 +27,28 @@ func TestBuildURLRejectsFixedProviderWithoutClientRuntime(t *testing.T) {
 		t.Fatal("BuildURL() error = nil")
 	}
 }
+
+func TestBuildURLUsesEndpointPathOverrideAndModelTemplate(t *testing.T) {
+	cand := &domain.RouteCandidate{
+		Protocol: domain.ProtocolGeminiGenerate, BaseURL: "https://gateway.example/google",
+		RequestPath: "/google/v2/models/{model}:generate", UpstreamModel: "gemini-test",
+	}
+	got, err := BuildURL(cand, RequestMeta{})
+	if err != nil {
+		t.Fatalf("BuildURL() error = %v", err)
+	}
+	if got != "https://gateway.example/google/v2/models/gemini-test:generate" {
+		t.Fatalf("BuildURL() = %q", got)
+	}
+}
+
+func TestBuildHeadersUsesEndpointAuthScheme(t *testing.T) {
+	cand := &domain.RouteCandidate{
+		Protocol: domain.ProtocolOpenAIResponses, APIKeyCiphertext: "secret",
+		EndpointAuthScheme: domain.EndpointAuthCustomHeader, EndpointAuthHeader: "X-Provider-Key",
+	}
+	headers := BuildHeaders(cand, RequestMeta{})
+	if headers["X-Provider-Key"] != "secret" || headers["Authorization"] != "" {
+		t.Fatalf("headers = %#v", headers)
+	}
+}

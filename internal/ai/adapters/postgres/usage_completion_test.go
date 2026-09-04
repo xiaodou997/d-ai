@@ -117,7 +117,7 @@ func TestUsageCompletionIsIdempotentAndAtomic(t *testing.T) {
 		t.Fatalf("read upstream reference-cost summary: %v", err)
 	}
 	if len(upstreamRows) != 1 || upstreamRows[0].TargetKind != "direct_upstream" ||
-		upstreamRows[0].TargetID != "44444444-4444-4444-4444-444444444444" ||
+		upstreamRows[0].TargetID != "33333333-3333-3333-3333-333333333333" ||
 		upstreamRows[0].CatalogBaseMicro != 500 || upstreamRows[0].TenantPayableMicro != 700 {
 		t.Fatalf("upstream reference-cost summary = %#v", upstreamRows)
 	}
@@ -220,6 +220,7 @@ func usageCompletionRequest(requestID, tenantID, userID string) *serving.Request
 		},
 		Candidate: &domain.RouteCandidate{
 			RouteID:                    "11111111-1111-1111-1111-111111111111",
+			AccountID:                  "33333333-3333-3333-3333-333333333333",
 			EndpointID:                 "44444444-4444-4444-4444-444444444444",
 			ProviderCode:               "test-upstream",
 			ModelCode:                  "test-model",

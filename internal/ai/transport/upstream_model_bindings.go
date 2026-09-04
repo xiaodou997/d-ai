@@ -3,7 +3,6 @@ package transport
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strings"
 
@@ -11,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"xiaodou/dai/internal/ai/domain"
+	"xiaodou/dai/internal/ai/upstreamcontrol"
 	"xiaodou/dai/libs/go/httpx"
 )
 
@@ -18,7 +18,6 @@ type upstreamModelBindingDTO struct {
 	ID                          string `json:"id" doc:"显式上游模型绑定 ID"`
 	ModelCode                   string `json:"model_code" doc:"模型标识"`
 	CapabilityType              string `json:"capability_type" doc:"能力类型"`
-	APIFormat                   string `json:"api_format" doc:"上游 API 格式"`
 	UpstreamModelName           string `json:"upstream_model_name" doc:"上游模型 ID"`
 	Status                      string `json:"status" doc:"状态"`
 	ImageStreamMode             string `json:"image_stream_mode,omitempty" enum:"auto,force_stream,force_sync" doc:"生图上游流式策略"`
@@ -44,7 +43,6 @@ type upstreamModelBindingOutput struct {
 type upstreamModelBindingWriteRequest struct {
 	ModelCode                   string  `json:"model_code,omitempty" doc:"模型标识"`
 	CapabilityType              string  `json:"capability_type,omitempty" enum:"chat,image,video,embedding,audio_tts,audio_stt,rerank" doc:"能力类型；为空时按 model_code 推断"`
-	APIFormat                   string  `json:"api_format,omitempty" enum:"openai_chat,openai_responses,openai_embeddings,openai_images,anthropic_messages,gemini_generate,gemini_embeddings" doc:"上游 API 格式"`
 	UpstreamModelName           string  `json:"upstream_model_name,omitempty" doc:"上游模型 ID；为空默认同 model_code"`
 	Status                      string  `json:"status,omitempty" enum:"active,disabled" doc:"状态；为空默认/保留 active"`
 	ImageStreamMode             string  `json:"image_stream_mode,omitempty" enum:"auto,force_stream,force_sync" doc:"生图上游流式策略"`
@@ -156,7 +154,7 @@ func registerAccountModelBindings(api huma.API, d ModelBindingHTTPDeps) {
 		if err != nil {
 			return nil, err
 		}
-		item, err := createUpstreamModelBinding(ctx, d.ModelBindings, "direct_upstream", in.AccountID, fixedProviderEndpointProtocolFromAccount(account.DefaultProtocol), nil, in.Body)
+		item, err := createUpstreamModelBinding(ctx, d.ModelBindings, "direct_upstream", in.AccountID, in.Body, modelBindingPolicyForAccount(account))
 		if err != nil {
 			return nil, err
 		}
@@ -175,7 +173,7 @@ func registerAccountModelBindings(api huma.API, d ModelBindingHTTPDeps) {
 		if err != nil {
 			return nil, err
 		}
-		item, err := updateUpstreamModelBinding(ctx, d.ModelBindings, "direct_upstream", in.AccountID, in.BindingID, fixedProviderEndpointProtocolFromAccount(account.DefaultProtocol), nil, in.Body)
+		item, err := updateUpstreamModelBinding(ctx, d.ModelBindings, "direct_upstream", in.AccountID, in.BindingID, in.Body, modelBindingPolicyForAccount(account))
 		if err != nil {
 			return nil, err
 		}
@@ -256,7 +254,7 @@ func registerPoolModelBindings(api huma.API, d ModelBindingHTTPDeps) {
 		if err != nil {
 			return nil, err
 		}
-		item, err := createUpstreamModelBinding(ctx, d.ModelBindings, "oauth_pool", in.PoolID, fixedProviderEndpointProtocol(pool.FixedProviderType), &pool.FixedProviderType, in.Body)
+		item, err := createUpstreamModelBinding(ctx, d.ModelBindings, "oauth_pool", in.PoolID, in.Body, modelBindingPolicyForPool(pool))
 		if err != nil {
 			return nil, err
 		}
@@ -275,7 +273,7 @@ func registerPoolModelBindings(api huma.API, d ModelBindingHTTPDeps) {
 		if err != nil {
 			return nil, err
 		}
-		item, err := updateUpstreamModelBinding(ctx, d.ModelBindings, "oauth_pool", in.PoolID, in.BindingID, fixedProviderEndpointProtocol(pool.FixedProviderType), &pool.FixedProviderType, in.Body)
+		item, err := updateUpstreamModelBinding(ctx, d.ModelBindings, "oauth_pool", in.PoolID, in.BindingID, in.Body, modelBindingPolicyForPool(pool))
 		if err != nil {
 			return nil, err
 		}
@@ -341,7 +339,6 @@ func bindingRecordToDTO(item domain.UpstreamModelBinding) upstreamModelBindingDT
 		ID:                          item.ID,
 		ModelCode:                   item.ModelCode,
 		CapabilityType:              item.CapabilityType,
-		APIFormat:                   item.APIFormat,
 		UpstreamModelName:           item.UpstreamModelName,
 		Status:                      item.Status,
 		ImageStreamMode:             imagePolicy.StreamMode,
@@ -354,23 +351,19 @@ func bindingRecordToDTO(item domain.UpstreamModelBinding) upstreamModelBindingDT
 	}
 }
 
-func ensureDirectUpstreamExists(ctx context.Context, reader UpstreamAccountReader, accountID string) (upstreamAccountDTO, error) {
+func ensureDirectUpstreamExists(ctx context.Context, reader UpstreamAccountReader, accountID string) (upstreamcontrol.AccountSecret, error) {
 	if reader == nil {
-		return upstreamAccountDTO{}, httpx.ErrUnavailable.WithDetail("database is not configured")
+		return upstreamcontrol.AccountSecret{}, httpx.ErrUnavailable.WithDetail("database is not configured")
 	}
 	_, err := parseTransportUUID(accountID)
 	if err != nil {
-		return upstreamAccountDTO{}, httpx.ErrBadRequest.WithDetail("invalid accountID")
+		return upstreamcontrol.AccountSecret{}, httpx.ErrBadRequest.WithDetail("invalid accountID")
 	}
 	account, err := reader.GetAccountSecret(ctx, accountID)
 	if err != nil {
-		return upstreamAccountDTO{}, mapServiceError(err)
+		return upstreamcontrol.AccountSecret{}, mapServiceError(err)
 	}
-	return upstreamAccountDTO{DefaultProtocol: account.DefaultProtocol}, nil
-}
-
-type upstreamAccountDTO struct {
-	DefaultProtocol string
+	return account, nil
 }
 
 func ensurePoolExists(ctx context.Context, reader OAuthPoolReader, poolID string) (*domain.CredentialPool, error) {
@@ -399,12 +392,15 @@ func listUpstreamModelBindings(ctx context.Context, store UpstreamModelBindingSt
 	return items, nil
 }
 
-func createUpstreamModelBinding(ctx context.Context, store UpstreamModelBindingStore, upstreamKind, upstreamID, endpointProtocol string, fixedProviderType *domain.FixedProviderType, req upstreamModelBindingWriteRequest) (domain.UpstreamModelBinding, error) {
+func createUpstreamModelBinding(ctx context.Context, store UpstreamModelBindingStore, upstreamKind, upstreamID string, req upstreamModelBindingWriteRequest, policy modelBindingProtocolPolicy) (domain.UpstreamModelBinding, error) {
 	if store == nil {
 		return domain.UpstreamModelBinding{}, httpx.ErrUnavailable.WithDetail("database is not configured")
 	}
-	write, err := normalizeUpstreamModelBindingWrite(req, endpointProtocol, fixedProviderType, nil)
+	write, err := normalizeUpstreamModelBindingWrite(req, nil)
 	if err != nil {
+		return domain.UpstreamModelBinding{}, mapServiceError(err)
+	}
+	if err := validateModelBindingProtocolPolicy(write, policy); err != nil {
 		return domain.UpstreamModelBinding{}, mapServiceError(err)
 	}
 	item, err := store.Create(ctx, modelBindingScope(upstreamKind, upstreamID), write)
@@ -414,14 +410,17 @@ func createUpstreamModelBinding(ctx context.Context, store UpstreamModelBindingS
 	return item, nil
 }
 
-func updateUpstreamModelBinding(ctx context.Context, store UpstreamModelBindingStore, upstreamKind, upstreamID, bindingID, endpointProtocol string, fixedProviderType *domain.FixedProviderType, req upstreamModelBindingWriteRequest) (domain.UpstreamModelBinding, error) {
+func updateUpstreamModelBinding(ctx context.Context, store UpstreamModelBindingStore, upstreamKind, upstreamID, bindingID string, req upstreamModelBindingWriteRequest, policy modelBindingProtocolPolicy) (domain.UpstreamModelBinding, error) {
 	current, err := getUpstreamModelBinding(ctx, store, upstreamKind, upstreamID, bindingID)
 	if err != nil {
 		return domain.UpstreamModelBinding{}, err
 	}
-	write, normalizeErr := normalizeUpstreamModelBindingWrite(req, endpointProtocol, fixedProviderType, &current)
+	write, normalizeErr := normalizeUpstreamModelBindingWrite(req, &current)
 	if normalizeErr != nil {
 		return domain.UpstreamModelBinding{}, mapServiceError(normalizeErr)
+	}
+	if err := validateModelBindingProtocolPolicy(write, policy); err != nil {
+		return domain.UpstreamModelBinding{}, mapServiceError(err)
 	}
 	item, err := store.Update(ctx, modelBindingScope(upstreamKind, upstreamID), bindingID, write)
 	if err != nil {
@@ -488,7 +487,7 @@ type imageGenerationBindingPolicy struct {
 	EditMaxOutputCount     int
 }
 
-func normalizeUpstreamModelBindingWrite(req upstreamModelBindingWriteRequest, endpointProtocol string, fixedProviderType *domain.FixedProviderType, current *domain.UpstreamModelBinding) (domain.UpstreamModelBindingWrite, error) {
+func normalizeUpstreamModelBindingWrite(req upstreamModelBindingWriteRequest, current *domain.UpstreamModelBinding) (domain.UpstreamModelBindingWrite, error) {
 	modelCode := strings.TrimSpace(req.ModelCode)
 	if modelCode == "" && current != nil {
 		modelCode = current.ModelCode
@@ -502,24 +501,10 @@ func normalizeUpstreamModelBindingWrite(req upstreamModelBindingWriteRequest, en
 		if current != nil {
 			capabilityType = current.CapabilityType
 		} else {
-			capabilityType, _ = inferCapabilityAndProtocol(modelCode, endpointProtocol)
+			capabilityType = string(domain.InferModelCapability(modelCode))
 		}
 	}
 	if err := validateBindingCapabilityType(capabilityType); err != nil {
-		return domain.UpstreamModelBindingWrite{}, err
-	}
-
-	apiFormat := strings.TrimSpace(req.APIFormat)
-	if apiFormat == "" {
-		if current != nil {
-			apiFormat = current.APIFormat
-		} else if fixedProviderType != nil {
-			apiFormat = string(domain.FixedProviderProtocol(*fixedProviderType))
-		} else {
-			_, apiFormat = inferCapabilityAndProtocol(modelCode, endpointProtocol)
-		}
-	}
-	if err := validateBindingProtocol("api_format", apiFormat); err != nil {
 		return domain.UpstreamModelBindingWrite{}, err
 	}
 
@@ -530,17 +515,6 @@ func normalizeUpstreamModelBindingWrite(req upstreamModelBindingWriteRequest, en
 		} else {
 			upstreamModelName = modelCode
 		}
-	}
-
-	if fixedProviderType != nil {
-		expectedProtocol := string(domain.FixedProviderProtocol(*fixedProviderType))
-		if apiFormat != expectedProtocol {
-			return domain.UpstreamModelBindingWrite{}, domain.NewValidationError("api_format", "fixed-provider pool bindings must use API format "+expectedProtocol)
-		}
-	}
-
-	if !bindingProtocolSupportsCapability(domain.UpstreamProtocol(apiFormat), domain.CapabilityType(capabilityType)) {
-		return domain.UpstreamModelBindingWrite{}, domain.NewValidationError("api_format", fmt.Sprintf("API format %s does not support capability %s", apiFormat, capabilityType))
 	}
 
 	status := strings.TrimSpace(req.Status)
@@ -565,7 +539,6 @@ func normalizeUpstreamModelBindingWrite(req upstreamModelBindingWriteRequest, en
 	return domain.UpstreamModelBindingWrite{
 		ModelCode:         modelCode,
 		CapabilityType:    capabilityType,
-		APIFormat:         apiFormat,
 		UpstreamModelName: upstreamModelName,
 		Status:            status,
 		ConfigJSON:        configJSON,
@@ -752,29 +725,37 @@ func validateBindingProtocol(field, protocol string) error {
 	}
 }
 
-func bindingProtocolSupportsCapability(protocol domain.UpstreamProtocol, capability domain.CapabilityType) bool {
-	switch capability {
-	case domain.CapabilityEmbedding:
-		return protocol == domain.ProtocolOpenAIEmbeddings || protocol == domain.ProtocolGeminiEmbeddings
-	case domain.CapabilityImage:
-		return protocol == domain.ProtocolOpenAIImages || protocol == domain.ProtocolGeminiGenerate
-	case domain.CapabilityChat:
-		return protocol == domain.ProtocolOpenAIChat ||
-			protocol == domain.ProtocolOpenAIResponses ||
-			protocol == domain.ProtocolAnthropicMessages ||
-			protocol == domain.ProtocolGeminiGenerate
-	default:
-		return true
+type modelBindingProtocolPolicy struct {
+	Enforce   bool
+	Protocols []domain.UpstreamProtocol
+}
+
+func modelBindingPolicyForAccount(account upstreamcontrol.AccountSecret) modelBindingProtocolPolicy {
+	protocols := make([]domain.UpstreamProtocol, 0, len(account.Endpoints))
+	for _, endpoint := range account.Endpoints {
+		if endpoint.Status == domain.EndpointStatusActive {
+			protocols = append(protocols, endpoint.APIFormat)
+		}
+	}
+	return modelBindingProtocolPolicy{Enforce: account.Status == domain.UpstreamAccountStatusActive, Protocols: protocols}
+}
+
+func modelBindingPolicyForPool(pool *domain.CredentialPool) modelBindingProtocolPolicy {
+	if pool == nil {
+		return modelBindingProtocolPolicy{}
+	}
+	return modelBindingProtocolPolicy{
+		Enforce:   pool.Status == "active",
+		Protocols: []domain.UpstreamProtocol{domain.FixedProviderProtocol(pool.FixedProviderType)},
 	}
 }
 
-func fixedProviderEndpointProtocolFromAccount(endpointProtocol string) string {
-	switch endpointProtocol {
-	case string(domain.EndpointProtocolAnthropic):
-		return string(domain.EndpointProtocolAnthropic)
-	case string(domain.EndpointProtocolGemini):
-		return string(domain.EndpointProtocolGemini)
-	default:
-		return string(domain.EndpointProtocolOpenAICompatible)
+func validateModelBindingProtocolPolicy(write domain.UpstreamModelBindingWrite, policy modelBindingProtocolPolicy) error {
+	if !policy.Enforce || write.Status != "active" {
+		return nil
 	}
+	if !domain.AnyProtocolSupportsCapability(policy.Protocols, domain.CapabilityType(write.CapabilityType)) {
+		return domain.NewValidationError("capability_type", "active target has no compatible active request endpoint")
+	}
+	return nil
 }

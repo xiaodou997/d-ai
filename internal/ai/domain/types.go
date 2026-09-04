@@ -20,8 +20,9 @@ const (
 	CapabilityRerank    CapabilityType = "rerank"
 )
 
-// EndpointProtocol identifies the vendor API style of an endpoint, used for
-// model discovery (GET /v1/models) and default protocol assignment.
+// EndpointProtocol identifies a coarse provider family for legacy catalog and
+// commercial bridges. Direct request routing uses the exact UpstreamProtocol
+// declared by ai_upstream_account_endpoints.
 type EndpointProtocol string
 
 const (
@@ -156,12 +157,12 @@ type Model struct {
 // It carries everything needed to execute an AI request against an upstream.
 //
 // Two mutually exclusive target types (由 ai_group_targets 关联):
-//   - Account-based (API Key): EndpointID + APIKeyCiphertext + BaseURL + Protocol are set.
+//   - Account-based (API Key): AccountID + EndpointID + APIKeyCiphertext + BaseURL + Protocol are set.
 //   - Pool-based (OAuth Fixed Provider): PoolID + PoolUpstreamModel are set; BaseURL and
 //     Protocol are derived from FixedProviderBaseURL / FixedProviderProtocol at selection time.
 //
 // RouteID = ai_group_targets.id（绑定行，用于日志/统计/sticky 校验）。
-// 目标身份（健康/sticky）：账号取 EndpointID，池取 PoolID。
+// 目标身份（健康/sticky）：直连取具体 EndpointID，池取 PoolID。
 type RouteCandidate struct {
 	RouteID                      string
 	GroupRank                    int
@@ -186,9 +187,12 @@ type RouteCandidate struct {
 	ImageMaxOutputCount         int
 	ImageEditMaxOutputCount     int
 	HealthStatus                HealthStatus
-	EndpointID                  string // ai_upstream_accounts.id（账号目标身份）
+	AccountID                   string // ai_upstream_accounts.id（凭据/并发身份）
+	EndpointID                  string // ai_upstream_account_endpoints.id（请求端点身份）
 	BaseURL                     string
 	APIKeyCiphertext            string // decrypted; empty for pool routes
+	EndpointAuthScheme          string
+	EndpointAuthHeader          string
 	ExtraHeaders                map[string]string
 	Timeouts                    RouteTimeouts // 系统统一的响应头、首字节、空闲及总时长限制
 	ProviderCode                string
@@ -230,10 +234,23 @@ func (r *RouteCandidate) UpstreamTargetType() string {
 	if r.IsPoolRoute() {
 		return "pool"
 	}
-	if r.EndpointID != "" {
+	if r.AccountID != "" || r.EndpointID != "" {
 		return "account"
 	}
 	return ""
+}
+
+// EffectiveAccountID keeps account-scoped credential and concurrency handling
+// separate from the selected request endpoint. EndpointID is accepted only as
+// a compatibility fallback for older in-memory callers and tests.
+func (r *RouteCandidate) EffectiveAccountID() string {
+	if r == nil {
+		return ""
+	}
+	if r.AccountID != "" {
+		return r.AccountID
+	}
+	return r.EndpointID
 }
 
 func (r *RouteCandidate) EffectiveUpstreamModel() string {
@@ -293,25 +310,6 @@ func FixedProviderProtocol(t FixedProviderType) UpstreamProtocol {
 		return ProtocolGeminiGenerate
 	default:
 		return ProtocolOpenAIChat
-	}
-}
-
-// ProtocolFamilyMembers expands a provider protocol family into the concrete
-// request protocols used by protocol-routing tests and conversion decisions.
-// Account and pool model reachability still comes from explicit bindings.
-func ProtocolFamilyMembers(family string) []UpstreamProtocol {
-	switch EndpointProtocol(family) {
-	case EndpointProtocolAnthropic:
-		return []UpstreamProtocol{ProtocolAnthropicMessages}
-	case EndpointProtocolGemini:
-		return []UpstreamProtocol{ProtocolGeminiGenerate, ProtocolGeminiEmbeddings}
-	default:
-		return []UpstreamProtocol{
-			ProtocolOpenAIChat,
-			ProtocolOpenAIResponses,
-			ProtocolOpenAIEmbeddings,
-			ProtocolOpenAIImages,
-		}
 	}
 }
 

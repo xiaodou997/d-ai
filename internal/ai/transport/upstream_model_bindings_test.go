@@ -122,9 +122,9 @@ func TestEnsurePoolExistsRequiresPoolReader(t *testing.T) {
 func TestCreateUpstreamModelBindingUsesDomainStore(t *testing.T) {
 	const accountID = "10000000-0000-0000-0000-000000000001"
 	store := &modelBindingStoreStub{created: domain.UpstreamModelBinding{ID: "binding-1", ModelCode: "gpt-test"}}
-	got, err := createUpstreamModelBinding(context.Background(), store, string(domain.UpstreamKindDirect), accountID, string(domain.EndpointProtocolOpenAICompatible), nil, upstreamModelBindingWriteRequest{
+	got, err := createUpstreamModelBinding(context.Background(), store, string(domain.UpstreamKindDirect), accountID, upstreamModelBindingWriteRequest{
 		ModelCode: "gpt-test",
-	})
+	}, modelBindingProtocolPolicy{Enforce: true, Protocols: []domain.UpstreamProtocol{domain.ProtocolOpenAIResponses}})
 	if err != nil {
 		t.Fatalf("createUpstreamModelBinding() error = %v", err)
 	}
@@ -137,8 +137,21 @@ func TestCreateUpstreamModelBindingUsesDomainStore(t *testing.T) {
 	if store.gotWrite.ModelCode != "gpt-test" || store.gotWrite.UpstreamModelName != "gpt-test" || store.gotWrite.Status != "active" {
 		t.Fatalf("write = %+v", store.gotWrite)
 	}
-	if store.gotWrite.CapabilityType != "chat" || store.gotWrite.APIFormat != "openai_responses" || len(store.gotWrite.ConfigJSON) == 0 {
+	if store.gotWrite.CapabilityType != "chat" || len(store.gotWrite.ConfigJSON) == 0 {
 		t.Fatalf("normalized write = %+v", store.gotWrite)
+	}
+}
+
+func TestCreateUpstreamModelBindingRejectsUnsupportedActiveCapability(t *testing.T) {
+	store := &modelBindingStoreStub{}
+	_, err := createUpstreamModelBinding(context.Background(), store, string(domain.UpstreamKindDirect), "10000000-0000-0000-0000-000000000001", upstreamModelBindingWriteRequest{
+		ModelCode: "image-model", CapabilityType: string(domain.CapabilityImage), Status: "active",
+	}, modelBindingProtocolPolicy{Enforce: true, Protocols: []domain.UpstreamProtocol{domain.ProtocolOpenAIResponses}})
+	if err == nil {
+		t.Fatal("createUpstreamModelBinding() accepted an unsupported active capability")
+	}
+	if store.gotWrite.ModelCode != "" {
+		t.Fatalf("store was called with invalid binding: %+v", store.gotWrite)
 	}
 }
 
@@ -188,7 +201,6 @@ func performModelBindingRequest(handler http.Handler, method, path string) *http
 func TestLoadUpstreamTestBindingUsesDomainStore(t *testing.T) {
 	const accountID = "10000000-0000-0000-0000-000000000001"
 	store := &modelBindingStoreStub{created: domain.UpstreamModelBinding{
-		APIFormat:         "openai_images",
 		UpstreamModelName: "vendor-image-model",
 		CapabilityType:    "image",
 		ConfigJSON:        []byte(`{"image_generation":{"stream_mode":"force_stream","upstream_response_format":"b64_json"}}`),
@@ -198,7 +210,7 @@ func TestLoadUpstreamTestBindingUsesDomainStore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadUpstreamTestBinding() error = %v", err)
 	}
-	if got.APIFormat != "openai_images" || got.UpstreamModel != "vendor-image-model" || got.CapabilityType != "image" {
+	if got.UpstreamModel != "vendor-image-model" || got.CapabilityType != "image" {
 		t.Fatalf("binding = %+v", got)
 	}
 	if got.ImagePolicy.StreamMode != domain.ImageStreamModeForceStream || got.ImagePolicy.UpstreamResponseFormat != domain.ImageResponseFormatB64 {

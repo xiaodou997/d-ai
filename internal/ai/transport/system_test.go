@@ -7,8 +7,16 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"xiaodou/dai/internal/ai/routing"
 	"xiaodou/dai/libs/go/server"
 )
+
+func TestHealthRecordEndpointKind(t *testing.T) {
+	got := healthRecordToDTO(routing.HealthRecord{TargetID: "endpoint-1", Kind: routing.TargetEndpoint})
+	if got.Kind != "endpoint" || got.TargetID != "endpoint-1" {
+		t.Fatalf("health record = %+v", got)
+	}
+}
 
 func TestComponentProbeStatus(t *testing.T) {
 	tests := []struct {

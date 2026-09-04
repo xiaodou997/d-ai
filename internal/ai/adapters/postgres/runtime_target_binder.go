@@ -94,9 +94,21 @@ func (b *RuntimeTargetBinder) bindDirectUpstream(
 		}
 		return coreupstream.RuntimeBinding{}, err
 	}
-	selectedProtocol, conversionBucket, ok := chooseProviderProtocolWithSupport(support, runtimecompat.CapabilityFromCore(req.Capability), clientProtocol, []domain.UpstreamProtocol{binding.APIFormat}, req.AllowProtocolConversion, req.Stream)
+	endpoints, err := loadActiveDirectEndpoints(ctx, b.pool, uuidToString(row.ID))
+	if err != nil {
+		return coreupstream.RuntimeBinding{}, err
+	}
+	supported := make([]domain.UpstreamProtocol, 0, len(endpoints))
+	for _, endpoint := range endpoints {
+		supported = append(supported, endpoint.APIFormat)
+	}
+	selectedProtocol, conversionBucket, ok := chooseProviderProtocolWithSupport(support, runtimecompat.CapabilityFromCore(req.Capability), clientProtocol, supported, req.AllowProtocolConversion, req.Stream)
 	if !ok {
 		return coreupstream.RuntimeBinding{}, coreupstream.NewRuntimeBindingRejection(coreupstream.BindingRejectionProtocolIncompatible, "no compatible protocol")
+	}
+	endpoint, ok := findDirectEndpoint(endpoints, selectedProtocol)
+	if !ok {
+		return coreupstream.RuntimeBinding{}, coreupstream.NewRuntimeBindingRejection(coreupstream.BindingRejectionBindingInvalid, "selected endpoint is missing")
 	}
 	providerFamily := upstreamProviderFamilyFromProtocol(selectedProtocol)
 	providerSurface, err := runtimecompat.ProtocolToSurfaceForCapability(selectedProtocol, req.Capability)
@@ -104,11 +116,6 @@ func (b *RuntimeTargetBinder) bindDirectUpstream(
 		return coreupstream.RuntimeBinding{}, coreupstream.NewRuntimeBindingRejection(coreupstream.BindingRejectionBindingInvalid, err.Error())
 	}
 	requestSurface := providerSurface
-	if binding.APIFormat != "" {
-		if requestSurface, err = runtimecompat.ProtocolToSurfaceForCapability(binding.APIFormat, req.Capability); err != nil {
-			return coreupstream.RuntimeBinding{}, coreupstream.NewRuntimeBindingRejection(coreupstream.BindingRejectionBindingInvalid, err.Error())
-		}
-	}
 	responseSurface := requestSurface
 	bridgeRequired := support.NeedsBridge(req.ClientSurface, providerSurface)
 	if bridgeRequired && !bridgeSurfaceSupportedForCapability(support, req.ClientSurface, providerSurface, req.Capability, req.Stream) {
@@ -121,6 +128,7 @@ func (b *RuntimeTargetBinder) bindDirectUpstream(
 	}
 	resource := directUpstreamToCore(row)
 	resource.ProviderFamily = providerFamily
+	resource.BaseURL = endpoint.BaseURL
 	apiKey, err := decryptDirectProviderKey(b.masterKey, row.ApiKeyCiphertext)
 	if err != nil {
 		return coreupstream.RuntimeBinding{}, credentialRejection(err)
@@ -159,12 +167,16 @@ func (b *RuntimeTargetBinder) bindDirectUpstream(
 			Status:            coreupstream.StatusActive,
 			Config:            binding.Config,
 		},
-		ConversionBucket: conversionBucket,
-		APIKeyCiphertext: apiKey,
-		ExtraHeaders:     unmarshalStringMap(row.ExtraHeaders),
-		CostPriceBookID:  uuidToString(row.PriceBookID),
-		TenantMultiplier: costMultiplier,
-		CostPer1kTokens:  costPer1k,
+		ConversionBucket:   conversionBucket,
+		EndpointID:         endpoint.ID,
+		RequestPath:        endpoint.PathOverride,
+		EndpointAuthScheme: endpoint.AuthScheme,
+		EndpointAuthHeader: endpoint.AuthHeader,
+		APIKeyCiphertext:   apiKey,
+		ExtraHeaders:       endpoint.ExtraHeaders,
+		CostPriceBookID:    uuidToString(row.PriceBookID),
+		TenantMultiplier:   costMultiplier,
+		CostPer1kTokens:    costPer1k,
 	}, nil
 }
 
@@ -191,6 +203,53 @@ func decryptDirectProviderKey(masterKey, ciphertext string) (string, error) {
 		return "", nil
 	}
 	return secret.DecryptProviderKey(masterKey, ciphertext)
+}
+
+type directEndpointRow struct {
+	ID           string
+	APIFormat    domain.UpstreamProtocol
+	BaseURL      string
+	PathOverride string
+	AuthScheme   string
+	AuthHeader   string
+	ExtraHeaders map[string]string
+}
+
+func loadActiveDirectEndpoints(ctx context.Context, db dbgen.DBTX, accountID string) ([]directEndpointRow, error) {
+	rows, err := db.Query(ctx, `
+		SELECT id::text, api_format, base_url, path_override, auth_scheme,
+		       auth_header, extra_headers
+		FROM ai_upstream_account_endpoints
+		WHERE account_id = $1::uuid AND status = 'active'
+		ORDER BY api_format, id
+	`, accountID)
+	if err != nil {
+		return nil, fmt.Errorf("load upstream account endpoints: %w", err)
+	}
+	defer rows.Close()
+	out := make([]directEndpointRow, 0)
+	for rows.Next() {
+		var item directEndpointRow
+		var extraHeaders []byte
+		if err := rows.Scan(&item.ID, &item.APIFormat, &item.BaseURL, &item.PathOverride, &item.AuthScheme, &item.AuthHeader, &extraHeaders); err != nil {
+			return nil, fmt.Errorf("scan upstream account endpoint: %w", err)
+		}
+		item.ExtraHeaders = unmarshalStringMap(extraHeaders)
+		out = append(out, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate upstream account endpoints: %w", err)
+	}
+	return out, nil
+}
+
+func findDirectEndpoint(items []directEndpointRow, protocol domain.UpstreamProtocol) (directEndpointRow, bool) {
+	for _, item := range items {
+		if item.APIFormat == protocol {
+			return item, true
+		}
+	}
+	return directEndpointRow{}, false
 }
 
 func (b *RuntimeTargetBinder) bindOAuthPool(
@@ -220,7 +279,8 @@ func (b *RuntimeTargetBinder) bindOAuthPool(
 		}
 		return coreupstream.RuntimeBinding{}, err
 	}
-	selectedProtocol, conversionBucket, ok := chooseProviderProtocolWithSupport(support, runtimecompat.CapabilityFromCore(req.Capability), clientProtocol, []domain.UpstreamProtocol{binding.APIFormat}, req.AllowProtocolConversion, req.Stream)
+	fixedProtocol := domain.FixedProviderProtocol(pool.FixedProviderType)
+	selectedProtocol, conversionBucket, ok := chooseProviderProtocolWithSupport(support, runtimecompat.CapabilityFromCore(req.Capability), clientProtocol, []domain.UpstreamProtocol{fixedProtocol}, req.AllowProtocolConversion, req.Stream)
 	if !ok {
 		return coreupstream.RuntimeBinding{}, coreupstream.NewRuntimeBindingRejection(coreupstream.BindingRejectionProtocolIncompatible, "no compatible protocol")
 	}
@@ -230,11 +290,6 @@ func (b *RuntimeTargetBinder) bindOAuthPool(
 		return coreupstream.RuntimeBinding{}, coreupstream.NewRuntimeBindingRejection(coreupstream.BindingRejectionBindingInvalid, err.Error())
 	}
 	requestSurface := providerSurface
-	if binding.APIFormat != "" {
-		if requestSurface, err = runtimecompat.ProtocolToSurfaceForCapability(binding.APIFormat, req.Capability); err != nil {
-			return coreupstream.RuntimeBinding{}, coreupstream.NewRuntimeBindingRejection(coreupstream.BindingRejectionBindingInvalid, err.Error())
-		}
-	}
 	responseSurface := requestSurface
 	bridgeRequired := support.NeedsBridge(req.ClientSurface, providerSurface)
 	if bridgeRequired && !bridgeSurfaceSupportedForCapability(support, req.ClientSurface, providerSurface, req.Capability, req.Stream) {
@@ -355,7 +410,6 @@ func directUpstreamToCore(row dbgen.AiUpstreamAccount) coreupstream.Upstream {
 		Name:             row.Name,
 		ProviderFamily:   coreupstream.ProviderFamilyOther,
 		AccessMode:       coreupstream.AccessModeDirect,
-		BaseURL:          row.BaseUrl,
 		ConcurrencyLimit: int32PtrToIntPtr(akInt4StrPtr(row.ConcurrencyLimit)),
 		Status:           coreupstream.Status(row.Status),
 		CreatedAt:        row.CreatedAt.Time,

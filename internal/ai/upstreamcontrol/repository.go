@@ -16,16 +16,20 @@ type Repository interface {
 	MarkAccountInvalid(ctx context.Context, id, reason string) (domain.UpstreamAccount, error)
 	PriceBookExists(ctx context.Context, id string) (bool, error)
 	DeleteAccount(ctx context.Context, id string) error
+	ListEndpoints(ctx context.Context, accountID string) ([]domain.UpstreamAccountEndpoint, error)
+	GetEndpoint(ctx context.Context, accountID, endpointID string) (domain.UpstreamAccountEndpoint, error)
+	CreateEndpoint(ctx context.Context, accountID string, write domain.UpstreamAccountEndpointWrite) (domain.UpstreamAccountEndpoint, error)
+	UpdateEndpoint(ctx context.Context, accountID, endpointID string, write domain.UpstreamAccountEndpointWrite) (domain.UpstreamAccountEndpoint, error)
+	UpdateEndpointHealth(ctx context.Context, accountID, endpointID string, health domain.HealthStatus, lastError string) (domain.UpstreamAccountEndpoint, error)
+	DeleteEndpoint(ctx context.Context, accountID, endpointID string) error
 }
 
 type AccountCreate struct {
 	Name              string
 	TenantDisplayName string
 	TenantAccessMode  string
-	BaseURL           string
 	Ciphertext        string
-	ExtraHeaders      []byte
-	DefaultProtocol   string
+	Endpoints         []domain.UpstreamAccountEndpointWrite
 	ConcurrencyLimit  *int
 	PriceBookID       string
 	TenantMultiplier  *float64
@@ -37,10 +41,7 @@ type AccountUpdate struct {
 	Name              string
 	TenantDisplayName string
 	TenantAccessMode  string
-	BaseURL           string
 	Ciphertext        string
-	ExtraHeaders      []byte
-	DefaultProtocol   string
 	ConcurrencyLimit  *int
 	PriceBookID       string
 	TenantMultiplier  *float64
@@ -49,9 +50,7 @@ type AccountUpdate struct {
 
 type AccountSecret struct {
 	Ciphertext        string
-	BaseURL           string
-	ExtraHeaders      []byte
-	DefaultProtocol   string
+	Endpoints         []domain.UpstreamAccountEndpoint
 	TenantDisplayName string
 	TenantAccessMode  string
 	Status            string

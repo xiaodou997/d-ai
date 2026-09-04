@@ -20,7 +20,6 @@ const (
 type upstreamModelBindingRow struct {
 	ModelCode         string
 	CapabilityType    domain.CapabilityType
-	APIFormat         domain.UpstreamProtocol
 	UpstreamModelName string
 	Status            string
 	Config            map[string]any
@@ -39,13 +38,11 @@ func loadUpstreamModelBinding(
 ) (upstreamModelBindingRow, error) {
 	var item upstreamModelBindingRow
 	var capabilityType string
-	var apiFormat string
 	var configJSON []byte
 	err := db.QueryRow(ctx, `
 		SELECT
 			model_code,
 			capability_type,
-			api_format,
 			upstream_model_name,
 			status,
 			config_json
@@ -59,7 +56,6 @@ func loadUpstreamModelBinding(
 	`, upstreamKind, upstreamID, strings.TrimSpace(modelCode), string(capability)).Scan(
 		&item.ModelCode,
 		&capabilityType,
-		&apiFormat,
 		&item.UpstreamModelName,
 		&item.Status,
 		&configJSON,
@@ -71,7 +67,6 @@ func loadUpstreamModelBinding(
 		return upstreamModelBindingRow{}, fmt.Errorf("load upstream model binding: %w", err)
 	}
 	item.CapabilityType = domain.CapabilityType(capabilityType)
-	item.APIFormat = domain.UpstreamProtocol(apiFormat)
 	item.Config = unmarshalBindingConfig(configJSON)
 	return item, nil
 }

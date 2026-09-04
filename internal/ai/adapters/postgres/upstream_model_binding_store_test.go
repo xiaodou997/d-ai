@@ -6,6 +6,8 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/internal/ai/testsupport"
 )
@@ -24,6 +26,7 @@ func TestUpstreamModelBindingStoreCRUDAndScopeIsolation(t *testing.T) {
 		t.Skipf("open model binding store test pool: %v", err)
 	}
 	defer func() { _ = cleanup(ctx) }()
+	seedBindingTargets(t, ctx, pool)
 
 	store := NewUpstreamModelBindingStore(pool)
 	directScope := domain.UpstreamModelBindingScope{Kind: domain.UpstreamKindDirect, ID: directBindingScopeID}
@@ -31,7 +34,6 @@ func TestUpstreamModelBindingStoreCRUDAndScopeIsolation(t *testing.T) {
 	write := domain.UpstreamModelBindingWrite{
 		ModelCode:         "gpt-test",
 		CapabilityType:    "chat",
-		APIFormat:         "openai_chat",
 		UpstreamModelName: "vendor-gpt-test",
 		Status:            "active",
 		ConfigJSON:        []byte(`{"image_generation":{"stream_mode":"force_sync"}}`),
@@ -85,7 +87,6 @@ func TestUpstreamModelBindingStoreCRUDAndScopeIsolation(t *testing.T) {
 	}
 	activeWrite := write
 	activeWrite.CapabilityType = "embedding"
-	activeWrite.APIFormat = "openai_embeddings"
 	activeWrite.Status = "active"
 	active, err := store.Create(ctx, directScope, activeWrite)
 	if err != nil {
@@ -122,6 +123,7 @@ func TestUpstreamModelBindingStoreImportIsOrderedAndIdempotent(t *testing.T) {
 		t.Skipf("open model binding import test pool: %v", err)
 	}
 	defer func() { _ = cleanup(ctx) }()
+	seedBindingTargets(t, ctx, pool)
 
 	store := NewUpstreamModelBindingStore(pool)
 	scope := domain.UpstreamModelBindingScope{Kind: domain.UpstreamKindPool, ID: poolBindingScopeID}
@@ -151,6 +153,7 @@ func TestUpstreamModelBindingStoreImportRollsBackOnFailure(t *testing.T) {
 		t.Skipf("open model binding rollback test pool: %v", err)
 	}
 	defer func() { _ = cleanup(ctx) }()
+	seedBindingTargets(t, ctx, pool)
 
 	store := NewUpstreamModelBindingStore(pool)
 	bad := importBindingWrite("bad\x00model")
@@ -170,12 +173,61 @@ func TestUpstreamModelBindingStoreImportRollsBackOnFailure(t *testing.T) {
 	}
 }
 
+func TestUpstreamModelBindingStoreRejectsCapabilitiesUnsupportedByActiveTarget(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	pool, cleanup, err := testsupport.OpenAsyncTaskTestPool(ctx, testsupport.AsyncTaskPoolOptions{MaxConns: 2})
+	if err != nil {
+		t.Skipf("open model binding validation test pool: %v", err)
+	}
+	defer func() { _ = cleanup(ctx) }()
+	seedBindingTargets(t, ctx, pool)
+
+	store := NewUpstreamModelBindingStore(pool)
+	imageWrite := domain.UpstreamModelBindingWrite{
+		ModelCode:         "image-model",
+		CapabilityType:    string(domain.CapabilityImage),
+		UpstreamModelName: "image-model",
+		Status:            "active",
+	}
+	if _, err := store.Create(ctx, domain.UpstreamModelBindingScope{Kind: domain.UpstreamKindDirect, ID: directBindingScopeID}, imageWrite); !errors.Is(err, domain.ErrValidation) {
+		t.Fatalf("Create(direct incompatible capability) error = %v, want validation", err)
+	}
+	if _, err := store.Create(ctx, domain.UpstreamModelBindingScope{Kind: domain.UpstreamKindPool, ID: poolBindingScopeID}, imageWrite); !errors.Is(err, domain.ErrValidation) {
+		t.Fatalf("Create(pool incompatible capability) error = %v, want validation", err)
+	}
+}
+
 func importBindingWrite(modelCode string) domain.UpstreamModelBindingWrite {
 	return domain.UpstreamModelBindingWrite{
 		ModelCode:         modelCode,
 		CapabilityType:    "chat",
-		APIFormat:         "openai_chat",
 		UpstreamModelName: modelCode,
 		Status:            "active",
+	}
+}
+
+func seedBindingTargets(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+	t.Helper()
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO ai_upstream_accounts (id, name, tenant_display_name, api_key_ciphertext, status)
+		VALUES ($1::uuid, 'binding-direct', 'Binding Direct', 'cipher', 'active')
+	`, directBindingScopeID); err != nil {
+		t.Fatalf("seed direct model binding target: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO ai_upstream_account_endpoints (account_id, api_format, base_url, status)
+		VALUES
+			($1::uuid, 'openai_responses', 'https://example.test', 'active'),
+			($1::uuid, 'openai_embeddings', 'https://example.test', 'active')
+	`, directBindingScopeID); err != nil {
+		t.Fatalf("seed direct model binding endpoints: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO ai_credential_pools (id, name, tenant_display_name, fixed_provider_type, status)
+		VALUES ($1::uuid, 'binding-pool', 'Binding Pool', 'codex', 'active')
+	`, poolBindingScopeID); err != nil {
+		t.Fatalf("seed pool model binding target: %v", err)
 	}
 }

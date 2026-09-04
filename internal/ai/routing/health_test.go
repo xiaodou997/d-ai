@@ -47,6 +47,21 @@ func TestHealthTracker_RecordSuccessResets(t *testing.T) {
 	}
 }
 
+func TestHealthTrackerForgetRemovesSnapshotAndBreakerState(t *testing.T) {
+	tracker := NewInMemoryTracker(1, time.Minute)
+	tracker.RecordFailure("endpoint-1", TargetEndpoint)
+	if !tracker.IsBlocked("endpoint-1", time.Minute) {
+		t.Fatal("endpoint should be blocked before Forget")
+	}
+	tracker.Forget("endpoint-1")
+	if records := tracker.Snapshot(); len(records) != 0 {
+		t.Fatalf("snapshot after Forget = %+v", records)
+	}
+	if tracker.IsBlocked("endpoint-1", time.Minute) {
+		t.Fatal("endpoint remained blocked after Forget")
+	}
+}
+
 func TestHealthTracker_HalfOpenAfterCooldown(t *testing.T) {
 	tr := newFastTracker(2, 10*time.Millisecond)
 	tr.RecordFailure("d", TargetAccount)

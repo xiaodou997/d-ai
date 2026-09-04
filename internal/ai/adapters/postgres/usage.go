@@ -305,12 +305,14 @@ func buildUsageLogParams(req *serving.Request, billing domain.BillingResult) dbg
 		apiKeyUUID = mustParseUUID(subject.APIKeyID)
 	}
 
-	// 账号级路由：命中目标记 endpoint_id(账号)或 credential_pool_id(池)。
+	// 直连路由分别记录账号与具体请求端点；池路由记录凭证池与实际 OAuth 凭证。
+	accountUUID := pgtype.UUID{}
 	endpointUUID := pgtype.UUID{}
 	poolUUID := pgtype.UUID{}
 	var credUUID pgtype.UUID
 	if attempted {
 		groupTargetUUID = mustParseUUID(c.RouteID)
+		accountUUID = mustParseUUID(c.AccountID)
 		endpointUUID = mustParseUUID(c.EndpointID)
 		poolUUID = mustParseUUID(c.PoolID)
 	}
@@ -365,6 +367,7 @@ func buildUsageLogParams(req *serving.Request, billing domain.BillingResult) dbg
 		ResolvedProviderFamily:             nullableText(resolvedProviderFamily),
 		CapabilityType:                     string(req.CapabilityType),
 		GroupTargetID:                      groupTargetUUID,
+		UpstreamAccountID:                  accountUUID,
 		EndpointID:                         endpointUUID,
 		CredentialPoolID:                   poolUUID,
 		OauthCredentialID:                  credUUID,

@@ -4,6 +4,8 @@ import (
 	"net/http"
 
 	"github.com/danielgtaylor/huma/v2"
+
+	"xiaodou/dai/internal/ai/routing"
 )
 
 // UpstreamDiagnosticsHTTPDeps is the dependency boundary for upstream model
@@ -11,11 +13,13 @@ import (
 type UpstreamDiagnosticsHTTPDeps struct {
 	Auth              HTTPAuthDeps
 	AccountReader     UpstreamAccountReader
+	EndpointManager   UpstreamAccountEndpointManager
 	ModelBindings     UpstreamModelBindingStore
 	ProviderSecrets   ProviderSecretCodec
 	HTTPClient        HTTPDoer
 	AccountHealth     UpstreamAccountHealthWriter
 	ModelCapabilities ModelCapabilityResolver
+	RuntimeHealth     routing.HealthTracker
 }
 
 // HTTPDoer is the only outbound HTTP capability required by upstream

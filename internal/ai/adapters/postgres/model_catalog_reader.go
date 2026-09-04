@@ -160,9 +160,17 @@ func (r *ModelCatalogReader) ListTenantUpstreamResources(ctx context.Context, te
 			COALESCE(pb.id::text, ''),
 			COALESCE(pb.name, ''),
 			COALESCE(pb.revision, 0),
+			CASE WHEN r.resource_kind = 'direct_upstream' THEN ARRAY(
+				SELECT ae.api_format FROM ai_upstream_account_endpoints ae
+				WHERE ae.account_id = r.id AND ae.status = 'active' ORDER BY ae.api_format
+			) ELSE ARRAY[CASE
+				WHEN cp.fixed_provider_type = 'codex' THEN 'openai_responses'
+				WHEN cp.fixed_provider_type = 'claude_oauth' THEN 'anthropic_messages'
+				WHEN cp.fixed_provider_type IN ('gemini_cli', 'antigravity') THEN 'gemini_generate'
+				ELSE 'openai_chat'
+			END] END AS api_formats,
 			COALESCE(um.model_code, ''),
 			COALESCE(um.capability_type, ''),
-			COALESCE(um.api_format, ''),
 			e.id IS NOT NULL,
 			COALESCE(e.token_price_tiers, '[]'::jsonb),
 			COALESCE(e.image_default_price, 0)::float8,
@@ -180,6 +188,8 @@ func (r *ModelCatalogReader) ListTenantUpstreamResources(ctx context.Context, te
 			AND tp.tenant_id = $1
 		LEFT JOIN ai_price_books pb
 			ON pb.id = r.price_book_id AND pb.status = 'active'
+		LEFT JOIN ai_credential_pools cp
+			ON r.resource_kind = 'oauth_pool' AND cp.id = r.id
 		LEFT JOIN ai_upstream_models um
 			ON um.upstream_kind = r.resource_kind
 			AND um.upstream_id = r.id
@@ -208,7 +218,7 @@ func (r *ModelCatalogReader) ListTenantUpstreamResources(ctx context.Context, te
 		if err := rows.Scan(
 			&resource.ID, &resource.Kind, &resource.Name, &resource.TenantMultiplier,
 			&resource.PriceBookID, &resource.PriceBookName, &resource.PriceBookRevision,
-			&model.ModelCode, &model.CapabilityType, &model.APIFormat, &hasPrice,
+			&resource.APIFormats, &model.ModelCode, &model.CapabilityType, &hasPrice,
 			&tokenTiersRaw, &price.ImageDefaultPrice, &price.VideoDefaultPrice,
 			&imagePricesRaw, &videoPricesRaw, &price.AudioTTSPerChar,
 			&price.AudioSTTPerMinute, &price.Source, &price.ManuallyEdited,

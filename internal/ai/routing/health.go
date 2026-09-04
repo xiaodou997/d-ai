@@ -3,13 +3,15 @@ package routing
 
 import "time"
 
-// TargetKind distinguishes upstream accounts from OAuth pools in
-// health tracking. Both kinds share the same three-state FSM.
+// TargetKind distinguishes legacy account records, OAuth pools and concrete
+// direct-account endpoints in health tracking. Values for the two historical
+// kinds stay stable because Redis snapshots persist them across releases.
 type TargetKind int
 
 const (
 	TargetAccount TargetKind = iota
 	TargetPool
+	TargetEndpoint
 )
 
 // HealthState is the three-state circuit-breaker FSM value.
@@ -70,6 +72,11 @@ type HealthTracker interface {
 	// target as healthy or unhealthy. Call it when the request is canceled or
 	// fails locally after claiming the probe but before an upstream verdict.
 	ReleaseProbe(targetID string)
+
+	// Forget removes all breaker state for a deleted or disabled physical
+	// target. Configuration changes may instead call RecordSuccess to close the
+	// existing breaker while keeping the target visible in snapshots.
+	Forget(targetID string)
 
 	// StateOf returns the current health state of a target. Unlike IsBlocked,
 	// this is a pure read that does not claim the HALF_OPEN probe slot. Use it

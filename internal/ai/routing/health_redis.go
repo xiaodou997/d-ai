@@ -161,6 +161,24 @@ func (r *RedisHealthTracker) RecordFailure(targetID string, kind TargetKind) {
 	}
 }
 
+func (r *RedisHealthTracker) Forget(targetID string) {
+	if targetID == "" {
+		return
+	}
+	r.inner.Forget(targetID)
+	if r.rdb == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), healthRedisWait)
+	defer cancel()
+	pipe := r.rdb.TxPipeline()
+	pipe.Del(ctx, r.key(targetID))
+	pipe.SRem(ctx, healthIndexKey, targetID)
+	if _, err := pipe.Exec(ctx); err != nil {
+		zap.L().Warn("health redis target removal failed", zap.String("target_id", targetID), zap.Error(err))
+	}
+}
+
 func (r *RedisHealthTracker) IsBlocked(targetID string, probeLease time.Duration) bool {
 	if targetID == "" {
 		return false

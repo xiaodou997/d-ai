@@ -89,6 +89,9 @@ func TestRuntimeRouteSelectorPreservesCanonicalGroupPlan(t *testing.T) {
 	if candidates[0].ConversionBucket != 2 {
 		t.Fatalf("conversion bucket = %d, want 2", candidates[0].ConversionBucket)
 	}
+	if candidates[0].AccountID != "upstream-1" || candidates[0].EndpointID != "upstream-1-endpoint" {
+		t.Fatalf("direct identities = account %q endpoint %q", candidates[0].AccountID, candidates[0].EndpointID)
+	}
 }
 
 func TestRuntimeRouteSelectorAppliesSubscriptionGroupsBeforePlanning(t *testing.T) {
@@ -202,6 +205,7 @@ func plannedDirectTarget(routeID, groupID string, groupRank int, endpointID stri
 				Capability: catalog.CapabilityChat, RequestSurface: surface.OpenAIChat, ResponseSurface: surface.OpenAIChat,
 				UpstreamModelName: "gpt-5.6-luna",
 			},
+			EndpointID:       endpointID + "-endpoint",
 			CostPriceBookID:  "cost-book",
 			TenantMultiplier: 1,
 			CostPer1kTokens:  0.5,

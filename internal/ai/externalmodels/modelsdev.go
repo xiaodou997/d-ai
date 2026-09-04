@@ -1,13 +1,12 @@
 // Package externalmodels 从外部权威模型目录（models.dev）拉取模型模态信息，
 // 用于给"上游模型绑定"表单的能力类型提供更准确的默认值建议。
 //
-// 设计原则：只做只读的推断建议缓存，不落库、不参与提交时校验——真正的合法性
-// 红线仍是 domain.DefaultProtocolForCapability 配合 transport 层的
-// bindingProtocolSupportsCapability；这里命中与否都不影响用户手动改选的能力。
+// 设计原则：只做只读的能力推断建议缓存，不落库、不参与 API 格式决策。API 格式
+// 始终来自账号端点或固定 OAuth Provider；这里命中与否都不影响用户手动选择能力。
 //
 // models.dev 的 modalities 字段能结构化区分 image / audio_tts / audio_stt，
 // 但无法区分 chat / embedding / rerank（这三者都是纯 text→text），后两者仍需
-// 调用方回退到 domain.InferModelCapabilityAndProtocol 的关键词启发式。
+// 调用方回退到 domain.InferModelCapability 的关键词启发式。
 package externalmodels
 
 import (
@@ -230,7 +229,7 @@ func containsStr(list []string, target string) bool {
 
 // Lookup 按 model_code 查询 models.dev 缓存目录，返回结构化可辨识的能力类型。
 // ok=false 表示未命中，或命中了但模态无法区分 chat/embedding/rerank——
-// 两种情况调用方都应回退到 domain.InferModelCapabilityAndProtocol 的本地启发式。
+// 两种情况调用方都应回退到 domain.InferModelCapability 的本地启发式。
 func (s *Service) Lookup(ctx context.Context, modelCode string) (domain.CapabilityType, bool) {
 	key := strings.ToLower(strings.TrimSpace(modelCode))
 	if key == "" {

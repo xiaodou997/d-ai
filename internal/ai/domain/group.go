@@ -72,7 +72,7 @@ type GroupTargetBinding struct {
 type GroupTargetDetail struct {
 	GroupTargetBinding
 	AccountName       string
-	DefaultProtocol   string
+	APIFormats        []string
 	PoolName          string
 	FixedProviderType string
 	// Available 为该绑定的上游资源当前是否仍可被本租户路由（active 且 public 或已授权）。

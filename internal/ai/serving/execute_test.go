@@ -155,13 +155,13 @@ func TestBuildHeadersAPIKey(t *testing.T) {
 			wantKey: "x-api-key",
 		},
 		{
-			name: "gemini exposes x-gemini-api-key for transport to consume",
+			name: "gemini exposes x-goog-api-key",
 			cand: &domain.RouteCandidate{
 				Protocol:         domain.ProtocolGeminiGenerate,
 				APIKeyCiphertext: "AIza-test",
 			},
 			req:     &Request{},
-			wantKey: "x-gemini-api-key",
+			wantKey: "x-goog-api-key",
 		},
 	}
 
@@ -186,9 +186,9 @@ func TestBuildHeadersAPIKey(t *testing.T) {
 				if h["anthropic-version"] == "" {
 					t.Fatalf("anthropic-version missing")
 				}
-			case "x-gemini-api-key":
-				if h["x-gemini-api-key"] != tc.cand.APIKeyCiphertext {
-					t.Fatalf("x-gemini-api-key = %q, want %q", h["x-gemini-api-key"], tc.cand.APIKeyCiphertext)
+			case "x-goog-api-key":
+				if h["x-goog-api-key"] != tc.cand.APIKeyCiphertext {
+					t.Fatalf("x-goog-api-key = %q, want %q", h["x-goog-api-key"], tc.cand.APIKeyCiphertext)
 				}
 				if _, ok := h["Authorization"]; ok {
 					t.Fatalf("Gemini API-key path must not set Authorization header")
@@ -779,6 +779,13 @@ type recordingHealth struct {
 	blocked  map[string]bool
 }
 
+func TestHealthTargetUsesEndpointIdentityForDirectRoutes(t *testing.T) {
+	targetID, kind := healthTarget(&domain.RouteCandidate{AccountID: "account-1", EndpointID: "endpoint-1"})
+	if targetID != "endpoint-1" || kind != routing.TargetEndpoint {
+		t.Fatalf("health target = %q/%v, want endpoint-1/TargetEndpoint", targetID, kind)
+	}
+}
+
 func (h *recordingHealth) RecordSuccess(targetID string, _ routing.TargetKind) {
 	h.success = append(h.success, targetID)
 }
@@ -792,6 +799,7 @@ func (h *recordingHealth) IsBlocked(targetID string, _ time.Duration) bool {
 func (h *recordingHealth) ReleaseProbe(targetID string) {
 	h.released = append(h.released, targetID)
 }
+func (h *recordingHealth) Forget(string)                    {}
 func (*recordingHealth) StateOf(string) routing.HealthState { return routing.StateClosed }
 func (*recordingHealth) StatesOf(targetIDs []string) map[string]routing.HealthState {
 	out := make(map[string]routing.HealthState, len(targetIDs))

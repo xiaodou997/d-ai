@@ -219,16 +219,16 @@ type deleteGroupDispatchRuleInput struct {
 
 // 分组关联上游目标 DTO（账号或凭证池）
 type groupTargetDTO struct {
-	ID                    string `json:"id"`
-	GroupID               string `json:"group_id"`
-	AccountID             string `json:"account_id,omitempty"`
-	CredentialPoolID      string `json:"credential_pool_id,omitempty"`
-	Status                string `json:"status"`
-	TargetType            string `json:"target_type,omitempty" doc:"account|pool"`
-	AccountName           string `json:"account_name,omitempty"`
-	DefaultProviderFamily string `json:"default_provider_family,omitempty"`
-	PoolName              string `json:"pool_name,omitempty"`
-	FixedProviderType     string `json:"fixed_provider_type,omitempty"`
+	ID                string   `json:"id"`
+	GroupID           string   `json:"group_id"`
+	AccountID         string   `json:"account_id,omitempty"`
+	CredentialPoolID  string   `json:"credential_pool_id,omitempty"`
+	Status            string   `json:"status"`
+	TargetType        string   `json:"target_type,omitempty" doc:"account|pool"`
+	AccountName       string   `json:"account_name,omitempty"`
+	APIFormats        []string `json:"api_formats,omitempty"`
+	PoolName          string   `json:"pool_name,omitempty"`
+	FixedProviderType string   `json:"fixed_provider_type,omitempty"`
 	// Available 反映该绑定的上游资源当前是否仍可被本租户路由；false 时 UnavailableReason
 	// 给出原因（inactive/access_revoked/missing）。用于呈现「已绑定但请求会被拒」的哑故障。
 	Available         bool   `json:"available"`
@@ -966,19 +966,19 @@ func groupTargetToDTO(item commercial.GroupTargetDetail) groupTargetDTO {
 		accountID = item.TargetID
 	}
 	return groupTargetDTO{
-		ID:                    item.ID,
-		GroupID:               item.GroupID,
-		AccountID:             accountID,
-		CredentialPoolID:      credentialPoolID,
-		Status:                string(item.Status),
-		TargetType:            targetType,
-		AccountName:           item.AccountName,
-		DefaultProviderFamily: item.DefaultProtocol,
-		PoolName:              item.PoolName,
-		FixedProviderType:     item.FixedProviderType,
-		Available:             item.Available,
-		UnavailableReason:     item.UnavailableReason,
-		CreatedAt:             timeToMillisPtr(item.CreatedAt),
-		UpdatedAt:             timeToMillisPtr(item.UpdatedAt),
+		ID:                item.ID,
+		GroupID:           item.GroupID,
+		AccountID:         accountID,
+		CredentialPoolID:  credentialPoolID,
+		Status:            string(item.Status),
+		TargetType:        targetType,
+		AccountName:       item.AccountName,
+		APIFormats:        append([]string(nil), item.APIFormats...),
+		PoolName:          item.PoolName,
+		FixedProviderType: item.FixedProviderType,
+		Available:         item.Available,
+		UnavailableReason: item.UnavailableReason,
+		CreatedAt:         timeToMillisPtr(item.CreatedAt),
+		UpdatedAt:         timeToMillisPtr(item.UpdatedAt),
 	}
 }

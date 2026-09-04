@@ -136,7 +136,7 @@ func (r *UsageRepo) GetLogDetail(ctx context.Context, requestID string) (domain.
 	detail.UserAgent = detail.ClientUserAgent
 	if detail.CredentialPoolID != "" {
 		detail.SelectedUpstreamTargetType = "pool"
-	} else if detail.EndpointID != "" {
+	} else if detail.UpstreamAccountID != "" {
 		detail.SelectedUpstreamTargetType = "account"
 	}
 	auditRec, err := NewAuditStore(r.pool.Pool).GetByRequestID(ctx, requestID)
@@ -255,8 +255,8 @@ func (r *UsageRepo) UnitSummary(ctx context.Context, f domain.UsageSummaryFilter
 // or the raw ID rather than dropping the row.
 const upstreamUsageSummarySQL = `
 	SELECT
-		CASE WHEN l.endpoint_id IS NOT NULL THEN 'direct_upstream' ELSE 'oauth_pool' END AS target_kind,
-		COALESCE(l.endpoint_id::text, l.credential_pool_id::text) AS target_id,
+		CASE WHEN l.upstream_account_id IS NOT NULL THEN 'direct_upstream' ELSE 'oauth_pool' END AS target_kind,
+		COALESCE(l.upstream_account_id::text, l.credential_pool_id::text) AS target_id,
 		COALESCE(a.name, p.name, '') AS target_name,
 		COALESCE(l.provider_code, '') AS provider_code,
 		COUNT(*)::bigint AS request_count,
@@ -273,9 +273,9 @@ const upstreamUsageSummarySQL = `
 		COALESCE(SUM(l.catalog_base), 0)::bigint AS catalog_base,
 		COALESCE(SUM(l.tenant_payable), 0)::bigint AS tenant_payable
 	FROM ai_usage_logs l
-	LEFT JOIN ai_upstream_accounts a ON a.id = l.endpoint_id
+	LEFT JOIN ai_upstream_accounts a ON a.id = l.upstream_account_id
 	LEFT JOIN ai_credential_pools  p ON p.id = l.credential_pool_id
-	WHERE (l.endpoint_id IS NOT NULL OR l.credential_pool_id IS NOT NULL)
+	WHERE (l.upstream_account_id IS NOT NULL OR l.credential_pool_id IS NOT NULL)
 	  AND ($1::text IS NULL OR l.tenant_id = $1::text)
 	  AND ($2::text IS NULL OR l.user_id = $2::text)
 	  AND ($3::text IS NULL OR l.model_code = $3::text)
@@ -479,6 +479,7 @@ func usageLogFromRow(row dbgen.ListUsageLogsRow) domain.UsageLog {
 		ResolvedProviderFamily:             row.ResolvedProviderFamily.String,
 		CapabilityType:                     row.CapabilityType,
 		GroupTargetID:                      uuidToString(row.GroupTargetID),
+		UpstreamAccountID:                  uuidToString(row.UpstreamAccountID),
 		EndpointID:                         uuidToString(row.EndpointID),
 		CredentialPoolID:                   uuidToString(row.CredentialPoolID),
 		ProviderCode:                       row.ProviderCode.String,
@@ -603,6 +604,7 @@ func usageLogFromGetByRequestIDRow(row dbgen.GetUsageLogByRequestIDRow) domain.U
 		ResolvedProviderFamily:             row.ResolvedProviderFamily.String,
 		CapabilityType:                     row.CapabilityType,
 		GroupTargetID:                      uuidToString(row.GroupTargetID),
+		UpstreamAccountID:                  uuidToString(row.UpstreamAccountID),
 		EndpointID:                         uuidToString(row.EndpointID),
 		CredentialPoolID:                   uuidToString(row.CredentialPoolID),
 		ProviderCode:                       row.ProviderCode.String,
