@@ -66,6 +66,11 @@ INSERT INTO ai_usage_logs (
   error_message,
   usage_estimated,
   token_usage_source,
+  provider_terminal_state,
+  client_delivery_state,
+  cancellation_origin,
+  billing_reason,
+  response_summary_state,
   attempts_count,
   final_route_id,
   client_protocol,
@@ -82,8 +87,8 @@ INSERT INTO ai_usage_logs (
   $31, $32, $33, $34, $35, $36, $37, $38, $39, $40,
   $41, $42, $43, $44, $45, $46, $47, $48, $49, $50,
   $51, $52, $53, $54, $55, $56, $57, $58, $59, $60,
-	  $61, $62, $63, $64, $65, $66, $67, $68, $69, $70,
-	  $71, $72, $73, $74, $75
+  $61, $62, $63, $64, $65, $66, $67, $68, $69, $70,
+	  $71, $72, $73, $74, $75, $76, $77, $78, $79, $80
 )
 ON CONFLICT (request_id) DO NOTHING
 RETURNING id;

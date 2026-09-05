@@ -103,8 +103,37 @@ function billingStatusLabel(status?: string | null) {
     free: "免费",
     pending: "待结算",
     settled: "已结算",
-    failed: "结算失败"
+    failed: "结算失败",
+    void: "未计费"
   }[status || ""] || status || "—";
+}
+
+function providerTerminalLabel(value?: string | null) {
+  return {
+    unknown: "未确认",
+    completed: "已完成",
+    failed: "终态失败",
+    cancelled: "上游取消",
+    incomplete: "未完成"
+  }[value || ""] || value || "—";
+}
+
+function deliveryStateLabel(value?: string | null) {
+  return {
+    unknown: "未确认",
+    complete: "完整交付",
+    disconnected: "客户端断开",
+    write_failed: "写入失败"
+  }[value || ""] || value || "—";
+}
+
+function summaryStateLabel(value?: string | null) {
+  return {
+    unavailable: "不可用",
+    empty: "为空（不代表无输出）",
+    partial: "部分摘要",
+    complete: "完整摘要"
+  }[value || ""] || value || "—";
 }
 
 function refundStatusLabel(status?: string | null) {
@@ -116,7 +145,7 @@ function timestampLabel(value?: number | null) {
 }
 
 function attemptOutcomeLabel(value: string) {
-  return value === "success" ? "成功" : value === "failed" ? "失败" : value || "未知";
+  return value === "success" ? "成功" : value === "failed" ? "失败" : value === "canceled" ? "已取消" : value || "未知";
 }
 
 const timingSource = computed(() => ({
@@ -358,6 +387,10 @@ function copyActivePayload() {
           <div class="billing-facts">
             <div><span>计费来源</span><strong>{{ billingSourceText }}</strong></div>
             <div><span>计费状态</span><strong>{{ billingStatusLabel(detail?.billing_status) }}</strong></div>
+            <div><span>上游终态</span><strong>{{ providerTerminalLabel(detail?.provider_terminal_state) }}</strong></div>
+            <div><span>客户端交付</span><strong>{{ deliveryStateLabel(detail?.client_delivery_state) }}</strong></div>
+            <div><span>响应摘要</span><strong>{{ summaryStateLabel(detail?.response_summary_state) }}</strong></div>
+            <div v-if="detail?.billing_reason"><span>计费判定</span><strong>{{ detail.billing_reason }}</strong></div>
             <div><span>结算时间</span><strong>{{ timestampLabel(detail?.settled_at) }}</strong></div>
             <div><span>退款状态</span><strong>{{ refundStatusLabel(detail?.refund_status) }}</strong></div>
           </div>

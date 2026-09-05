@@ -626,6 +626,11 @@ SELECT
   public_response_model,
   usage_estimated,
   token_usage_source,
+	provider_terminal_state,
+	client_delivery_state,
+	cancellation_origin,
+	billing_reason,
+	response_summary_state,
 	  billing_source,
 	  created_at
 FROM ai_usage_logs
@@ -741,6 +746,11 @@ SELECT
   public_response_model,
   usage_estimated,
 	  token_usage_source,
+	provider_terminal_state,
+	client_delivery_state,
+	cancellation_origin,
+	billing_reason,
+	response_summary_state,
 	  created_at
 FROM ai_usage_logs
 WHERE request_id = $1;
@@ -1194,6 +1204,11 @@ SELECT
   http_status,
   latency_ms,
   first_token_latency_ms,
+	provider_terminal_state,
+	client_delivery_state,
+	cancellation_origin,
+	billing_reason,
+	response_summary_state,
 	  error_code,
 	  error_message,
 	  created_at

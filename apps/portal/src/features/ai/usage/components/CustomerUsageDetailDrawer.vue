@@ -33,7 +33,8 @@ function billingStatusLabel(status?: string) {
     free: "免费",
     pending: "待结算",
     settled: "已结算",
-    failed: "结算失败"
+    failed: "结算失败",
+    void: "未计费"
   }[status || ""] || status || "-";
 }
 </script>

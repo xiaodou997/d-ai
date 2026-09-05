@@ -161,7 +161,15 @@ type Request struct {
 	RateLimitLease RateLimitLease
 
 	RequestStatus domain.RequestStatus
-	HTTPStatus    int
+	// ProviderTerminalState and ClientDeliveryState are deliberately separate:
+	// a provider may have completed even when the client socket is already gone.
+	ProviderTerminalState domain.ProviderTerminalState
+	ClientDeliveryState   domain.ClientDeliveryState
+	CancellationOrigin    domain.CancellationOrigin
+	BillingStatus         domain.BillingStatus
+	BillingReason         string
+	ResponseSummaryState  domain.ResponseSummaryState
+	HTTPStatus            int
 	// ResponseCommitted is true once the Execute step has written response
 	// headers to the client. Past this point the pipeline can no longer emit
 	// a fresh HTTP error status — only an in-band (SSE) error frame. It must

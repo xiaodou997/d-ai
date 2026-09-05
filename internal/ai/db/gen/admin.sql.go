@@ -1060,6 +1060,11 @@ SELECT
   public_response_model,
   usage_estimated,
 	  token_usage_source,
+	provider_terminal_state,
+	client_delivery_state,
+	cancellation_origin,
+	billing_reason,
+	response_summary_state,
 	  created_at
 FROM ai_usage_logs
 WHERE request_id = $1
@@ -1147,6 +1152,11 @@ type GetUsageLogByRequestIDRow struct {
 	PublicResponseModel                pgtype.Text        `json:"public_response_model"`
 	UsageEstimated                     bool               `json:"usage_estimated"`
 	TokenUsageSource                   string             `json:"token_usage_source"`
+	ProviderTerminalState              string             `json:"provider_terminal_state"`
+	ClientDeliveryState                string             `json:"client_delivery_state"`
+	CancellationOrigin                 string             `json:"cancellation_origin"`
+	BillingReason                      string             `json:"billing_reason"`
+	ResponseSummaryState               string             `json:"response_summary_state"`
 	CreatedAt                          pgtype.Timestamptz `json:"created_at"`
 }
 
@@ -1235,6 +1245,11 @@ func (q *Queries) GetUsageLogByRequestID(ctx context.Context, requestID string) 
 		&i.PublicResponseModel,
 		&i.UsageEstimated,
 		&i.TokenUsageSource,
+		&i.ProviderTerminalState,
+		&i.ClientDeliveryState,
+		&i.CancellationOrigin,
+		&i.BillingReason,
+		&i.ResponseSummaryState,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -2247,6 +2262,11 @@ SELECT
   public_response_model,
   usage_estimated,
   token_usage_source,
+	provider_terminal_state,
+	client_delivery_state,
+	cancellation_origin,
+	billing_reason,
+	response_summary_state,
 	  billing_source,
 	  created_at
 FROM ai_usage_logs
@@ -2359,6 +2379,11 @@ type ListUsageLogsRow struct {
 	PublicResponseModel                pgtype.Text        `json:"public_response_model"`
 	UsageEstimated                     bool               `json:"usage_estimated"`
 	TokenUsageSource                   string             `json:"token_usage_source"`
+	ProviderTerminalState              string             `json:"provider_terminal_state"`
+	ClientDeliveryState                string             `json:"client_delivery_state"`
+	CancellationOrigin                 string             `json:"cancellation_origin"`
+	BillingReason                      string             `json:"billing_reason"`
+	ResponseSummaryState               string             `json:"response_summary_state"`
 	BillingSource                      string             `json:"billing_source"`
 	CreatedAt                          pgtype.Timestamptz `json:"created_at"`
 }
@@ -2469,6 +2494,11 @@ func (q *Queries) ListUsageLogs(ctx context.Context, arg ListUsageLogsParams) ([
 			&i.PublicResponseModel,
 			&i.UsageEstimated,
 			&i.TokenUsageSource,
+			&i.ProviderTerminalState,
+			&i.ClientDeliveryState,
+			&i.CancellationOrigin,
+			&i.BillingReason,
+			&i.ResponseSummaryState,
 			&i.BillingSource,
 			&i.CreatedAt,
 		); err != nil {
@@ -2515,6 +2545,11 @@ SELECT
   http_status,
   latency_ms,
   first_token_latency_ms,
+	provider_terminal_state,
+	client_delivery_state,
+	cancellation_origin,
+	billing_reason,
+	response_summary_state,
 	  error_code,
 	  error_message,
 	  created_at
@@ -2565,6 +2600,11 @@ type ListUsageLogsByTenantUserRow struct {
 	HttpStatus                      pgtype.Int4        `json:"http_status"`
 	LatencyMs                       pgtype.Int4        `json:"latency_ms"`
 	FirstTokenLatencyMs             pgtype.Int4        `json:"first_token_latency_ms"`
+	ProviderTerminalState           string             `json:"provider_terminal_state"`
+	ClientDeliveryState             string             `json:"client_delivery_state"`
+	CancellationOrigin              string             `json:"cancellation_origin"`
+	BillingReason                   string             `json:"billing_reason"`
+	ResponseSummaryState            string             `json:"response_summary_state"`
 	ErrorCode                       pgtype.Text        `json:"error_code"`
 	ErrorMessage                    pgtype.Text        `json:"error_message"`
 	CreatedAt                       pgtype.Timestamptz `json:"created_at"`
@@ -2616,6 +2656,11 @@ func (q *Queries) ListUsageLogsByTenantUser(ctx context.Context, arg ListUsageLo
 			&i.HttpStatus,
 			&i.LatencyMs,
 			&i.FirstTokenLatencyMs,
+			&i.ProviderTerminalState,
+			&i.ClientDeliveryState,
+			&i.CancellationOrigin,
+			&i.BillingReason,
+			&i.ResponseSummaryState,
 			&i.ErrorCode,
 			&i.ErrorMessage,
 			&i.CreatedAt,

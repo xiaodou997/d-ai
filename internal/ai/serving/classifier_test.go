@@ -1,6 +1,7 @@
 package serving
 
 import (
+	"context"
 	"net/http"
 	"testing"
 )
@@ -19,6 +20,18 @@ func TestClassifyOutcomeRetriesEvery5xx(t *testing.T) {
 		if !outcome.CountsAsHealthFailure() {
 			t.Fatalf("status %d did not count as a health failure", status)
 		}
+	}
+}
+
+func TestClassifyOutcomeTreatsClientCancellationSeparately(t *testing.T) {
+	t.Parallel()
+
+	outcome := ClassifyOutcome(0, context.Canceled)
+	if outcome.Status != ResultCanceled {
+		t.Fatalf("context.Canceled classified as %s, want canceled", outcome.Status)
+	}
+	if outcome.CountsAsHealthFailure() {
+		t.Fatal("client cancellation must not count as provider health failure")
 	}
 }
 

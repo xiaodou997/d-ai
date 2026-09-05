@@ -3,6 +3,7 @@ package serving
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -61,6 +62,7 @@ func (s *ExecuteStep) executeSync(dc *deadlineController, req *Request, resp *Up
 	// (before model-name rewrite, but model identity is captured separately).
 	req.AuditResponseMessage = audit.ExtractSyncResponseMessage(req.UpstreamResponseBody, req.Candidate.Protocol)
 	req.AuditResponseMessage = s.restorePII(req, req.AuditResponseMessage)
+	updateResponseSummaryState(req, req.AuditResponseMessage, true)
 
 	// A 200 whose body is actually an error object is a failed attempt — fail
 	// over to another route instead of relaying a broken success.
@@ -92,12 +94,16 @@ func (s *ExecuteStep) executeSync(dc *deadlineController, req *Request, resp *Up
 	} else {
 		w.Header().Set("Content-Type", "application/json")
 	}
+	markProviderTerminal(req, domain.ProviderTerminalCompleted)
 	w.WriteHeader(resp.StatusCode)
 	req.ResponseCommitted = true
 	req.MarkFirstResponseByte(time.Now())
-	_, _ = w.Write(bodyBytes)
+	if _, werr := w.Write(bodyBytes); werr != nil {
+		return streamClientWriteError(req, werr)
+	}
 
 	req.RequestStatus = domain.RequestSuccess
+	markClientDelivery(req, domain.ClientDeliveryComplete)
 	req.HTTPStatus = resp.StatusCode
 	return nil
 }
@@ -263,6 +269,7 @@ awaitLoop:
 			return err
 		}
 		data := trimmed[len(dataPrefix):]
+		observeProviderStreamFrame(req, data, evt)
 		if bytes.Equal(data, donePayload) {
 			_, err := w.Write(line)
 			return err
@@ -312,6 +319,7 @@ awaitLoop:
 
 	if awaitErr != nil {
 		req.AuditResponseMessage = auditAcc.Build()
+		updateResponseSummaryState(req, req.AuditResponseMessage, req.ProviderTerminalState == domain.ProviderTerminalCompleted)
 		return finishStream(s, req, startTime, accumulatedOutputBytes, awaitErr, dc, w, flusher)
 	}
 
@@ -336,6 +344,7 @@ awaitLoop:
 		}
 		if readErr != nil {
 			req.AuditResponseMessage = auditAcc.Build()
+			updateResponseSummaryState(req, req.AuditResponseMessage, req.ProviderTerminalState == domain.ProviderTerminalCompleted)
 			return finishStream(s, req, startTime, accumulatedOutputBytes, readErr, dc, w, flusher)
 		}
 	}
@@ -348,7 +357,23 @@ func finishStream(s *ExecuteStep, req *Request, startTime time.Time, accumulated
 	fillEstimatedUsage(req, accumulatedOutputBytes)
 
 	if readErr == io.EOF {
-		req.RequestStatus = domain.RequestSuccess
+		markClientDelivery(req, domain.ClientDeliveryComplete)
+		switch req.ProviderTerminalState {
+		case domain.ProviderTerminalFailed:
+			req.RequestStatus = domain.RequestFailed
+			req.BillingReason = "provider_terminal_failure"
+			req.ErrorCode = "provider_terminal_error"
+			req.ErrorMessage = "the upstream reported a terminal stream failure"
+		case domain.ProviderTerminalCancelled:
+			req.RequestStatus = domain.RequestCancelled
+			req.CancellationOrigin = domain.CancellationProvider
+			req.BillingReason = "provider_cancelled"
+			req.ErrorCode = "provider_cancelled"
+			req.ErrorMessage = "the upstream cancelled the stream"
+		default:
+			markProviderTerminal(req, domain.ProviderTerminalCompleted)
+			req.RequestStatus = domain.RequestSuccess
+		}
 		req.HTTPStatus = http.StatusOK
 		zap.L().Info("stream finished",
 			requestLogFields(req,
@@ -361,6 +386,13 @@ func finishStream(s *ExecuteStep, req *Request, startTime time.Time, accumulated
 		)
 		return nil
 	}
+	if streamClientCancelled(dc, readErr) {
+		markClientCancellation(req)
+		req.ErrorCode = "client_disconnected"
+		req.ErrorMessage = "the client disconnected before the upstream stream completed"
+		req.HTTPStatus = http.StatusOK
+		return &postcommitError{code: req.ErrorCode, message: req.ErrorMessage}
+	}
 
 	// Post-commit failure — 200 OK is already sent and the body is partial.
 	code, msg := streamFailureReason(dc, readErr)
@@ -368,6 +400,8 @@ func finishStream(s *ExecuteStep, req *Request, startTime time.Time, accumulated
 	req.InternalErrorDetail = RedactInternalErrorDetail(msg)
 	msg = egress.SanitizeText(msg, PublicEgressPolicy(req))
 	req.RequestStatus = domain.RequestFailed
+	markProviderTerminal(req, domain.ProviderTerminalIncomplete)
+	req.BillingReason = "upstream_stream_interrupted"
 	req.HTTPStatus = http.StatusOK
 	req.ErrorCode = code
 	req.ErrorMessage = msg
@@ -382,6 +416,17 @@ func finishStream(s *ExecuteStep, req *Request, startTime time.Time, accumulated
 		)...,
 	)
 	return &postcommitError{code: code, message: msg}
+}
+
+func streamClientCancelled(dc *deadlineController, readErr error) bool {
+	if dc != nil && dc.cause() != nil {
+		return false
+	}
+	// A bare context.Canceled returned by an upstream reader is not enough to
+	// identify the caller: only the derived attempt context can prove that the
+	// parent HTTP request was cancelled. This avoids treating an upstream abort
+	// as a customer disconnect and voiding its charge incorrectly.
+	return dc != nil && errors.Is(context.Cause(dc.ctx), context.Canceled)
 }
 
 // streamFailureReason maps a post-commit read failure to an error code/message.
@@ -491,6 +536,7 @@ func (s *ExecuteStep) executeSyncConvert(dc *deadlineController, req *Request, r
 	}
 	req.AuditResponseMessage = audit.ExtractSyncResponseMessage(req.UpstreamResponseBody, req.Candidate.Protocol)
 	req.AuditResponseMessage = s.restorePII(req, req.AuditResponseMessage)
+	updateResponseSummaryState(req, req.AuditResponseMessage, true)
 
 	// Translate provider → client.
 	if s.Bridge == nil {
@@ -512,12 +558,16 @@ func (s *ExecuteStep) executeSyncConvert(dc *deadlineController, req *Request, r
 	out = egress.SanitizeJSON(out, policy)
 
 	w.Header().Set("Content-Type", "application/json")
+	markProviderTerminal(req, domain.ProviderTerminalCompleted)
 	w.WriteHeader(resp.StatusCode)
 	req.ResponseCommitted = true
 	req.MarkFirstResponseByte(time.Now())
-	_, _ = w.Write(out)
+	if _, werr := w.Write(out); werr != nil {
+		return streamClientWriteError(req, werr)
+	}
 
 	req.RequestStatus = domain.RequestSuccess
+	markClientDelivery(req, domain.ClientDeliveryComplete)
 	req.HTTPStatus = resp.StatusCode
 	return nil
 }
@@ -636,6 +686,9 @@ awaitLoop:
 			if fr.HasFinish && fr.Usage != nil {
 				applyCanonicalUsage(req, fr.Usage)
 			}
+			if fr.HasFinish && req.ProviderTerminalState != domain.ProviderTerminalFailed && req.ProviderTerminalState != domain.ProviderTerminalCancelled {
+				markProviderTerminal(req, domain.ProviderTerminalCompleted)
+			}
 			out, eerr := emitter.Emit(fr)
 			if eerr != nil || len(out) == 0 {
 				continue
@@ -663,6 +716,7 @@ awaitLoop:
 	flusher.Flush()
 
 	if awaitErr != nil {
+		updateResponseSummaryState(req, []byte(auditBuf.String()), req.ProviderTerminalState == domain.ProviderTerminalCompleted)
 		return s.finishStreamConvert(req, startTime, &auditBuf, accumulatedOutputBytes, awaitErr, dc, w, flusher, provider, emitFrames, emitter)
 	}
 
@@ -677,6 +731,7 @@ awaitLoop:
 			flusher.Flush()
 		}
 		if readErr != nil {
+			updateResponseSummaryState(req, []byte(auditBuf.String()), req.ProviderTerminalState == domain.ProviderTerminalCompleted)
 			return s.finishStreamConvert(req, startTime, &auditBuf, accumulatedOutputBytes, readErr, dc, w, flusher, provider, emitFrames, emitter)
 		}
 	}
@@ -706,9 +761,26 @@ func (s *ExecuteStep) finishStreamConvert(
 			_, _ = w.Write(tail)
 		}
 		flusher.Flush()
+		markClientDelivery(req, domain.ClientDeliveryComplete)
+		updateResponseSummaryState(req, []byte(auditBuf.String()), true)
 		req.AuditResponseMessage = []byte(auditBuf.String())
 		fillEstimatedUsage(req, accumulatedOutputBytes)
-		req.RequestStatus = domain.RequestSuccess
+		switch req.ProviderTerminalState {
+		case domain.ProviderTerminalFailed:
+			req.RequestStatus = domain.RequestFailed
+			req.BillingReason = "provider_terminal_failure"
+			req.ErrorCode = "provider_terminal_error"
+			req.ErrorMessage = "the upstream reported a terminal stream failure"
+		case domain.ProviderTerminalCancelled:
+			req.RequestStatus = domain.RequestCancelled
+			req.CancellationOrigin = domain.CancellationProvider
+			req.BillingReason = "provider_cancelled"
+			req.ErrorCode = "provider_cancelled"
+			req.ErrorMessage = "the upstream cancelled the stream"
+		default:
+			markProviderTerminal(req, domain.ProviderTerminalCompleted)
+			req.RequestStatus = domain.RequestSuccess
+		}
 		req.HTTPStatus = http.StatusOK
 		zap.L().Info("stream finished (convert)",
 			requestLogFields(req,
@@ -721,6 +793,13 @@ func (s *ExecuteStep) finishStreamConvert(
 		)
 		return nil
 	}
+	if streamClientCancelled(dc, readErr) {
+		markClientCancellation(req)
+		req.ErrorCode = "client_disconnected"
+		req.ErrorMessage = "the client disconnected before the upstream stream completed"
+		req.HTTPStatus = http.StatusOK
+		return &postcommitError{code: req.ErrorCode, message: req.ErrorMessage}
+	}
 
 	req.AuditResponseMessage = []byte(auditBuf.String())
 	fillEstimatedUsage(req, accumulatedOutputBytes)
@@ -729,6 +808,8 @@ func (s *ExecuteStep) finishStreamConvert(
 	req.InternalErrorDetail = RedactInternalErrorDetail(msg)
 	msg = egress.SanitizeText(msg, PublicEgressPolicy(req))
 	req.RequestStatus = domain.RequestFailed
+	markProviderTerminal(req, domain.ProviderTerminalIncomplete)
+	req.BillingReason = "upstream_stream_interrupted"
 	req.HTTPStatus = http.StatusOK
 	req.ErrorCode = code
 	req.ErrorMessage = msg

@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -88,6 +89,7 @@ func (l *UsageLogger) WithAuditEnqueuer(enqueuer auditTxEnqueuer) *UsageLogger {
 // BillingResult is calculated here, then usage, API-key quota, subscription
 // quota, and the direct balance charge are committed in one transaction.
 func (l *UsageLogger) Log(ctx context.Context, req *serving.Request) error {
+	serving.EnsureSettlementState(req)
 	subject := req.RuntimeSubject()
 	if subject == nil || req.Candidate == nil {
 		return nil
@@ -97,12 +99,16 @@ func (l *UsageLogger) Log(ctx context.Context, req *serving.Request) error {
 	if err != nil {
 		return fmt.Errorf("calculate prepared billing: %w", err)
 	}
-	if len(req.Attempts) == 0 && req.RequestStatus == domain.RequestFailed {
+	if serving.ShouldVoidBilling(req) {
+		billing = voidBilling(billing, req.BillingReason)
+		req.BillingStatus = domain.BillingVoid
+	} else if len(req.Attempts) == 0 && req.RequestStatus == domain.RequestFailed {
 		req.TokenUsage = domain.TokenUsage{}
 		req.TokenCountSource = ""
 		req.UpstreamStatus = 0
 		billing = unattemptedBilling(billing)
 	}
+	billing.BillingBreakdownJSON = annotateSettlementMetadata(billing.BillingBreakdownJSON, req)
 	req.BillingResult = billing
 	var lastErr error
 	backoff := usageCompletionRetryBase
@@ -194,6 +200,13 @@ func (l *UsageLogger) reconcileAsyncTaskCharge(ctx context.Context, tx pgx.Tx, r
 	charge := billing.TenantPayableMicro
 	if subject := req.RuntimeSubject(); subject != nil && runtimeSubjectOwnerType(subject) == domain.OwnerUser {
 		charge = billing.UserChargedMicro
+	}
+	if req.BillingStatus == domain.BillingVoid {
+		// A void completion has no new customer charge. Preserve any existing
+		// caller_charge: clearing a positive value would silently erase a prior
+		// settlement without a compensating ledger reversal. The async task
+		// completion path uses GREATEST as well, so zero remains idempotent.
+		return nil
 	}
 	if _, err := tx.Exec(ctx, `
 		UPDATE ai_async_tasks
@@ -408,6 +421,11 @@ func buildUsageLogParams(req *serving.Request, billing domain.BillingResult) dbg
 		ErrorMessage:                       nullableText(req.ErrorMessage),
 		UsageEstimated:                     req.TokenCountSource == domain.TokenUsageSourceEstimated || req.TokenCountSource == domain.TokenUsageSourceMixed,
 		TokenUsageSource:                   tokenCountSource(req.TokenCountSource),
+		ProviderTerminalState:              string(req.ProviderTerminalState),
+		ClientDeliveryState:                string(req.ClientDeliveryState),
+		CancellationOrigin:                 string(req.CancellationOrigin),
+		BillingReason:                      req.BillingReason,
+		ResponseSummaryState:               string(req.ResponseSummaryState),
 		AttemptsCount:                      int32(len(req.Attempts)),
 		FinalRouteID:                       groupTargetUUID,
 		ClientProtocol:                     string(req.ClientProtocol),
@@ -482,14 +500,10 @@ func buildUsageRollupParams(req *serving.Request, billing domain.BillingResult) 
 	}
 }
 
-// unattemptedBilling zeroes a request that never reached an upstream.
-//
-// This is the whole of the "don't charge for failures" rule, and it is
-// deliberately narrow: a request that DID reach an upstream is billed for
-// whatever that upstream reported, even when it ultimately failed. The cost was
-// really incurred on the way out, and the platform does not absorb it. Image and
-// video counts are still zeroed for a failed request (settlementUsage), because
-// an undelivered asset is not a billable unit the way consumed tokens are.
+// unattemptedBilling zeroes a request that never reached an upstream. Requests
+// that did reach an upstream are normally billed for authoritative usage, while
+// client/gateway cancellations before a provider terminal event use
+// voidBilling below.
 func unattemptedBilling(source domain.BillingResult) domain.BillingResult {
 	source.CatalogBaseMicro = 0
 	source.TenantPayableMicro = 0
@@ -500,6 +514,63 @@ func unattemptedBilling(source domain.BillingResult) domain.BillingResult {
 	source.BillableUnits = 0
 	source.BillingBreakdownJSON = []byte(`{"reason":"upstream_not_attempted"}`)
 	return source
+}
+
+// voidBilling keeps the observed token/cost breakdown for audit, but removes
+// every customer-facing payable amount and billable unit. This is used for a
+// client/gateway cancellation before the provider emitted a terminal event.
+func voidBilling(source domain.BillingResult, reason string) domain.BillingResult {
+	source.CatalogBaseMicro = 0
+	source.TenantPayableMicro = 0
+	source.RetailBaseMicro = 0
+	source.UserPayableMicro = 0
+	source.UserChargedMicro = 0
+	source.APIKeyQuotaCostMicro = 0
+	source.BillableUnits = 0
+	source.BillingBreakdownJSON = annotateBillingBreakdown(source.BillingBreakdownJSON, reason)
+	return source
+}
+
+func annotateBillingBreakdown(raw []byte, reason string) []byte {
+	var value map[string]any
+	if len(raw) == 0 || json.Unmarshal(raw, &value) != nil {
+		value = map[string]any{}
+	}
+	value["billing_status"] = string(domain.BillingVoid)
+	if reason == "" {
+		reason = "customer_charge_void"
+	}
+	value["billing_reason"] = reason
+	out, err := json.Marshal(value)
+	if err != nil {
+		return []byte(`{"billing_status":"void"}`)
+	}
+	return out
+}
+
+func annotateSettlementMetadata(raw []byte, req *serving.Request) []byte {
+	var value map[string]any
+	if len(raw) == 0 || json.Unmarshal(raw, &value) != nil {
+		value = map[string]any{}
+	}
+	if req != nil {
+		value["request_status"] = string(req.RequestStatus)
+		value["provider_terminal_state"] = string(req.ProviderTerminalState)
+		value["client_delivery_state"] = string(req.ClientDeliveryState)
+		value["cancellation_origin"] = string(req.CancellationOrigin)
+		value["response_summary_state"] = string(req.ResponseSummaryState)
+		if req.BillingReason != "" {
+			value["billing_reason"] = req.BillingReason
+		}
+		if req.BillingStatus != "" {
+			value["billing_status"] = string(req.BillingStatus)
+		}
+	}
+	out, err := json.Marshal(value)
+	if err != nil {
+		return raw
+	}
+	return out
 }
 
 // tokenCountSource normalises the source label; defaults to "upstream" when empty
@@ -533,8 +604,12 @@ func usageBillingSource(src string) string {
 
 // billingStatus is the settlement state at insert time. A billable request is
 // written "pending" and the outbox consumer promotes it to "settled" once the
-// balance has actually moved.
+// balance has actually moved. A customer-charge void is terminal and never
+// enters the outbox.
 func billingStatus(req *serving.Request) string {
+	if req.BillingStatus != "" {
+		return string(req.BillingStatus)
+	}
 	if req.BillingResult.TenantPayableMicro == 0 && req.BillingResult.UserChargedMicro == 0 {
 		return string(domain.BillingFree)
 	}

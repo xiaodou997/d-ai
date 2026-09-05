@@ -69,14 +69,62 @@ const (
 	BillingPending BillingStatus = "pending"
 	BillingSettled BillingStatus = "settled"
 	BillingFailed  BillingStatus = "failed"
+	// BillingVoid means the request may have produced internal/provider-side
+	// usage, but no customer-facing charge is payable. Raw usage is retained
+	// for audit and provider-cost analysis.
+	BillingVoid BillingStatus = "void"
 )
 
 // RequestStatus describes the outcome of an AI request.
 type RequestStatus string
 
 const (
-	RequestSuccess RequestStatus = "success"
-	RequestFailed  RequestStatus = "failed"
+	RequestSuccess   RequestStatus = "success"
+	RequestFailed    RequestStatus = "failed"
+	RequestCancelled RequestStatus = "cancelled"
+)
+
+// ProviderTerminalState records whether the upstream reached a protocol
+// terminal event. HTTP 2xx only describes response headers and is not a
+// terminal signal for a streaming request.
+type ProviderTerminalState string
+
+const (
+	ProviderTerminalUnknown    ProviderTerminalState = "unknown"
+	ProviderTerminalCompleted  ProviderTerminalState = "completed"
+	ProviderTerminalFailed     ProviderTerminalState = "failed"
+	ProviderTerminalCancelled  ProviderTerminalState = "cancelled"
+	ProviderTerminalIncomplete ProviderTerminalState = "incomplete"
+)
+
+// ClientDeliveryState describes the downstream side independently from the
+// upstream execution result.
+type ClientDeliveryState string
+
+const (
+	ClientDeliveryUnknown      ClientDeliveryState = "unknown"
+	ClientDeliveryComplete     ClientDeliveryState = "complete"
+	ClientDeliveryDisconnected ClientDeliveryState = "disconnected"
+	ClientDeliveryWriteFailed  ClientDeliveryState = "write_failed"
+)
+
+type CancellationOrigin string
+
+const (
+	CancellationNone     CancellationOrigin = "none"
+	CancellationClient   CancellationOrigin = "client"
+	CancellationProvider CancellationOrigin = "provider"
+	CancellationGateway  CancellationOrigin = "gateway"
+	CancellationUnknown  CancellationOrigin = "unknown"
+)
+
+type ResponseSummaryState string
+
+const (
+	ResponseSummaryUnavailable ResponseSummaryState = "unavailable"
+	ResponseSummaryEmpty       ResponseSummaryState = "empty"
+	ResponseSummaryPartial     ResponseSummaryState = "partial"
+	ResponseSummaryComplete    ResponseSummaryState = "complete"
 )
 
 type ServiceTier string

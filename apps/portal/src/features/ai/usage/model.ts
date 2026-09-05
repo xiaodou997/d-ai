@@ -10,9 +10,17 @@ import {
 
 type Schemas = components["schemas"];
 
-export type UsageLogDTO = Schemas["UsageLogDTO"];
+export interface UsageSettlementStateFields {
+  provider_terminal_state?: string;
+  client_delivery_state?: string;
+  cancellation_origin?: string;
+  billing_reason?: string;
+  response_summary_state?: string;
+}
+
+export type UsageLogDTO = Schemas["UsageLogDTO"] & UsageSettlementStateFields;
 export type UsageStatsDTO = Schemas["UsageStatsDTO"];
-export type UsageLogDetailDTO = Schemas["UsageLogDetailDTO"];
+export type UsageLogDetailDTO = Schemas["UsageLogDetailDTO"] & UsageSettlementStateFields;
 export interface UsageAttemptDetail {
   route_id?: string;
   provider_code?: string;

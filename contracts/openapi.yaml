@@ -4717,6 +4717,8 @@ components:
       properties:
         enabled:
           type: boolean
+        mode:
+          type: string
         entries:
           items:
             $ref: "#/components/schemas/KeywordEntryDTO"
@@ -7168,11 +7170,23 @@ components:
           type: boolean
         keyword:
           $ref: "#/components/schemas/KeywordConfigDTO"
+        keyword_upstream_account_ids:
+          items:
+            type: string
+          type:
+            - array
+            - "null"
         mode:
           description: off | observe | pre_block
           type: string
         provider:
           $ref: "#/components/schemas/RiskControlProviderDTO"
+        provider_upstream_account_ids:
+          items:
+            type: string
+          type:
+            - array
+            - "null"
         record_non_hits:
           type: boolean
         risk_event_threshold:
@@ -7206,7 +7220,9 @@ components:
         - mode
         - config_revision
         - keyword
+        - keyword_upstream_account_ids
         - provider
+        - provider_upstream_account_ids
         - thresholds
         - sample_rate
         - verdict_cache_ttl_seconds
@@ -7236,6 +7252,12 @@ components:
           type: boolean
         keyword:
           $ref: "#/components/schemas/KeywordConfigDTO"
+        keyword_upstream_account_ids:
+          items:
+            type: string
+          type:
+            - array
+            - "null"
         mode:
           enum:
             - "off"
@@ -7244,6 +7266,12 @@ components:
           type: string
         provider:
           $ref: "#/components/schemas/RiskControlProviderWriteDTO"
+        provider_upstream_account_ids:
+          items:
+            type: string
+          type:
+            - array
+            - "null"
         record_non_hits:
           type: boolean
         risk_event_threshold:
@@ -7368,6 +7396,10 @@ components:
         base_url:
           description: 审核 API Base URL，如 https://api.openai.com
           type: string
+        enabled:
+          type: boolean
+        mode:
+          type: string
         has_api_key:
           description: 是否已配置审核 API Key（出于安全考虑不回显明文/密文）
           type: boolean
@@ -7391,6 +7423,10 @@ components:
           description: 传入以更新审核 API Key 明文；省略则保留原值，传空字符串则清空
           type: string
         base_url:
+          type: string
+        enabled:
+          type: boolean
+        mode:
           type: string
         model:
           type: string
@@ -9210,6 +9246,21 @@ components:
         billing_status:
           description: 计费状态
           type: string
+        provider_terminal_state:
+          description: 上游流式终态
+          type: string
+        client_delivery_state:
+          description: 客户端交付状态
+          type: string
+        cancellation_origin:
+          description: 取消来源
+          type: string
+        billing_reason:
+          description: 计费判定原因
+          type: string
+        response_summary_state:
+          description: 响应摘要状态
+          type: string
         billing_status_label:
           description: 计费状态展示名
           type: string
@@ -10777,6 +10828,21 @@ components:
         billing_status:
           description: 计费状态
           type: string
+        provider_terminal_state:
+          description: 上游流式终态
+          type: string
+        client_delivery_state:
+          description: 客户端交付状态
+          type: string
+        cancellation_origin:
+          description: 取消来源
+          type: string
+        billing_reason:
+          description: 计费判定原因
+          type: string
+        response_summary_state:
+          description: 响应摘要状态
+          type: string
         cache_read_tokens:
           description: 缓存读 token 数
           format: int32
@@ -11077,6 +11143,21 @@ components:
           description: 计费来源
           type: string
         billing_status:
+          type: string
+        provider_terminal_state:
+          description: 上游流式终态
+          type: string
+        client_delivery_state:
+          description: 客户端交付状态
+          type: string
+        cancellation_origin:
+          description: 取消来源
+          type: string
+        billing_reason:
+          description: 计费判定原因
+          type: string
+        response_summary_state:
+          description: 响应摘要状态
           type: string
         cache_read_tokens:
           format: int32
@@ -11968,6 +12049,21 @@ components:
           type: string
         billing_status:
           description: 计费状态
+          type: string
+        provider_terminal_state:
+          description: 上游流式终态
+          type: string
+        client_delivery_state:
+          description: 客户端交付状态
+          type: string
+        cancellation_origin:
+          description: 取消来源
+          type: string
+        billing_reason:
+          description: 计费判定原因
+          type: string
+        response_summary_state:
+          description: 响应摘要状态
           type: string
         cache_read_tokens:
           description: 缓存读 token 数

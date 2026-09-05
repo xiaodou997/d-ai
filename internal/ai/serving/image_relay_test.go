@@ -2,13 +2,24 @@ package serving
 
 import (
 	"context"
+	"net/http"
 	"net/http/httptest"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
 	"xiaodou/dai/internal/ai/domain"
 )
+
+type imageClientWriteFailure struct{ header http.Header }
+
+func (w *imageClientWriteFailure) Header() http.Header { return w.header }
+func (w *imageClientWriteFailure) WriteHeader(int)      {}
+func (w *imageClientWriteFailure) Write([]byte) (int, error) {
+	return 0, syscall.EPIPE
+}
+func (w *imageClientWriteFailure) Flush() {}
 
 type stalledImageBody struct {
 	ctx  context.Context
@@ -60,6 +71,24 @@ func TestImageRelaySyncUpstreamToStreamClient(t *testing.T) {
 	}
 	if req.RequestStatus != domain.RequestSuccess {
 		t.Fatalf("RequestStatus = %v, want success", req.RequestStatus)
+	}
+}
+
+func TestImageRelayClientDisconnectAfterCompleteUpstreamRemainsBillable(t *testing.T) {
+	dc := genTestDC()
+	defer dc.stop()
+	req := imageRelayReq(true)
+	w := &imageClientWriteFailure{header: make(http.Header)}
+
+	err := newExecuteStepForTests().commitImageClientStream(dc, req, w, []byte(`{"data":[{"url":"ok"}]}`), http.StatusOK, time.Now())
+	if err != nil {
+		t.Fatalf("commitImageClientStream err = %v", err)
+	}
+	if req.ProviderTerminalState != domain.ProviderTerminalCompleted {
+		t.Fatalf("provider terminal state = %q, want completed", req.ProviderTerminalState)
+	}
+	if ShouldVoidBilling(req) {
+		t.Fatal("completed upstream image must not be voided after client disconnect")
 	}
 }
 

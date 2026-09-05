@@ -115,6 +115,11 @@ type usageLogDTO struct {
 	SettledAt                          *int64   `json:"settled_at,omitempty" doc:"结算时间，Unix 毫秒"`
 	RefundedAt                         *int64   `json:"refunded_at,omitempty" doc:"退款时间，Unix 毫秒"`
 	RequestStatus                      string   `json:"request_status" doc:"请求状态"`
+	ProviderTerminalState              string   `json:"provider_terminal_state" doc:"上游终态：unknown/completed/failed/cancelled/incomplete"`
+	ClientDeliveryState                string   `json:"client_delivery_state" doc:"客户端交付状态"`
+	CancellationOrigin                 string   `json:"cancellation_origin" doc:"取消来源"`
+	BillingReason                      string   `json:"billing_reason,omitempty" doc:"计费判定原因"`
+	ResponseSummaryState               string   `json:"response_summary_state" doc:"响应摘要状态"`
 	HTTPStatus                         *int32   `json:"http_status,omitempty" doc:"HTTP 状态码"`
 	UpstreamStatus                     *int32   `json:"upstream_status,omitempty" doc:"上游状态码"`
 	LatencyMs                          *int32   `json:"latency_ms,omitempty" doc:"请求延迟，毫秒"`
@@ -185,6 +190,11 @@ type usageLogDetailDTO struct {
 	UpstreamModelMappingApplied        bool            `json:"upstream_model_mapping_applied"`
 	PublicResponseModel                *string         `json:"public_response_model,omitempty"`
 	RequestStatus                      string          `json:"request_status"`
+	ProviderTerminalState              string          `json:"provider_terminal_state"`
+	ClientDeliveryState                string          `json:"client_delivery_state"`
+	CancellationOrigin                 string          `json:"cancellation_origin"`
+	BillingReason                      string          `json:"billing_reason,omitempty"`
+	ResponseSummaryState               string          `json:"response_summary_state"`
 	HTTPStatus                         *int32          `json:"http_status,omitempty"`
 	UpstreamStatus                     *int32          `json:"upstream_status,omitempty"`
 	Stream                             bool            `json:"stream" doc:"是否流式请求"`
@@ -274,6 +284,11 @@ type tenantUsageLogDTO struct {
 	RefundStatus                       string  `json:"refund_status" doc:"退款状态：none/refunded"`
 	BillingSource                      string  `json:"billing_source" doc:"计费来源：payg=按量 / subscription=订阅内"`
 	RequestStatus                      string  `json:"request_status" doc:"请求状态"`
+	ProviderTerminalState              string  `json:"provider_terminal_state" doc:"上游终态"`
+	ClientDeliveryState                string  `json:"client_delivery_state" doc:"客户端交付状态"`
+	CancellationOrigin                 string  `json:"cancellation_origin" doc:"取消来源"`
+	BillingReason                      string  `json:"billing_reason,omitempty" doc:"计费判定原因"`
+	ResponseSummaryState               string  `json:"response_summary_state" doc:"响应摘要状态"`
 	HTTPStatus                         *int32  `json:"http_status,omitempty" doc:"HTTP 状态码"`
 	LatencyMs                          *int32  `json:"latency_ms,omitempty" doc:"请求延迟，毫秒"`
 	FirstTokenLatencyMs                *int32  `json:"first_token_latency_ms,omitempty" doc:"首 token 延迟，毫秒"`
@@ -320,6 +335,11 @@ type userUsageLogDTO struct {
 	RefundStatus                    string  `json:"refund_status" doc:"退款状态：none/refunded"`
 	BillingSource                   string  `json:"billing_source" doc:"计费来源：payg=按量 / subscription=订阅内"`
 	RequestStatus                   string  `json:"request_status" doc:"请求状态"`
+	ProviderTerminalState           string  `json:"provider_terminal_state" doc:"上游终态"`
+	ClientDeliveryState             string  `json:"client_delivery_state" doc:"客户端交付状态"`
+	CancellationOrigin              string  `json:"cancellation_origin" doc:"取消来源"`
+	BillingReason                   string  `json:"billing_reason,omitempty" doc:"计费判定原因"`
+	ResponseSummaryState            string  `json:"response_summary_state" doc:"响应摘要状态"`
 	HTTPStatus                      *int32  `json:"http_status,omitempty" doc:"HTTP 状态码"`
 	LatencyMs                       *int32  `json:"latency_ms,omitempty" doc:"请求延迟，毫秒"`
 	FirstTokenLatencyMs             *int32  `json:"first_token_latency_ms,omitempty" doc:"首 token 延迟，毫秒"`
@@ -839,6 +859,11 @@ func usageLogToDTO(log domain.UsageLog) usageLogDTO {
 		SettledAt:                          timeToMillisPtrPtr(log.SettledAt),
 		RefundedAt:                         timeToMillisPtrPtr(log.RefundedAt),
 		RequestStatus:                      log.RequestStatus,
+		ProviderTerminalState:              log.ProviderTerminalState,
+		ClientDeliveryState:                log.ClientDeliveryState,
+		CancellationOrigin:                 log.CancellationOrigin,
+		BillingReason:                      log.BillingReason,
+		ResponseSummaryState:               log.ResponseSummaryState,
 		HTTPStatus:                         log.HTTPStatus,
 		UpstreamStatus:                     log.UpstreamStatus,
 		LatencyMs:                          log.LatencyMs,
@@ -916,6 +941,11 @@ func usageLogDetailToDTO(detail domain.UsageLogDetail) usageLogDetailDTO {
 		UpstreamModelMappingApplied:        detail.UpstreamModelMappingApplied,
 		PublicResponseModel:                stringPtrOrNil(detail.PublicResponseModel),
 		RequestStatus:                      detail.RequestStatus,
+		ProviderTerminalState:              detail.ProviderTerminalState,
+		ClientDeliveryState:                detail.ClientDeliveryState,
+		CancellationOrigin:                 detail.CancellationOrigin,
+		BillingReason:                      detail.BillingReason,
+		ResponseSummaryState:               detail.ResponseSummaryState,
 		HTTPStatus:                         detail.HTTPStatus,
 		UpstreamStatus:                     detail.UpstreamStatus,
 		Stream:                             detail.Stream,
@@ -1012,6 +1042,11 @@ func tenantUsageLogToDTO(log domain.UsageLog) tenantUsageLogDTO {
 		RefundStatus:                       log.RefundStatus,
 		BillingSource:                      billingSourceOrDefault(log.BillingSource),
 		RequestStatus:                      log.RequestStatus,
+		ProviderTerminalState:              log.ProviderTerminalState,
+		ClientDeliveryState:                log.ClientDeliveryState,
+		CancellationOrigin:                 log.CancellationOrigin,
+		BillingReason:                      log.BillingReason,
+		ResponseSummaryState:               log.ResponseSummaryState,
 		HTTPStatus:                         log.HTTPStatus,
 		LatencyMs:                          log.LatencyMs,
 		FirstTokenLatencyMs:                log.FirstTokenLatencyMs,
@@ -1052,6 +1087,11 @@ func userUsageLogToDTO(row domain.UsageLog) userUsageLogDTO {
 		RefundStatus:                    row.RefundStatus,
 		BillingSource:                   billingSourceOrDefault(row.BillingSource),
 		RequestStatus:                   row.RequestStatus,
+		ProviderTerminalState:           row.ProviderTerminalState,
+		ClientDeliveryState:             row.ClientDeliveryState,
+		CancellationOrigin:              row.CancellationOrigin,
+		BillingReason:                   row.BillingReason,
+		ResponseSummaryState:            row.ResponseSummaryState,
 		HTTPStatus:                      row.HTTPStatus,
 		LatencyMs:                       row.LatencyMs,
 		FirstTokenLatencyMs:             row.FirstTokenLatencyMs,
@@ -1084,6 +1124,8 @@ func billingStatusLabel(status string) string {
 		return "结算失败"
 	case "free":
 		return "免费"
+	case "void":
+		return "未计费"
 	default:
 		return status
 	}

@@ -88,6 +88,11 @@ type UsageLog struct {
 	PublicResponseModel                string
 	UsageEstimated                     bool
 	TokenUsageSource                   string
+	ProviderTerminalState              string
+	ClientDeliveryState                string
+	CancellationOrigin                 string
+	BillingReason                      string
+	ResponseSummaryState               string
 	BillingSource                      string
 	CreatedAt                          time.Time
 }

@@ -67,6 +67,7 @@ func (s *ExecuteStep) executeImageRelay(dc *deadlineController, req *Request, re
 		req.TokenUsage = u
 	}
 	req.AuditResponseMessage = audit.ExtractSyncResponseMessage(providerBody, req.Candidate.Protocol)
+	updateResponseSummaryState(req, req.AuditResponseMessage, true)
 	fillEstimatedUsage(req, len(providerBody))
 
 	// Translate provider → client (passthrough when the protocols match, since
@@ -103,12 +104,16 @@ func (s *ExecuteStep) executeImageRelay(dc *deadlineController, req *Request, re
 }
 
 func (s *ExecuteStep) commitImageClientSync(req *Request, w http.ResponseWriter, clientBody []byte, statusCode int) error {
+	markProviderTerminal(req, domain.ProviderTerminalCompleted)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
 	req.ResponseCommitted = true
 	req.MarkFirstResponseByte(time.Now())
-	_, _ = w.Write(clientBody)
+	if _, err := w.Write(clientBody); err != nil {
+		return streamClientWriteError(req, err)
+	}
 	req.RequestStatus = domain.RequestSuccess
+	markClientDelivery(req, domain.ClientDeliveryComplete)
 	req.HTTPStatus = statusCode
 	return nil
 }
@@ -141,11 +146,17 @@ func (s *ExecuteStep) commitImageClientStream(dc *deadlineController, req *Reque
 	dc.firstByte()
 	req.MarkFirstResponseByte(time.Now())
 	req.FirstTokenMs = int(time.Since(startTime).Milliseconds())
+	// The upstream body was fully read, validated and converted before this
+	// client stream was built. Mark provider completion before the downstream
+	// write so a client disconnect cannot incorrectly void an already-completed
+	// image generation.
+	markProviderTerminal(req, domain.ProviderTerminalCompleted)
 	if _, err := w.Write(clientStream); err != nil {
 		return streamClientWriteError(req, err)
 	}
 	flusher.Flush()
 	req.RequestStatus = domain.RequestSuccess
+	markClientDelivery(req, domain.ClientDeliveryComplete)
 	req.HTTPStatus = http.StatusOK
 	return nil
 }

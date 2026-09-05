@@ -3,6 +3,7 @@ import type { UsageTagKind, UsageTagMeta } from "./types";
 export const requestStatusMeta: Record<string, UsageTagMeta> = {
   success: { label: "成功", tone: "positive" },
   failed: { label: "失败", tone: "danger" },
+  cancelled: { label: "已取消", tone: "warning" },
   error: { label: "错误", tone: "danger" },
   rejected: { label: "拒绝", tone: "warning" },
   pending: { label: "待处理", tone: "warning" }
@@ -36,6 +37,7 @@ export const streamMeta: Record<string, UsageTagMeta> = {
 
 export const tokenUsageSourceMeta: Record<string, UsageTagMeta> = {
   upstream: { label: "上游", tone: "positive" },
+  mixed: { label: "部分估算", tone: "warning" },
   estimated: { label: "估算", tone: "warning" }
 };
 

@@ -9611,6 +9611,16 @@ export interface components {
             billing_source: string;
             /** @description 计费状态 */
             billing_status: string;
+            /** @description 上游流式终态 */
+            provider_terminal_state?: string;
+            /** @description 客户端交付状态 */
+            client_delivery_state?: string;
+            /** @description 取消来源 */
+            cancellation_origin?: string;
+            /** @description 计费判定原因 */
+            billing_reason?: string;
+            /** @description 响应摘要状态 */
+            response_summary_state?: string;
             /** @description 计费状态展示名 */
             billing_status_label: string;
             /**
@@ -10526,6 +10536,16 @@ export interface components {
             billing_source: string;
             /** @description 计费状态 */
             billing_status: string;
+            /** @description 上游流式终态 */
+            provider_terminal_state?: string;
+            /** @description 客户端交付状态 */
+            client_delivery_state?: string;
+            /** @description 取消来源 */
+            cancellation_origin?: string;
+            /** @description 计费判定原因 */
+            billing_reason?: string;
+            /** @description 响应摘要状态 */
+            response_summary_state?: string;
             /**
              * Format: int32
              * @description 缓存读 token 数
@@ -10772,6 +10792,16 @@ export interface components {
             /** @description 计费来源 */
             billing_source?: string;
             billing_status: string;
+            /** @description 上游流式终态 */
+            provider_terminal_state?: string;
+            /** @description 客户端交付状态 */
+            client_delivery_state?: string;
+            /** @description 取消来源 */
+            cancellation_origin?: string;
+            /** @description 计费判定原因 */
+            billing_reason?: string;
+            /** @description 响应摘要状态 */
+            response_summary_state?: string;
             /** Format: int32 */
             cache_read_tokens: number;
             /** Format: int32 */
@@ -11363,6 +11393,16 @@ export interface components {
             billing_source: string;
             /** @description 计费状态 */
             billing_status: string;
+            /** @description 上游流式终态 */
+            provider_terminal_state?: string;
+            /** @description 客户端交付状态 */
+            client_delivery_state?: string;
+            /** @description 取消来源 */
+            cancellation_origin?: string;
+            /** @description 计费判定原因 */
+            billing_reason?: string;
+            /** @description 响应摘要状态 */
+            response_summary_state?: string;
             /**
              * Format: int32
              * @description 缓存读 token 数

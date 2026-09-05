@@ -70,9 +70,11 @@ const (
 func ClassifyOutcome(httpStatus int, err error) Outcome {
 	if err != nil {
 		switch {
+		case errors.Is(err, context.Canceled):
+			return Outcome{Status: ResultCanceled, Err: err}
 		case errors.Is(err, ErrResponseHeaderTimeout), errors.Is(err, ErrFirstByteTimeout),
 			errors.Is(err, ErrIdleTimeout), errors.Is(err, ErrMaxDuration),
-			errors.Is(err, context.DeadlineExceeded), errors.Is(err, context.Canceled):
+			errors.Is(err, context.DeadlineExceeded):
 			return Outcome{Status: ResultTimeout, Err: err}
 		}
 		return Outcome{Status: ResultNetwork, Err: err}

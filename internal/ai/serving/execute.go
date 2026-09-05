@@ -165,6 +165,7 @@ type UpstreamResponse struct {
 func (s *ExecuteStep) Name() string { return "execute" }
 
 func (s *ExecuteStep) Execute(ctx context.Context, req *Request) error {
+	initializeSettlementState(req)
 	if s == nil || s.Transport == nil || s.Bridge == nil {
 		return apiError(http.StatusInternalServerError, "runtime_not_configured", "runtime execution is not fully configured")
 	}
@@ -666,8 +667,15 @@ func payloadIsError(data []byte) bool {
 // pipeline-level error (the response is already committed, and the upstream
 // itself was healthy).
 func streamClientWriteError(req *Request, err error) error {
-	req.RequestStatus = domain.RequestFailed
-	req.ErrorCode = "stream_write_error"
+	initializeSettlementState(req)
+	if isClientDisconnectError(err) {
+		markClientCancellation(req)
+		req.ErrorCode = "client_disconnected"
+	} else {
+		req.RequestStatus = domain.RequestFailed
+		markClientDelivery(req, domain.ClientDeliveryWriteFailed)
+		req.ErrorCode = "stream_write_error"
+	}
 	req.ErrorMessage = err.Error()
 	req.FailedStep = "execute"
 	req.InternalErrorDetail = RedactInternalErrorDetail(err.Error())

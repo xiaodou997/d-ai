@@ -100,9 +100,20 @@ func requestContextError(parentCtx, executionCtx context.Context, req *Request) 
 			return apiError(http.StatusGatewayTimeout, req.ErrorCode, req.ErrorMessage)
 		}
 	}
-	req.RequestStatus = domain.RequestFailed
-	req.ErrorCode = "client_disconnected"
-	req.ErrorMessage = "request context ended before execution completed"
+	if isClientContextCancellation(parentCtx) {
+		markClientCancellation(req)
+	} else {
+		req.RequestStatus = domain.RequestFailed
+		req.CancellationOrigin = domain.CancellationGateway
+		req.BillingReason = "execution_context_cancelled"
+	}
+	if req.CancellationOrigin == domain.CancellationGateway {
+		req.ErrorCode = "execution_context_cancelled"
+		req.ErrorMessage = "the gateway execution context ended before completion"
+	} else {
+		req.ErrorCode = "client_disconnected"
+		req.ErrorMessage = "request context ended before execution completed"
+	}
 	return apiError(http.StatusGatewayTimeout, req.ErrorCode, req.ErrorMessage)
 }
 
@@ -259,8 +270,10 @@ func (s *ExecuteStep) runAttempt(parentCtx context.Context, req *Request, cand *
 	}()
 	if outcome.Status == ResultCanceled {
 		s.releaseHealthProbe(cand)
-		req.RequestStatus = domain.RequestFailed
 		if errors.Is(context.Cause(parentCtx), ErrRetryDeadlineExceeded) {
+			req.RequestStatus = domain.RequestFailed
+			req.CancellationOrigin = domain.CancellationGateway
+			req.BillingReason = "retry_deadline_exhausted"
 			req.ErrorCode = "retry_deadline_exhausted"
 			req.ErrorMessage = "the total upstream retry deadline was exhausted"
 			return attemptResult{
@@ -268,8 +281,18 @@ func (s *ExecuteStep) runAttempt(parentCtx context.Context, req *Request, cand *
 				finalErr: apiError(http.StatusGatewayTimeout, req.ErrorCode, req.ErrorMessage),
 			}
 		}
-		req.ErrorCode = "client_disconnected"
-		req.ErrorMessage = "request context ended before the upstream call completed"
+		if isClientContextCancellation(parentCtx) {
+			markClientCancellation(req)
+		} else {
+			markUpstreamCancellation(req)
+		}
+		if req.CancellationOrigin == domain.CancellationProvider {
+			req.ErrorCode = "upstream_cancelled"
+			req.ErrorMessage = "the upstream cancelled the request before completion"
+		} else {
+			req.ErrorCode = "client_disconnected"
+			req.ErrorMessage = "request context ended before the upstream call completed"
+		}
 		return attemptResult{
 			finished: true,
 			finalErr: apiError(http.StatusGatewayTimeout, req.ErrorCode, req.ErrorMessage),
@@ -320,8 +343,18 @@ func (s *ExecuteStep) runAttempt(parentCtx context.Context, req *Request, cand *
 		case err == nil:
 			// Downstream write failures are terminal for this request but are
 			// not upstream successes; do not reward the route or persist sticky.
-			if req.RequestStatus == domain.RequestFailed && req.ErrorCode == "stream_write_error" {
+			if (req.RequestStatus == domain.RequestFailed || req.RequestStatus == domain.RequestCancelled) &&
+				(req.ErrorCode == "stream_write_error" || req.ErrorCode == "client_disconnected") {
 				s.releaseHealthProbe(cand)
+				return attemptResult{finished: true, finalErr: nil}
+			}
+			if req.RequestStatus != domain.RequestSuccess {
+				if req.ProviderTerminalState == domain.ProviderTerminalFailed {
+					markAttemptFailed(req, req.BillingReason)
+					s.notifyHealth(parentCtx, req, cand, Outcome{Status: ResultServerError, HTTPStatus: http.StatusOK})
+				} else {
+					s.releaseHealthProbe(cand)
+				}
 				return attemptResult{finished: true, finalErr: nil}
 			}
 			// Upstream succeeded AND the response committed cleanly.
@@ -347,10 +380,12 @@ func (s *ExecuteStep) runAttempt(parentCtx context.Context, req *Request, cand *
 
 		default:
 			// postcommitError — the stream broke after 200 OK was committed.
-			// The client already received a protocol error frame; this is
-			// terminal but still a breaker failure for the deployment.
+			// Client delivery failures are terminal but are not provider failures.
 			markAttemptFailed(req, err.Error())
-			s.notifyHealth(parentCtx, req, cand, Outcome{Status: ResultServerError, HTTPStatus: http.StatusOK})
+			if req.ClientDeliveryState != domain.ClientDeliveryDisconnected &&
+				req.ClientDeliveryState != domain.ClientDeliveryWriteFailed {
+				s.notifyHealth(parentCtx, req, cand, Outcome{Status: ResultServerError, HTTPStatus: http.StatusOK})
+			}
 			return attemptResult{finished: true, finalErr: nil}
 		}
 
@@ -456,7 +491,11 @@ func isPrecommitError(err error) bool {
 // optimistically right after 2xx headers, before the relay result is known).
 func markAttemptFailed(req *Request, msg string) {
 	if n := len(req.Attempts); n > 0 {
-		req.Attempts[n-1].Outcome = ResultServerError
+		if req.ClientDeliveryState == domain.ClientDeliveryDisconnected || req.ClientDeliveryState == domain.ClientDeliveryWriteFailed {
+			req.Attempts[n-1].Outcome = ResultCanceled
+		} else {
+			req.Attempts[n-1].Outcome = ResultServerError
+		}
 		req.Attempts[n-1].ErrorMsg = msg
 	}
 }

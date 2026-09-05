@@ -100,6 +100,11 @@ INSERT INTO ai_usage_logs (
   error_message,
   usage_estimated,
   token_usage_source,
+  provider_terminal_state,
+  client_delivery_state,
+  cancellation_origin,
+  billing_reason,
+  response_summary_state,
   attempts_count,
   final_route_id,
   client_protocol,
@@ -116,8 +121,8 @@ INSERT INTO ai_usage_logs (
   $31, $32, $33, $34, $35, $36, $37, $38, $39, $40,
   $41, $42, $43, $44, $45, $46, $47, $48, $49, $50,
   $51, $52, $53, $54, $55, $56, $57, $58, $59, $60,
-	  $61, $62, $63, $64, $65, $66, $67, $68, $69, $70,
-	  $71, $72, $73, $74, $75
+  $61, $62, $63, $64, $65, $66, $67, $68, $69, $70,
+	  $71, $72, $73, $74, $75, $76, $77, $78, $79, $80
 )
 ON CONFLICT (request_id) DO NOTHING
 RETURNING id
@@ -190,6 +195,11 @@ type CreateUsageLogParams struct {
 	ErrorMessage                       pgtype.Text    `json:"error_message"`
 	UsageEstimated                     bool           `json:"usage_estimated"`
 	TokenUsageSource                   string         `json:"token_usage_source"`
+	ProviderTerminalState              string         `json:"provider_terminal_state"`
+	ClientDeliveryState                string         `json:"client_delivery_state"`
+	CancellationOrigin                 string         `json:"cancellation_origin"`
+	BillingReason                      string         `json:"billing_reason"`
+	ResponseSummaryState               string         `json:"response_summary_state"`
 	AttemptsCount                      int32          `json:"attempts_count"`
 	FinalRouteID                       pgtype.UUID    `json:"final_route_id"`
 	ClientProtocol                     string         `json:"client_protocol"`
@@ -269,6 +279,11 @@ func (q *Queries) CreateUsageLog(ctx context.Context, arg CreateUsageLogParams) 
 		arg.ErrorMessage,
 		arg.UsageEstimated,
 		arg.TokenUsageSource,
+		arg.ProviderTerminalState,
+		arg.ClientDeliveryState,
+		arg.CancellationOrigin,
+		arg.BillingReason,
+		arg.ResponseSummaryState,
 		arg.AttemptsCount,
 		arg.FinalRouteID,
 		arg.ClientProtocol,

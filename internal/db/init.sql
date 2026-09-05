@@ -1470,6 +1470,11 @@ CREATE INDEX idx_ledger_credit_leases_account
     public_response_model  TEXT,
     usage_estimated        BOOLEAN     NOT NULL DEFAULT false,
     token_usage_source     TEXT        NOT NULL DEFAULT 'upstream',
+    provider_terminal_state TEXT       NOT NULL DEFAULT 'unknown',
+    client_delivery_state   TEXT       NOT NULL DEFAULT 'unknown',
+    cancellation_origin     TEXT       NOT NULL DEFAULT 'none',
+    billing_reason          TEXT       NOT NULL DEFAULT '',
+    response_summary_state  TEXT       NOT NULL DEFAULT 'unavailable',
     -- 计费来源：payg 按量 / subscription 订阅覆盖（gate 决策落快照，见 ai_sub_* 表）
     billing_source         TEXT        NOT NULL DEFAULT 'payg' CHECK (billing_source IN ('payg', 'subscription')),
     subscription_id        UUID,
@@ -1493,7 +1498,11 @@ CREATE INDEX idx_ledger_credit_leases_account
       AND (billing_source <> 'payg' OR user_charged = user_payable)
       AND (billing_source <> 'subscription' OR (user_charged = 0 AND subscription_id IS NOT NULL))
     ),
-    CONSTRAINT ai_usage_logs_billing_status_check CHECK (billing_status IN ('free', 'pending', 'settled', 'failed')),
+    CONSTRAINT ai_usage_logs_billing_status_check CHECK (billing_status IN ('free', 'pending', 'settled', 'failed', 'void')),
+    CONSTRAINT ai_usage_logs_provider_terminal_state_check CHECK (provider_terminal_state IN ('unknown', 'completed', 'failed', 'cancelled', 'incomplete')),
+    CONSTRAINT ai_usage_logs_client_delivery_state_check CHECK (client_delivery_state IN ('unknown', 'complete', 'disconnected', 'write_failed')),
+    CONSTRAINT ai_usage_logs_cancellation_origin_check CHECK (cancellation_origin IN ('none', 'client', 'provider', 'gateway', 'unknown')),
+    CONSTRAINT ai_usage_logs_response_summary_state_check CHECK (response_summary_state IN ('unavailable', 'empty', 'partial', 'complete')),
     CONSTRAINT ai_usage_logs_refund_status_check CHECK (
       (refund_status = 'none' AND refunded_at IS NULL)
       OR (refund_status = 'refunded' AND refunded_at IS NOT NULL)
@@ -2795,6 +2804,6 @@ CREATE TABLE dai_schema_metadata (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 33);
+INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 35);
 
 COMMIT;

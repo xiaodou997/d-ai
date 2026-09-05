@@ -736,6 +736,11 @@ type AiUsageLog struct {
 	PublicResponseModel                pgtype.Text        `json:"public_response_model"`
 	UsageEstimated                     bool               `json:"usage_estimated"`
 	TokenUsageSource                   string             `json:"token_usage_source"`
+	ProviderTerminalState              string             `json:"provider_terminal_state"`
+	ClientDeliveryState                string             `json:"client_delivery_state"`
+	CancellationOrigin                 string             `json:"cancellation_origin"`
+	BillingReason                      string             `json:"billing_reason"`
+	ResponseSummaryState               string             `json:"response_summary_state"`
 	BillingSource                      string             `json:"billing_source"`
 	SubscriptionID                     pgtype.UUID        `json:"subscription_id"`
 	CreatedAt                          pgtype.Timestamptz `json:"created_at"`
