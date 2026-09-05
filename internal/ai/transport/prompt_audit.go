@@ -119,7 +119,7 @@ func registerPromptAudit(api huma.API, d RiskControlHTTPDeps) {
 		}
 		return &promptAuditConfigOutput{Body: promptAuditConfigToDTO(saved)}, nil
 	})
-	huma.Register(api, huma.Operation{OperationID: "ai-probe-prompt-audit-endpoint", Method: http.MethodPost, Path: "/api/v1/prompt-audit/endpoints/probe", Summary: "探测提示词审计节点", Tags: []string{"prompt-audit"}}, func(ctx context.Context, in *probePromptAuditInput) (*promptAuditProbeOutput, error) {
+	huma.Register(api, huma.Operation{OperationID: "ai-probe-prompt-audit-endpoint", Method: http.MethodPost, Path: "/api/v1/prompt-audit/endpoints/probe", Summary: "测试提示词审计节点", Tags: []string{"prompt-audit"}}, func(ctx context.Context, in *probePromptAuditInput) (*promptAuditProbeOutput, error) {
 		if d.PromptAuditProbe == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("prompt audit probe is not configured")
 		}
