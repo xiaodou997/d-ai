@@ -51,7 +51,6 @@ type platformModules struct {
 	AuthAccounts          *authpg.AuthRepository
 	AuthRateLimiters      *auth.RateLimiters
 	TenantRepo            *tenantpg.TenantRepository
-	TenantDeletion        *tenantpkg.DeletionService
 	TenantLifecycle       *tenantpkg.AdminTenantLifecycleService
 	TenantBranding        *tenantpg.PortalBrandingRepository
 	TenantSelf            *tenantpkg.SelfService
@@ -139,7 +138,6 @@ func buildPlatformModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, r
 	deductionSvc := billingsvc.NewDeductionService(billingPool, appLogger)
 	rechargeSvc := billingsvc.NewRechargeService(billingPool, tenantRepo)
 	tenantLifecycle := tenantpkg.NewAdminTenantLifecycleService(tenantRepo, security)
-	tenantDeletion := tenantpkg.NewDeletionService(tenantRepo)
 	adminAccountRepo := userpg.NewAdminAccountRepository(pool, activationSvc)
 	adminEndUserRepo := userpg.NewAdminEndUserRepository(pool, activationSvc)
 	adminAccountLifecycle := userpkg.NewAdminAccountLifecycleService(adminAccountRepo, security)
@@ -166,7 +164,6 @@ func buildPlatformModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, r
 		AuthAccounts:          authAccountRepo,
 		AuthRateLimiters:      authRateLimiters,
 		TenantRepo:            tenantRepo,
-		TenantDeletion:        tenantDeletion,
 		TenantLifecycle:       tenantLifecycle,
 		TenantBranding:        tenantBrandingRepo,
 		TenantSelf:            tenantSelfSvc,
@@ -262,9 +259,6 @@ func (m *platformModules) Start(ctxs ...context.Context) {
 		if m.sched != nil {
 			m.sched.Start(ctx)
 		}
-		if m.TenantDeletion != nil {
-			m.TenantDeletion.Start(ctx)
-		}
 	})
 }
 
@@ -299,9 +293,6 @@ func (m *platformModules) Stop(ctxs ...context.Context) error {
 		if err := m.banReconciler.Stop(ctx); err != nil {
 			errs = append(errs, fmt.Errorf("stop ban reconciler: %w", err))
 		}
-	}
-	if m.TenantDeletion != nil {
-		m.TenantDeletion.Stop(ctx)
 	}
 	if err := errors.Join(errs...); err != nil {
 		return err

@@ -481,7 +481,7 @@ const handleSubmit = async () => {
 const handleDelete = async (id: string) => {
   try {
     await platformAdminApi.deleteTenant(id)
-    ElMessage.success('删除成功')
+    ElMessage.success('租户已删除')
     refresh()
   } catch {
     ElMessage.error('删除失败')

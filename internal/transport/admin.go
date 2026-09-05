@@ -20,7 +20,6 @@ type adminHandlers struct {
 	tenantReader     tenantports.AdminTenantReader
 	tenantLifecycle  tenantports.AdminTenantLifecycle
 	tenantWriter     tenantports.AdminTenantWriter
-	tenantDeletion   tenantports.TenantDeletionService
 	accountRepo      userports.AdminAccountReader
 	accountWriter    userports.AdminAccountWriter
 	accountLifecycle userports.AdminAccountLifecycle
@@ -53,7 +52,6 @@ func newAdminTenantHandlers(d adminTenantModule) *adminHandlers {
 		tenantReader:    d.TenantReader,
 		tenantLifecycle: d.TenantLifecycle,
 		tenantWriter:    d.TenantWriter,
-		tenantDeletion:  d.TenantDeletion,
 		activations:     d.Activations,
 	}
 }
