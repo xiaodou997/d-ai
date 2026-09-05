@@ -276,13 +276,13 @@ func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisCl
 		ModuleGate:        platform.Modules,
 		Privacy:           privacy.NewProtector(),
 		ContentModeration: contentModerationStep,
+		PromptAudit:       promptAuditStep,
 	}
 	usageCompletionFinalizer := &serving.UsageLogFinalizer{Logger: usageLogger, Metrics: metricsGW}
 	auditFinalizer := &serving.AuditFinalizer{Worker: auditWorker}
 
 	pipeline := serving.NewPipeline(
 		&serving.AuthNStep{Resolver: aiadapters.NewAPIKeyResolver(q)},
-		promptAuditStep,
 		quotaCheckStep,
 		subscriptionGateStep,
 		balanceGateStep,

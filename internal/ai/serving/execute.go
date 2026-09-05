@@ -117,6 +117,7 @@ type ExecuteStep struct {
 	ImageNormalizer   ImageResponseNormalizer    // optional; normalizes image URL/Base64 response mismatches
 	ModuleGate        ModuleGate                 // optional; controls feature module activation
 	ContentModeration *ContentModerationStep     // optional; runs after each candidate is selected
+	PromptAudit       *PromptAuditStep           // optional; runs after each candidate is selected
 	Privacy           *privacy.Protector         // optional; protects upstream request content
 }
 
@@ -196,6 +197,11 @@ func (s *ExecuteStep) Execute(ctx context.Context, req *Request) error {
 			break // exhausted all candidates
 		}
 		req.SetCandidate(cand)
+		if s.PromptAudit != nil {
+			if err := s.PromptAudit.Execute(executionCtx, req); err != nil {
+				return err
+			}
+		}
 		if s.ContentModeration != nil {
 			if err := s.ContentModeration.Execute(executionCtx, req); err != nil {
 				return err

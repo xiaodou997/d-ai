@@ -11,9 +11,9 @@ type PromptAuditChecker interface {
 	Check(context.Context, promptaudit.Input) promptaudit.Decision
 }
 
-// PromptAuditStep runs after authentication and before any quota, routing,
-// billing or upstream side effect. Observe mode only submits an in-memory job;
-// blocking mode fails closed when the Guard cannot make a trustworthy decision.
+// PromptAuditStep runs after a concrete upstream candidate is selected.
+// Observe mode only submits an in-memory job; blocking mode fails closed when
+// the Guard cannot make a trustworthy decision.
 type PromptAuditStep struct {
 	Checker PromptAuditChecker
 }
