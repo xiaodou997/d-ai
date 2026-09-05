@@ -261,20 +261,21 @@ func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisCl
 	modelCapabilities := externalmodels.New(redisClient, managementHTTPClient)
 
 	executeStep := &serving.ExecuteStep{
-		Transport:       upstreamHTTPTransport,
-		ClientRuntime:   fixedClientRuntime,
-		UpstreamLimiter: upstreamConcurrencyLimiter,
-		Bridge:          bridgeRuntime,
-		Health:          healthTracker,
-		OAuthPool:       oauthCreds,
-		AccountState:    accountSvc,
-		Budget:          serving.DefaultRetryBudget(),
-		Scorer:          scorer,
-		Stats:           routeStats,
-		Sticky:          stickyStore,
-		ImageNormalizer: fileStore,
-		ModuleGate:      platform.Modules,
-		Privacy:         privacy.NewProtector(),
+		Transport:         upstreamHTTPTransport,
+		ClientRuntime:     fixedClientRuntime,
+		UpstreamLimiter:   upstreamConcurrencyLimiter,
+		Bridge:            bridgeRuntime,
+		Health:            healthTracker,
+		OAuthPool:         oauthCreds,
+		AccountState:      accountSvc,
+		Budget:            serving.DefaultRetryBudget(),
+		Scorer:            scorer,
+		Stats:             routeStats,
+		Sticky:            stickyStore,
+		ImageNormalizer:   fileStore,
+		ModuleGate:        platform.Modules,
+		Privacy:           privacy.NewProtector(),
+		ContentModeration: contentModerationStep,
 	}
 	usageCompletionFinalizer := &serving.UsageLogFinalizer{Logger: usageLogger, Metrics: metricsGW}
 	auditFinalizer := &serving.AuditFinalizer{Worker: auditWorker}
@@ -282,7 +283,6 @@ func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisCl
 	pipeline := serving.NewPipeline(
 		&serving.AuthNStep{Resolver: aiadapters.NewAPIKeyResolver(q)},
 		promptAuditStep,
-		contentModerationStep,
 		quotaCheckStep,
 		subscriptionGateStep,
 		balanceGateStep,

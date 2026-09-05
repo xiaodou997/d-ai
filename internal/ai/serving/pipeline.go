@@ -274,6 +274,13 @@ func (r *Request) SetCandidate(c *domain.RouteCandidate) {
 	r.PublicResponseModel = r.PublicModel()
 }
 
+func (r *Request) CandidateAccountID() string {
+	if r == nil || r.Candidate == nil {
+		return ""
+	}
+	return r.Candidate.AccountID
+}
+
 // ============================================================================
 // Step interface
 // ============================================================================

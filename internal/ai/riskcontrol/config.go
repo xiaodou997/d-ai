@@ -144,6 +144,12 @@ func backfillConfig(cfg *domain.RiskControlConfig) {
 	if cfg.ScopeGroupIDs == nil {
 		cfg.ScopeGroupIDs = []string{}
 	}
+	if cfg.KeywordUpstreamAccountIDs == nil {
+		cfg.KeywordUpstreamAccountIDs = []string{}
+	}
+	if cfg.ProviderUpstreamAccountIDs == nil {
+		cfg.ProviderUpstreamAccountIDs = []string{}
+	}
 	if cfg.ViolationWindowHours <= 0 {
 		cfg.ViolationWindowHours = 24
 	}

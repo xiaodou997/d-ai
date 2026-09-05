@@ -46,6 +46,8 @@ interface RiskControlConfigForm {
   block_status_code: number
   block_message: string
   thresholds: Record<string, number>
+  keyword_upstream_account_ids: string[]
+  provider_upstream_account_ids: string[]
 }
 
 export function useRiskControlConfig(api: RiskControlApi = riskControlApi) {
@@ -74,7 +76,9 @@ export function useRiskControlConfig(api: RiskControlApi = riskControlApi) {
     record_non_hits: false,
     block_status_code: 451,
     block_message: '请求内容未通过安全审核',
-    thresholds: {}
+    thresholds: {},
+    keyword_upstream_account_ids: [],
+    provider_upstream_account_ids: []
   })
 
   const statusSummary = computed(() => {
@@ -114,6 +118,8 @@ export function useRiskControlConfig(api: RiskControlApi = riskControlApi) {
       block_status_code: cfg?.block_status_code ?? 451,
       block_message: cfg?.block_message ?? '请求内容未通过安全审核',
       thresholds: { ...(cfg?.thresholds || {}) }
+      ,keyword_upstream_account_ids: [...(cfg?.keyword_upstream_account_ids || [])]
+      ,provider_upstream_account_ids: [...(cfg?.provider_upstream_account_ids || [])]
     })
     apiKeyInput.value = ''
     testText.value = ''
@@ -156,6 +162,8 @@ export function useRiskControlConfig(api: RiskControlApi = riskControlApi) {
         },
         thresholds: form.thresholds,
         scope_group_ids: config.value?.scope_group_ids || [],
+        keyword_upstream_account_ids: form.keyword_upstream_account_ids,
+        provider_upstream_account_ids: form.provider_upstream_account_ids,
         sample_rate: form.sample_rate,
         verdict_cache_ttl_seconds: form.verdict_cache_ttl_seconds,
         violation_window_hours: form.violation_window_hours,

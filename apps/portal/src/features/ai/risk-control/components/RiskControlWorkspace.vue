@@ -1,6 +1,6 @@
 <!--
   风控中心 — 智能服务 / AI 网关内容安全审核工作台。
-  风控中心统一工作台：审核日志、关键词引擎、审核 API、提示词审核和风险事件
+  风控中心工作台：审核日志、关键词引擎、审核 API、提示词审核和风险事件
   通过 DsTabs 切换；网关审计与风控中心为两个并列的独立菜单。
 -->
 <script setup lang="ts">
@@ -9,7 +9,6 @@ import { ShieldAlert } from 'lucide-vue-next'
 import { PortalPagePanel } from '@/platform'
 import { DsTabs } from '@/shared/ui'
 
-import RiskControlConfigPanel from './RiskControlConfigPanel.vue'
 import RiskControlEventsPanel from './RiskControlEventsPanel.vue'
 import RiskControlLogsPanel from './RiskControlLogsPanel.vue'
 import { PromptAuditPanel } from '../../prompt-audit'
@@ -39,12 +38,9 @@ watch(activeTab, (key) => {
     <PortalPagePanel
       :icon="ShieldAlert"
       :breadcrumbs="[{ label: '智能服务' }, { label: '风控中心' }]"
-      description="统一管理内容审核与提示词安全审计：关键词引擎、OpenAI Moderations API、Qwen3Guard 提示词审核和人工风险事件。"
+      description="按审核能力分别配置关键词、审核 API 与提示词安全审计，并集中查看日志和风险事件。"
       fill
     >
-      <template #actions>
-        <RiskControlConfigPanel />
-      </template>
 
       <div class="risk-control-body">
         <DsTabs v-model="activeTab" :tabs="tabs" />

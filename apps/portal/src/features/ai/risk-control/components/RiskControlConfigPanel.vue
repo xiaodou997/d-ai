@@ -5,11 +5,22 @@
        状态 el-tag 换成 DsTag;弹窗、表单与业务逻辑不变。
 -->
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { Setting } from '@element-plus/icons-vue'
 import { DsTag } from '@/shared/ui'
+import { aiAdminApi } from '@/api/aiAdmin'
+import type { AccountDTO } from '@/api/types/admin'
 
 import { useRiskControlConfig } from '../composables/useRiskControlConfig'
+
+const props = withDefaults(defineProps<{ section?: 'keyword' | 'provider' }>(), { section: 'provider' })
+const accountOptions = ref<AccountDTO[]>([])
+const title = computed(() => props.section === 'keyword' ? '关键词审核配置' : '审核 API 配置')
+const selectedAccountIds = computed<string[]>({
+  get: () => props.section === 'keyword' ? form.keyword_upstream_account_ids : form.provider_upstream_account_ids,
+  set: (value) => { if (props.section === 'keyword') form.keyword_upstream_account_ids = value; else form.provider_upstream_account_ids = value }
+})
+onMounted(async () => { try { accountOptions.value = (await aiAdminApi.listUpstreamAccounts()).items } catch { accountOptions.value = [] } })
 
 const modeOptions = [
   { label: '关闭', value: 'off' },
@@ -70,10 +81,10 @@ onMounted(fetchConfig)
   <DsTag :tone="config?.enabled ? 'positive' : 'info'">{{ statusSummary }}</DsTag>
   <el-button :icon="Setting" type="primary" :loading="configLoading" @click="openConfigDialog">配置</el-button>
 
-  <el-dialog v-model="configDialogVisible" title="风控中心配置" width="860px" append-to-body>
+  <el-dialog v-model="configDialogVisible" :title="title" width="860px" append-to-body>
     <el-form :model="form" label-position="top" class="risk-control-form">
       <!-- 基础开关 -->
-      <section class="dialog-section">
+      <section v-if="section === 'provider'" class="dialog-section">
         <div class="dialog-section-head">
           <h4>基础开关</h4>
         </div>
@@ -90,7 +101,7 @@ onMounted(fetchConfig)
       </section>
 
       <!-- 关键词引擎 -->
-      <section class="dialog-section">
+      <section v-if="section === 'keyword'" class="dialog-section">
         <div class="dialog-section-head">
           <h4>关键词引擎（L1）</h4>
           <p>AC 自动机 + 归一化（全角/繁体/同形字/干扰符）+ 可选拼音匹配。</p>
@@ -179,8 +190,17 @@ onMounted(fetchConfig)
         </div>
       </section>
 
-      <!-- 审核 API -->
       <section class="dialog-section">
+        <div class="dialog-section-head"><h4>审核范围</h4><p>按实际命中的上游账号控制是否执行本项审核；留空表示全部账号。</p></div>
+        <el-form-item label="上游账号">
+          <el-select v-model="selectedAccountIds" multiple clearable filterable collapse-tags class="full-field" placeholder="全部上游账号">
+            <el-option v-for="account in accountOptions" :key="account.id" :label="account.name" :value="account.id" />
+          </el-select>
+        </el-form-item>
+      </section>
+
+      <!-- 审核 API -->
+      <section v-if="section === 'provider'" class="dialog-section">
         <div class="dialog-section-head">
           <h4>审核 API（Provider）</h4>
           <p>兼容 OpenAI Moderation 协议（POST {base_url}/v1/moderations）。</p>
@@ -205,7 +225,7 @@ onMounted(fetchConfig)
       </section>
 
       <!-- 裁决缓存 -->
-      <section class="dialog-section">
+      <section v-if="section === 'provider'" class="dialog-section">
         <div class="dialog-section-head">
           <h4>L0 裁决缓存</h4>
           <p>同一段文本在 TTL 内只检测一次，不重复写日志、不计入违规累计。</p>
@@ -216,7 +236,7 @@ onMounted(fetchConfig)
       </section>
 
       <!-- 分类阈值 -->
-      <section class="dialog-section">
+      <section v-if="section === 'provider'" class="dialog-section">
         <div class="dialog-section-head">
           <h4>分类阈值</h4>
           <p>达到阈值即判定命中该分类；分数来自审核 API 返回。</p>
@@ -230,7 +250,7 @@ onMounted(fetchConfig)
       </section>
 
       <!-- 风险事件与拦截响应 -->
-      <section class="dialog-section">
+      <section v-if="section === 'provider'" class="dialog-section">
         <div class="dialog-section-head">
           <h4>风险事件与拦截响应</h4>
         </div>
@@ -254,7 +274,7 @@ onMounted(fetchConfig)
       </section>
 
       <!-- 测试检测 -->
-      <section class="dialog-section">
+      <section v-if="section === 'provider'" class="dialog-section">
         <div class="dialog-section-head">
           <h4>测试检测</h4>
           <p>用当前弹窗中的设置试跑一段文本，不落库。保存前先点一次"保存"以生效最新配置。</p>

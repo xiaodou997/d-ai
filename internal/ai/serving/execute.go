@@ -103,20 +103,21 @@ type ImageResponseNormalizer interface {
 // credential, gives up (4xx), or relays the successful response to the client
 // via the protocol-appropriate Relay.
 type ExecuteStep struct {
-	Transport       Transporter
-	ClientRuntime   clientruntime.Invoker      // fixed OAuth providers; nil keeps the legacy path
-	UpstreamLimiter UpstreamConcurrencyLimiter // optional unless a direct account caps concurrency
-	Bridge          ProtocolBridge             // required for cross-surface request/response conversion
-	Health          routing.HealthTracker      // optional; nil = no circuit breaking
-	OAuthPool       OAuthCredentialPool        // optional; enables rejected-credential swaps
-	AccountState    DirectAccountState         // optional; persists direct-account credential rejection
-	Budget          RetryBudget                // zero value falls back to DefaultRetryBudget
-	Scorer          RouteScorer                // optional; nil = first unused candidate (P1 behaviour)
-	Stats           routing.RouteStatsStore    // optional; used for inflight tracking alongside scorer
-	Sticky          stickyWriter               // optional; writes/deletes sticky binding on success/failure
-	ImageNormalizer ImageResponseNormalizer    // optional; normalizes image URL/Base64 response mismatches
-	ModuleGate      ModuleGate                 // optional; controls feature module activation
-	Privacy         *privacy.Protector         // optional; protects upstream request content
+	Transport         Transporter
+	ClientRuntime     clientruntime.Invoker      // fixed OAuth providers; nil keeps the legacy path
+	UpstreamLimiter   UpstreamConcurrencyLimiter // optional unless a direct account caps concurrency
+	Bridge            ProtocolBridge             // required for cross-surface request/response conversion
+	Health            routing.HealthTracker      // optional; nil = no circuit breaking
+	OAuthPool         OAuthCredentialPool        // optional; enables rejected-credential swaps
+	AccountState      DirectAccountState         // optional; persists direct-account credential rejection
+	Budget            RetryBudget                // zero value falls back to DefaultRetryBudget
+	Scorer            RouteScorer                // optional; nil = first unused candidate (P1 behaviour)
+	Stats             routing.RouteStatsStore    // optional; used for inflight tracking alongside scorer
+	Sticky            stickyWriter               // optional; writes/deletes sticky binding on success/failure
+	ImageNormalizer   ImageResponseNormalizer    // optional; normalizes image URL/Base64 response mismatches
+	ModuleGate        ModuleGate                 // optional; controls feature module activation
+	ContentModeration *ContentModerationStep     // optional; runs after each candidate is selected
+	Privacy           *privacy.Protector         // optional; protects upstream request content
 }
 
 // Transporter makes the actual HTTP call to an upstream provider.
@@ -195,6 +196,11 @@ func (s *ExecuteStep) Execute(ctx context.Context, req *Request) error {
 			break // exhausted all candidates
 		}
 		req.SetCandidate(cand)
+		if s.ContentModeration != nil {
+			if err := s.ContentModeration.Execute(executionCtx, req); err != nil {
+				return err
+			}
+		}
 
 		// Pool routes: select a fresh credential per attempt so auth-swap and
 		// new-route paths both get a clean credential.

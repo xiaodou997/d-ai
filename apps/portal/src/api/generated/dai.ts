@@ -8565,9 +8565,11 @@ export interface components {
             config_revision: number;
             enabled: boolean;
             keyword: components["schemas"]["KeywordConfigDTO"];
+            keyword_upstream_account_ids: string[] | null;
             /** @description off | observe | pre_block */
             mode: string;
             provider: components["schemas"]["RiskControlProviderDTO"];
+            provider_upstream_account_ids: string[] | null;
             record_non_hits: boolean;
             /** Format: int64 */
             risk_event_threshold: number;
@@ -8601,9 +8603,11 @@ export interface components {
             block_status_code: number;
             enabled: boolean;
             keyword: components["schemas"]["KeywordConfigDTO"];
+            keyword_upstream_account_ids?: string[] | null;
             /** @enum {string} */
             mode: "off" | "observe" | "pre_block";
             provider: components["schemas"]["RiskControlProviderWriteDTO"];
+            provider_upstream_account_ids?: string[] | null;
             record_non_hits: boolean;
             /** Format: int64 */
             risk_event_threshold: number;

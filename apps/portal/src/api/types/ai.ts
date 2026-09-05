@@ -393,6 +393,8 @@ export interface RiskControlConfigDTO {
   sample_rate: number;
   verdict_cache_ttl_seconds: number;
   scope_group_ids: string[];
+  keyword_upstream_account_ids: string[];
+  provider_upstream_account_ids: string[];
   violation_window_hours: number;
   risk_event_threshold: number;
   record_non_hits: boolean;
@@ -414,6 +416,8 @@ export interface RiskControlConfigWriteRequest {
   sample_rate: number;
   verdict_cache_ttl_seconds: number;
   scope_group_ids: string[];
+  keyword_upstream_account_ids?: string[];
+  provider_upstream_account_ids?: string[];
   violation_window_hours: number;
   risk_event_threshold: number;
   record_non_hits: boolean;

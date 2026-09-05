@@ -41,6 +41,18 @@ func (s *ContentModerationStep) Execute(ctx context.Context, req *Request) error
 	if subject == nil {
 		return nil
 	}
+	// RouteCandidatesStep now runs before this step, so account-scoped rules
+	// can be evaluated against the actual candidate selected for this attempt.
+	accountID := req.CandidateAccountID()
+	if len(cfg.KeywordUpstreamAccountIDs) > 0 && !containsString(cfg.KeywordUpstreamAccountIDs, accountID) {
+		cfg.Keyword.Enabled = false
+	}
+	if len(cfg.ProviderUpstreamAccountIDs) > 0 && !containsString(cfg.ProviderUpstreamAccountIDs, accountID) {
+		cfg.SampleRate = 0
+	}
+	if !cfg.Keyword.Enabled && cfg.SampleRate <= 0 {
+		return nil
+	}
 
 	text := extractModerationText(req)
 	if text == "" {
@@ -48,13 +60,14 @@ func (s *ContentModerationStep) Execute(ctx context.Context, req *Request) error
 	}
 
 	in := riskcontrol.CheckInput{
-		RequestID:      req.RequestID,
-		TenantID:       subject.TenantID,
-		UserID:         subject.UserID,
-		APIKeyID:       subject.APIKeyID,
-		ModelCode:      req.ModelCode,
-		CapabilityType: string(req.CapabilityType),
-		Text:           text,
+		RequestID:         req.RequestID,
+		TenantID:          subject.TenantID,
+		UserID:            subject.UserID,
+		APIKeyID:          subject.APIKeyID,
+		ModelCode:         req.ModelCode,
+		CapabilityType:    string(req.CapabilityType),
+		UpstreamAccountID: req.CandidateAccountID(),
+		Text:              text,
 	}
 
 	if cfg.Mode == domain.RiskControlModeObserve {
@@ -76,6 +89,15 @@ func (s *ContentModerationStep) Execute(ctx context.Context, req *Request) error
 		return apiError(cfg.BlockStatusCode, "content_moderation_blocked", cfg.BlockMessage)
 	}
 	return nil
+}
+
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *ContentModerationStep) Rollback(_ context.Context, _ *Request) {}

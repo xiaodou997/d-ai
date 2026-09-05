@@ -52,36 +52,40 @@ type keywordConfigDTO struct {
 }
 
 type riskControlConfigDTO struct {
-	Enabled                bool                   `json:"enabled"`
-	Mode                   string                 `json:"mode" doc:"off | observe | pre_block"`
-	ConfigRevision         int64                  `json:"config_revision" doc:"配置版本号，每次更新自增"`
-	Keyword                keywordConfigDTO       `json:"keyword"`
-	Provider               riskControlProviderDTO `json:"provider"`
-	Thresholds             map[string]float64     `json:"thresholds"`
-	SampleRate             float64                `json:"sample_rate" doc:"0~1，审核 API 采样率"`
-	VerdictCacheTTLSeconds int                    `json:"verdict_cache_ttl_seconds" doc:"L0 裁决缓存 TTL，默认 600"`
-	ScopeGroupIDs          []string               `json:"scope_group_ids" doc:"预留"`
-	ViolationWindowHours   int                    `json:"violation_window_hours"`
-	RiskEventThreshold     int                    `json:"risk_event_threshold"`
-	RecordNonHits          bool                   `json:"record_non_hits"`
-	BlockStatusCode        int                    `json:"block_status_code"`
-	BlockMessage           string                 `json:"block_message"`
+	Enabled                    bool                   `json:"enabled"`
+	Mode                       string                 `json:"mode" doc:"off | observe | pre_block"`
+	ConfigRevision             int64                  `json:"config_revision" doc:"配置版本号，每次更新自增"`
+	Keyword                    keywordConfigDTO       `json:"keyword"`
+	Provider                   riskControlProviderDTO `json:"provider"`
+	Thresholds                 map[string]float64     `json:"thresholds"`
+	SampleRate                 float64                `json:"sample_rate" doc:"0~1，审核 API 采样率"`
+	VerdictCacheTTLSeconds     int                    `json:"verdict_cache_ttl_seconds" doc:"L0 裁决缓存 TTL，默认 600"`
+	ScopeGroupIDs              []string               `json:"scope_group_ids" doc:"预留"`
+	KeywordUpstreamAccountIDs  []string               `json:"keyword_upstream_account_ids"`
+	ProviderUpstreamAccountIDs []string               `json:"provider_upstream_account_ids"`
+	ViolationWindowHours       int                    `json:"violation_window_hours"`
+	RiskEventThreshold         int                    `json:"risk_event_threshold"`
+	RecordNonHits              bool                   `json:"record_non_hits"`
+	BlockStatusCode            int                    `json:"block_status_code"`
+	BlockMessage               string                 `json:"block_message"`
 }
 
 type riskControlConfigWriteDTO struct {
-	Enabled                bool                        `json:"enabled"`
-	Mode                   string                      `json:"mode" enum:"off,observe,pre_block"`
-	Keyword                keywordConfigDTO            `json:"keyword"`
-	Provider               riskControlProviderWriteDTO `json:"provider"`
-	Thresholds             map[string]float64          `json:"thresholds"`
-	SampleRate             float64                     `json:"sample_rate"`
-	VerdictCacheTTLSeconds int                         `json:"verdict_cache_ttl_seconds"`
-	ScopeGroupIDs          []string                    `json:"scope_group_ids,omitempty" doc:"预留"`
-	ViolationWindowHours   int                         `json:"violation_window_hours"`
-	RiskEventThreshold     int                         `json:"risk_event_threshold"`
-	RecordNonHits          bool                        `json:"record_non_hits"`
-	BlockStatusCode        int                         `json:"block_status_code"`
-	BlockMessage           string                      `json:"block_message"`
+	Enabled                    bool                        `json:"enabled"`
+	Mode                       string                      `json:"mode" enum:"off,observe,pre_block"`
+	Keyword                    keywordConfigDTO            `json:"keyword"`
+	Provider                   riskControlProviderWriteDTO `json:"provider"`
+	Thresholds                 map[string]float64          `json:"thresholds"`
+	SampleRate                 float64                     `json:"sample_rate"`
+	VerdictCacheTTLSeconds     int                         `json:"verdict_cache_ttl_seconds"`
+	ScopeGroupIDs              []string                    `json:"scope_group_ids,omitempty" doc:"预留"`
+	KeywordUpstreamAccountIDs  []string                    `json:"keyword_upstream_account_ids,omitempty"`
+	ProviderUpstreamAccountIDs []string                    `json:"provider_upstream_account_ids,omitempty"`
+	ViolationWindowHours       int                         `json:"violation_window_hours"`
+	RiskEventThreshold         int                         `json:"risk_event_threshold"`
+	RecordNonHits              bool                        `json:"record_non_hits"`
+	BlockStatusCode            int                         `json:"block_status_code"`
+	BlockMessage               string                      `json:"block_message"`
 }
 
 type riskControlConfigOutput struct {
@@ -377,15 +381,17 @@ func riskControlConfigToDTO(cfg domain.RiskControlConfig) riskControlConfigDTO {
 			HasAPIKey: cfg.Provider.APIKeyCiphertext != "",
 			TimeoutMs: cfg.Provider.TimeoutMs,
 		},
-		Thresholds:             cfg.Thresholds,
-		SampleRate:             cfg.SampleRate,
-		VerdictCacheTTLSeconds: cfg.VerdictCacheTTLSeconds,
-		ScopeGroupIDs:          cfg.ScopeGroupIDs,
-		ViolationWindowHours:   cfg.ViolationWindowHours,
-		RiskEventThreshold:     cfg.RiskEventThreshold,
-		RecordNonHits:          cfg.RecordNonHits,
-		BlockStatusCode:        cfg.BlockStatusCode,
-		BlockMessage:           cfg.BlockMessage,
+		Thresholds:                 cfg.Thresholds,
+		SampleRate:                 cfg.SampleRate,
+		VerdictCacheTTLSeconds:     cfg.VerdictCacheTTLSeconds,
+		ScopeGroupIDs:              cfg.ScopeGroupIDs,
+		KeywordUpstreamAccountIDs:  cfg.KeywordUpstreamAccountIDs,
+		ProviderUpstreamAccountIDs: cfg.ProviderUpstreamAccountIDs,
+		ViolationWindowHours:       cfg.ViolationWindowHours,
+		RiskEventThreshold:         cfg.RiskEventThreshold,
+		RecordNonHits:              cfg.RecordNonHits,
+		BlockStatusCode:            cfg.BlockStatusCode,
+		BlockMessage:               cfg.BlockMessage,
 	}
 }
 
@@ -434,15 +440,17 @@ func riskControlConfigFromWriteDTO(in riskControlConfigWriteDTO, current domain.
 			APIKeyCiphertext: current.Provider.APIKeyCiphertext,
 			TimeoutMs:        in.Provider.TimeoutMs,
 		},
-		Thresholds:             in.Thresholds,
-		SampleRate:             in.SampleRate,
-		VerdictCacheTTLSeconds: in.VerdictCacheTTLSeconds,
-		ScopeGroupIDs:          in.ScopeGroupIDs,
-		ViolationWindowHours:   in.ViolationWindowHours,
-		RiskEventThreshold:     in.RiskEventThreshold,
-		RecordNonHits:          in.RecordNonHits,
-		BlockStatusCode:        in.BlockStatusCode,
-		BlockMessage:           in.BlockMessage,
+		Thresholds:                 in.Thresholds,
+		SampleRate:                 in.SampleRate,
+		VerdictCacheTTLSeconds:     in.VerdictCacheTTLSeconds,
+		ScopeGroupIDs:              in.ScopeGroupIDs,
+		KeywordUpstreamAccountIDs:  in.KeywordUpstreamAccountIDs,
+		ProviderUpstreamAccountIDs: in.ProviderUpstreamAccountIDs,
+		ViolationWindowHours:       in.ViolationWindowHours,
+		RiskEventThreshold:         in.RiskEventThreshold,
+		RecordNonHits:              in.RecordNonHits,
+		BlockStatusCode:            in.BlockStatusCode,
+		BlockMessage:               in.BlockMessage,
 	}
 	if in.Provider.APIKey != nil {
 		if *in.Provider.APIKey == "" {

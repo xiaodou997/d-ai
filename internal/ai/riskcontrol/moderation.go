@@ -30,13 +30,14 @@ const (
 // independent of how the caller (sync pipeline step vs async worker)
 // obtained them.
 type CheckInput struct {
-	RequestID      string
-	TenantID       string
-	UserID         string
-	APIKeyID       string
-	ModelCode      string
-	CapabilityType string
-	Text           string
+	RequestID         string
+	TenantID          string
+	UserID            string
+	APIKeyID          string
+	ModelCode         string
+	CapabilityType    string
+	UpstreamAccountID string
+	Text              string
 }
 
 // DetectResult remains as a compatibility name for the domain detection

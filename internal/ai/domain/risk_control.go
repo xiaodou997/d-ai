@@ -110,8 +110,12 @@ type RiskControlConfig struct {
 	// Default 600 (10 min). Set to 0 to disable caching.
 	VerdictCacheTTLSeconds int `json:"verdict_cache_ttl_seconds"`
 
-	// ScopeGroupIDs reserves per-group scoping for a later iteration.
-	ScopeGroupIDs []string `json:"scope_group_ids"`
+	// ScopeGroupIDs is kept for backwards compatibility with the original
+	// tenant-group scope. New installations scope each checker by upstream
+	// account instead.
+	ScopeGroupIDs              []string `json:"scope_group_ids"`
+	KeywordUpstreamAccountIDs  []string `json:"keyword_upstream_account_ids"`
+	ProviderUpstreamAccountIDs []string `json:"provider_upstream_account_ids"`
 
 	ViolationWindowHours int    `json:"violation_window_hours"`
 	RiskEventThreshold   int    `json:"risk_event_threshold"`
