@@ -357,6 +357,8 @@ export interface TenantUpstreamPolicyRef {
 
 // ---- 风控中心（内容安全审核 v2）----
 export interface RiskControlProviderDTO {
+  enabled?: boolean;
+  mode?: "off" | "observe" | "pre_block";
   base_url: string;
   model: string;
   has_api_key: boolean;
@@ -378,6 +380,7 @@ export interface PinyinConfigDTO {
 
 export interface KeywordConfigDTO {
   enabled: boolean;
+  mode?: "off" | "observe" | "pre_block";
   entries: KeywordEntryDTO[];
   homoglyph_map_extra: Record<string, string>;
   pinyin: PinyinConfigDTO;

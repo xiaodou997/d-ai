@@ -105,6 +105,18 @@ func (s *ConfigService) Update(ctx context.Context, cfg domain.RiskControlConfig
 // backfillConfig applies default values for any missing/zero fields so
 // the rest of the pipeline can assume a well-formed config.
 func backfillConfig(cfg *domain.RiskControlConfig) {
+	if cfg.Keyword.Mode == "" {
+		cfg.Keyword.Mode = cfg.Mode
+	}
+	if cfg.Provider.Mode == "" {
+		cfg.Provider.Mode = cfg.Mode
+	}
+	if !cfg.Keyword.Enabled && cfg.Enabled {
+		cfg.Keyword.Enabled = true
+	}
+	if !cfg.Provider.Enabled && cfg.Enabled {
+		cfg.Provider.Enabled = true
+	}
 	if cfg.Thresholds == nil {
 		cfg.Thresholds = map[string]float64{}
 	}

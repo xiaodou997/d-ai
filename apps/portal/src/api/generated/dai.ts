@@ -7278,6 +7278,7 @@ export interface components {
         };
         KeywordConfigDTO: {
             enabled: boolean;
+            mode?: string;
             entries: components["schemas"]["KeywordEntryDTO"][] | null;
             /** @description 站点自定义同形字映射 */
             homoglyph_map_extra: {
@@ -8667,6 +8668,8 @@ export interface components {
         RiskControlProviderDTO: {
             /** @description 审核 API Base URL，如 https://api.openai.com */
             base_url: string;
+            enabled?: boolean;
+            mode?: string;
             /** @description 是否已配置审核 API Key（出于安全考虑不回显明文/密文） */
             has_api_key: boolean;
             /** @description 审核模型，如 omni-moderation-latest */
@@ -8681,6 +8684,8 @@ export interface components {
             /** @description 传入以更新审核 API Key 明文；省略则保留原值，传空字符串则清空 */
             api_key?: string;
             base_url: string;
+            enabled?: boolean;
+            mode?: string;
             model: string;
             /** Format: int64 */
             timeout_ms: number;

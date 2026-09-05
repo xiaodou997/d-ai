@@ -78,7 +78,7 @@ onMounted(fetchConfig)
 </script>
 
 <template>
-  <DsTag :tone="config?.enabled ? 'positive' : 'info'">{{ statusSummary }}</DsTag>
+  <DsTag :tone="(section === 'keyword' ? config?.keyword.enabled : config?.provider.enabled) ? 'positive' : 'info'">{{ section === 'keyword' ? (config?.keyword.enabled ? '运行中' : '已关闭') : (config?.provider.enabled ? '运行中' : '已关闭') }}</DsTag>
   <el-button :icon="Setting" type="primary" :loading="configLoading" @click="openConfigDialog">配置</el-button>
 
   <el-dialog v-model="configDialogVisible" :title="title" width="860px" append-to-body>
@@ -86,14 +86,14 @@ onMounted(fetchConfig)
       <!-- 基础开关 -->
       <section v-if="section === 'provider'" class="dialog-section">
         <div class="dialog-section-head">
-          <h4>基础开关</h4>
+          <h4>审核 API 开关</h4>
         </div>
         <div class="dialog-grid">
           <el-form-item label="总开关">
-            <el-switch v-model="form.enabled" />
+            <el-switch v-model="form.provider_enabled" />
           </el-form-item>
           <el-form-item label="运行模式">
-            <el-select v-model="form.mode" class="full-field">
+            <el-select v-model="form.provider_mode" class="full-field">
               <el-option v-for="item in modeOptions" :key="item.value" :label="item.label" :value="item.value" />
             </el-select>
           </el-form-item>
@@ -108,6 +108,9 @@ onMounted(fetchConfig)
         </div>
         <el-form-item label="关键词检测">
           <el-switch v-model="form.keyword_enabled" />
+        </el-form-item>
+        <el-form-item label="运行模式">
+          <el-select v-model="form.keyword_mode" class="full-field"><el-option v-for="item in modeOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select>
         </el-form-item>
 
         <div v-if="form.keyword_enabled" class="keyword-editor">

@@ -54,6 +54,8 @@ const (
 // endpoint used for API-based checks. APIKeyCiphertext is encrypted with
 // the same secret master key as upstream account credentials.
 type RiskControlProviderConfig struct {
+	Enabled          bool   `json:"enabled"`
+	Mode             string `json:"mode"`
 	BaseURL          string `json:"base_url"`
 	Model            string `json:"model"`
 	APIKeyCiphertext string `json:"api_key_ciphertext"`
@@ -84,6 +86,7 @@ type PinyinConfig struct {
 // KeywordConfig is the L1 keyword detection configuration.
 type KeywordConfig struct {
 	Enabled           bool              `json:"enabled"`
+	Mode              string            `json:"mode"`
 	Entries           []KeywordEntry    `json:"entries"`
 	HomoglyphMapExtra map[string]string `json:"homoglyph_map_extra"` // site-specific homoglyph overrides
 	Pinyin            PinyinConfig      `json:"pinyin"`

@@ -18,6 +18,8 @@ import (
 // ============================================================================
 
 type riskControlProviderDTO struct {
+	Enabled   bool   `json:"enabled"`
+	Mode      string `json:"mode"`
 	BaseURL   string `json:"base_url" doc:"审核 API Base URL，如 https://api.openai.com"`
 	Model     string `json:"model" doc:"审核模型，如 omni-moderation-latest"`
 	HasAPIKey bool   `json:"has_api_key" doc:"是否已配置审核 API Key（出于安全考虑不回显明文/密文）"`
@@ -25,6 +27,8 @@ type riskControlProviderDTO struct {
 }
 
 type riskControlProviderWriteDTO struct {
+	Enabled   bool    `json:"enabled"`
+	Mode      string  `json:"mode"`
 	BaseURL   string  `json:"base_url"`
 	Model     string  `json:"model"`
 	APIKey    *string `json:"api_key,omitempty" doc:"传入以更新审核 API Key 明文；省略则保留原值，传空字符串则清空"`
@@ -46,6 +50,7 @@ type pinyinConfigDTO struct {
 
 type keywordConfigDTO struct {
 	Enabled           bool              `json:"enabled"`
+	Mode              string            `json:"mode"`
 	Entries           []keywordEntryDTO `json:"entries"`
 	HomoglyphMapExtra map[string]string `json:"homoglyph_map_extra" doc:"站点自定义同形字映射"`
 	Pinyin            pinyinConfigDTO   `json:"pinyin"`
@@ -376,6 +381,8 @@ func riskControlConfigToDTO(cfg domain.RiskControlConfig) riskControlConfigDTO {
 		ConfigRevision: cfg.ConfigRevision,
 		Keyword:        keywordConfigToDTO(cfg.Keyword),
 		Provider: riskControlProviderDTO{
+			Enabled:   cfg.Provider.Enabled,
+			Mode:      cfg.Provider.Mode,
 			BaseURL:   cfg.Provider.BaseURL,
 			Model:     cfg.Provider.Model,
 			HasAPIKey: cfg.Provider.APIKeyCiphertext != "",
@@ -415,6 +422,7 @@ func keywordConfigToDTO(kc domain.KeywordConfig) keywordConfigDTO {
 		})
 	}
 	return keywordConfigDTO{
+		Mode:              kc.Mode,
 		Enabled:           kc.Enabled,
 		Entries:           entries,
 		HomoglyphMapExtra: kc.HomoglyphMapExtra,
@@ -435,6 +443,8 @@ func riskControlConfigFromWriteDTO(in riskControlConfigWriteDTO, current domain.
 		Mode:    in.Mode,
 		Keyword: keywordConfigFromDTO(in.Keyword),
 		Provider: domain.RiskControlProviderConfig{
+			Enabled:          in.Provider.Enabled,
+			Mode:             in.Provider.Mode,
 			BaseURL:          in.Provider.BaseURL,
 			Model:            in.Provider.Model,
 			APIKeyCiphertext: current.Provider.APIKeyCiphertext,
@@ -489,6 +499,7 @@ func keywordConfigFromDTO(kc keywordConfigDTO) domain.KeywordConfig {
 		})
 	}
 	return domain.KeywordConfig{
+		Mode:              kc.Mode,
 		Enabled:           kc.Enabled,
 		Entries:           entries,
 		HomoglyphMapExtra: kc.HomoglyphMapExtra,

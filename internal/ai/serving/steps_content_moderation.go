@@ -33,7 +33,7 @@ func (s *ContentModerationStep) Execute(ctx context.Context, req *Request) error
 		return nil
 	}
 	cfg, err := s.Checker.Config.Get(ctx)
-	if err != nil || !cfg.Enabled || cfg.Mode == domain.RiskControlModeOff {
+	if err != nil || (!cfg.Keyword.Enabled && !cfg.Provider.Enabled) {
 		return nil
 	}
 
@@ -44,13 +44,16 @@ func (s *ContentModerationStep) Execute(ctx context.Context, req *Request) error
 	// RouteCandidatesStep now runs before this step, so account-scoped rules
 	// can be evaluated against the actual candidate selected for this attempt.
 	accountID := req.CandidateAccountID()
+	if !cfg.Provider.Enabled {
+		cfg.SampleRate = 0
+	}
 	if len(cfg.KeywordUpstreamAccountIDs) > 0 && !containsString(cfg.KeywordUpstreamAccountIDs, accountID) {
 		cfg.Keyword.Enabled = false
 	}
 	if len(cfg.ProviderUpstreamAccountIDs) > 0 && !containsString(cfg.ProviderUpstreamAccountIDs, accountID) {
 		cfg.SampleRate = 0
 	}
-	if !cfg.Keyword.Enabled && cfg.SampleRate <= 0 {
+	if !cfg.Keyword.Enabled && (!cfg.Provider.Enabled || cfg.SampleRate <= 0) {
 		return nil
 	}
 
@@ -70,7 +73,11 @@ func (s *ContentModerationStep) Execute(ctx context.Context, req *Request) error
 		Text:              text,
 	}
 
-	if cfg.Mode == domain.RiskControlModeObserve {
+	mode := cfg.Provider.Mode
+	if cfg.Keyword.Enabled && cfg.Keyword.Mode == domain.RiskControlModePreBlock {
+		mode = domain.RiskControlModePreBlock
+	}
+	if mode == domain.RiskControlModeObserve {
 		if s.Worker != nil {
 			s.Worker.Submit(riskcontrol.WorkerTask{Config: cfg, Input: in})
 		}
@@ -83,7 +90,7 @@ func (s *ContentModerationStep) Execute(ctx context.Context, req *Request) error
 	// Cache hits skip Record (no log, no violation count) — same text is
 	// one behavior, not N.
 	if !det.FromCache {
-		s.Checker.Record(ctx, cfg, in, det, cfg.Mode)
+		s.Checker.Record(ctx, cfg, in, det, mode)
 	}
 	if det.Flagged {
 		return apiError(cfg.BlockStatusCode, "content_moderation_blocked", cfg.BlockMessage)

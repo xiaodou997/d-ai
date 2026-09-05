@@ -31,6 +31,9 @@ function entriesFromConfig(entries: KeywordEntryDTO[] | undefined): KeywordEntry
 interface RiskControlConfigForm {
   enabled: boolean
   mode: RiskControlConfigDTO['mode']
+  keyword_mode: 'off' | 'observe' | 'pre_block'
+  provider_enabled: boolean
+  provider_mode: 'off' | 'observe' | 'pre_block'
   base_url: string
   model: string
   timeout_ms: number
@@ -62,6 +65,7 @@ export function useRiskControlConfig(api: RiskControlApi = riskControlApi) {
   const form = reactive<RiskControlConfigForm>({
     enabled: false,
     mode: 'observe',
+    keyword_mode: 'observe', provider_enabled: true, provider_mode: 'observe',
     base_url: 'https://api.openai.com',
     model: 'omni-moderation-latest',
     timeout_ms: 5000,
@@ -103,6 +107,7 @@ export function useRiskControlConfig(api: RiskControlApi = riskControlApi) {
     Object.assign(form, {
       enabled: cfg?.enabled ?? false,
       mode: cfg?.mode ?? 'observe',
+      keyword_mode: cfg?.keyword?.mode ?? 'observe', provider_enabled: cfg?.provider?.enabled ?? true, provider_mode: cfg?.provider?.mode ?? 'observe',
       base_url: cfg?.provider?.base_url || 'https://api.openai.com',
       model: cfg?.provider?.model || 'omni-moderation-latest',
       timeout_ms: cfg?.provider?.timeout_ms || 5000,
@@ -146,6 +151,7 @@ export function useRiskControlConfig(api: RiskControlApi = riskControlApi) {
         mode: form.mode,
         keyword: {
           enabled: form.keyword_enabled,
+          mode: form.keyword_mode,
           entries: filterEntries(form.keyword_entries),
           homoglyph_map_extra: config.value?.keyword?.homoglyph_map_extra || {},
           pinyin: {
@@ -155,6 +161,8 @@ export function useRiskControlConfig(api: RiskControlApi = riskControlApi) {
           }
         },
         provider: {
+          enabled: form.provider_enabled,
+          mode: form.provider_mode,
           base_url: form.base_url.trim(),
           model: form.model.trim(),
           timeout_ms: form.timeout_ms,
