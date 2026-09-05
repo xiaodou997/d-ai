@@ -4,13 +4,11 @@
        错误列表 el-table → DsTable(子面板内 :frame="false"),状态 el-tag → DsTag。
 -->
 <script setup lang="ts">
-import { ArrowRight, Loading } from "@element-plus/icons-vue";
+import { ArrowRight } from "@element-plus/icons-vue";
 import { useRouter } from "vue-router";
-import { DsEmpty, DsTable, DsTag, type DsTableColumn } from "@/shared/ui";
 
 import AiWorkbenchSection from "./AiWorkbenchSection.vue";
 import AiUsageUserInsight from "./AiUsageUserInsight.vue";
-import type { TenantAiDashboardRecentError } from "@/api/types/aiTenant";
 
 interface UserInsightItem {
   key: string;
@@ -23,8 +21,6 @@ interface UserInsightItem {
 }
 
 const props = defineProps<{
-  recentErrors: TenantAiDashboardRecentError[];
-  errorsLoading: boolean;
   userInsights: UserInsightItem[];
   usersLoading: boolean;
   rangeLabel: string;
@@ -32,26 +28,12 @@ const props = defineProps<{
 
 const router = useRouter();
 
-const errorColumns: DsTableColumn[] = [
-  { key: "time", title: "时间", width: 150 },
-  { key: "model_code", title: "模型", width: 120, mono: true },
-  { key: "status", title: "状态", width: 90 },
-  { key: "error_message", title: "错误信息" }
-];
-
-const formatTime = (ts?: number | null) => {
-  if (!ts) return "—";
-  return new Date(ts).toLocaleString("zh-CN");
-};
-
-const errorTone = (value: string): "positive" | "danger" | "warning" | "neutral" =>
-  (({ success: "positive", failed: "danger", rejected: "warning", partial: "warning" } as Record<string, "positive" | "danger" | "warning">)[value] || "neutral");
 </script>
 
 <template>
   <AiWorkbenchSection
-    title="调用质量"
-    :description="`结合 ${props.rangeLabel} 的失败请求与核心调用用户，判断服务稳定性和主要使用主体。`"
+    title="调用主体"
+    :description="`查看 ${props.rangeLabel} 的主要调用主体，区分终端用户、外部标识与租户自身调用。`"
   >
     <template #actions>
       <el-button text type="primary" class="!text-xs font-bold" @click="router.push('/tenant/ai/usage')">
@@ -60,29 +42,6 @@ const errorTone = (value: string): "positive" | "danger" | "warning" | "neutral"
     </template>
 
     <div class="ai-quality-grid">
-      <div class="qs-panel">
-        <div class="qs-panel__head">
-          <div>
-            <h3 class="qs-panel__title">最近请求错误</h3>
-            <p class="qs-panel__desc">{{ props.rangeLabel }}请求失败记录</p>
-          </div>
-        </div>
-
-        <div v-if="errorsLoading" class="qs-panel__loading">
-          <el-icon class="qs-panel__spinner animate-spin" :size="32"><Loading /></el-icon>
-        </div>
-
-        <DsTable v-else :frame="false" :columns="errorColumns" :rows="recentErrors" row-key="request_id">
-          <template #empty>
-            <DsEmpty title="暂无错误记录" />
-          </template>
-          <template #cell-time="{ row }">{{ formatTime(row.created_at) }}</template>
-          <template #cell-status="{ row }">
-            <DsTag :tone="errorTone(row.request_status)">{{ row.request_status }}</DsTag>
-          </template>
-        </DsTable>
-      </div>
-
       <AiUsageUserInsight :loading="usersLoading" :items="userInsights" />
     </div>
   </AiWorkbenchSection>

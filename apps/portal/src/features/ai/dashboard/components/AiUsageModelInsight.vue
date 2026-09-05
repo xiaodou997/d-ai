@@ -30,8 +30,20 @@ const activeItems = computed(() => props.items.filter((item) => item.total_tenan
 const totalAmountText = computed(() =>
   formatUSD(activeItems.value.reduce((sum, item) => sum + Number(item.total_tenant_payable_usd || 0), 0))
 );
+const totalTokens = computed(() => activeItems.value.reduce((sum, item) => sum + Number(item.total_tokens || 0), 0));
+const amountShare = (item: TenantAiDashboardTopModel) => totalAmountText.value === "$0.00" ? 0 : (Number(item.total_tenant_payable_usd || 0) / activeItems.value.reduce((s, i) => s + Number(i.total_tenant_payable_usd || 0), 0)) * 100;
+const tokenShare = (item: TenantAiDashboardTopModel) => totalTokens.value ? (Number(item.total_tokens || 0) / totalTokens.value) * 100 : 0;
+const pieGradient = (kind: "amount" | "tokens") => {
+  const total = kind === "amount" ? activeItems.value.reduce((s, i) => s + Number(i.total_tenant_payable_usd || 0), 0) : totalTokens.value;
+  if (!total) return "conic-gradient(var(--ds-line) 0 100%)";
+  let cursor = 0;
+  const colors = ["var(--ds-accent)", "var(--ds-info)", "var(--ds-positive)", "var(--ds-warning)", "var(--ds-accent-hover)", "var(--ds-muted)"];
+  const stops = activeItems.value.map((item, index) => { const value = kind === "amount" ? Number(item.total_tenant_payable_usd || 0) : Number(item.total_tokens || 0); const start = cursor; cursor += value / total * 100; return `${colors[index % colors.length]} ${start}% ${cursor}%`; });
+  return `conic-gradient(${stops.join(",")})`;
+};
 
 const truncateLabel = (value: string) => (value.length > 12 ? `${value.slice(0, 12)}…` : value);
+const formatCompactNumber = (value: number) => value >= 1e9 ? `${(value / 1e9).toFixed(2)}B` : value >= 1e6 ? `${(value / 1e6).toFixed(2)}M` : value >= 1e3 ? `${(value / 1e3).toFixed(2)}K` : Math.round(value).toLocaleString("zh-CN");
 
 const renderChart = () => {
   if (!chartRef.value || !activeItems.value.length) {
@@ -135,7 +147,7 @@ onUnmounted(() => {
     <div class="model-insight__header">
       <div>
         <h3 class="model-insight__title">模型消耗分布</h3>
-        <p class="model-insight__desc">沿用 sub2api 思路，把 {{ props.rangeLabel }}高消耗模型作为首页第一图表。</p>
+        <p class="model-insight__desc">{{ props.rangeLabel }} Top 模型消耗，按金额排序。</p>
       </div>
       <span class="model-insight__summary">Top 模型合计 {{ totalAmountText }}</span>
     </div>
@@ -148,6 +160,12 @@ onUnmounted(() => {
 
     <div v-else class="model-insight__body">
       <div ref="chartRef" class="model-insight__chart"></div>
+
+      <div class="model-insight__pies">
+        <div class="model-pie"><div class="model-pie__ring" :style="{ background: pieGradient('amount') }"></div><div><strong>金额占比</strong><span>{{ totalAmountText }}</span></div></div>
+        <div class="model-pie"><div class="model-pie__ring" :style="{ background: pieGradient('tokens') }"></div><div><strong>Token 占比</strong><span>{{ formatCompactNumber(totalTokens) }}</span></div></div>
+        <div class="model-pie__legend"><span v-for="item in activeItems" :key="item.model_code"><i></i>{{ item.model_code }} {{ amountShare(item).toFixed(1) }}% / {{ tokenShare(item).toFixed(1) }}%</span></div>
+      </div>
 
       <div class="model-insight__list">
         <article v-for="item in activeItems" :key="item.model_code" class="model-insight__row">
@@ -233,6 +251,12 @@ onUnmounted(() => {
   gap: 18px;
   padding: 18px 24px 24px;
 }
+.model-insight__pies { display:grid; grid-template-columns:1fr 1fr; gap:12px; padding:16px 24px; border-top:1px solid var(--ds-line); }
+.model-pie { display:flex; align-items:center; gap:10px; color:var(--ds-ink); font-size:12px; }
+.model-pie__ring { width:56px; height:56px; border-radius:var(--ds-radius-pill); background:conic-gradient(var(--ds-accent) 0 68%, var(--ds-accent-soft) 68%); }
+.model-pie__ring--tokens { background:conic-gradient(var(--ds-info) 0 54%, var(--ds-accent-soft) 54%); }
+.model-pie strong,.model-pie span { display:block; }.model-pie span { color:var(--ds-muted); margin-top:3px; }
+.model-pie__legend { grid-column:1/-1; display:flex; flex-wrap:wrap; gap:6px 12px; color:var(--ds-muted); font-size:11px; }.model-pie__legend i { display:inline-block; width:7px; height:7px; margin-right:4px; border-radius:var(--ds-radius-pill); background:var(--ds-accent); }
 
 .model-insight__chart {
   height: 248px;

@@ -28,10 +28,7 @@ import {
 import { aiTenantApi, formatUSD } from "@/api/aiTenant";
 import { listTenantUsageRecords, type TenantUsageLog } from "@/features/ai/usage";
 import { tenantApi } from "@/api/tenant";
-import type {
-  TenantAiDashboardRecentError,
-  TenantAiDashboardTopModel,
-} from "@/api/types/aiTenant";
+import type { TenantAiDashboardTopModel } from "@/api/types/aiTenant";
 import type { TenantEndUserItem } from "@/api/types/tenant";
 
 const router = useRouter();
@@ -42,7 +39,6 @@ const gatewayLoading = ref(false);
 const analysisLoading = ref(false);
 
 const topModels = ref<TenantAiDashboardTopModel[]>([]);
-const recentErrors = ref<TenantAiDashboardRecentError[]>([]);
 const usageInsightLogs = ref<TenantUsageLog[]>([]);
 const usageInsightTotal = ref(0);
 const users = ref<TenantEndUserItem[]>([]);
@@ -75,6 +71,14 @@ const formatTime = (ts?: number | null) => {
 };
 
 const formatMetricNumber = (value?: number | null) => Number(value ?? 0).toLocaleString("zh-CN");
+const formatCompactNumber = (value?: number | null) => {
+  const number = Number(value ?? 0);
+  if (!Number.isFinite(number)) return "0";
+  const units = [[1e9, "B"], [1e6, "M"], [1e3, "K"]] as const;
+  const unit = units.find(([threshold]) => Math.abs(number) >= threshold);
+  if (!unit) return Math.round(number).toLocaleString("zh-CN");
+  return `${(number / unit[0]).toFixed(2).replace(/\.00$/, "").replace(/(\.\d)0$/, "$1")}${unit[1]}`;
+};
 
 const requestSourceLabel = (value?: string | null) =>
   ({
@@ -140,14 +144,14 @@ const signalMetrics = computed(() => [
   {
     key: "total-tokens",
     label: "Token 使用量",
-    value: formatMetricNumber(aiStats.totalTokens),
+    value: formatCompactNumber(aiStats.totalTokens),
     hint: `${selectedRangeLabel.value}输入与输出合计`,
     loading: signalLoading.value
   },
   {
     key: "avg-latency",
     label: "平均延迟",
-    value: `${formatMetricNumber(aiStats.avgLatency)} ms`,
+    value: `${Math.round(aiStats.avgLatency)} ms`,
     hint: `${selectedRangeLabel.value}端到端响应`,
     loading: signalLoading.value
   }
@@ -228,10 +232,10 @@ const topUserInsights = computed(() => {
   >();
 
   for (const row of usageInsightLogs.value) {
-    const key = row.user_id ? `user:${row.user_id}` : row.external_user_id ? `external:${row.external_user_id}` : "anonymous";
+    const key = row.user_id ? `user:${row.user_id}` : row.external_user_id ? `external:${row.external_user_id}` : "tenant-self";
     const fallbackLabel = row.user_id
       ? userMap.value.get(String(row.user_id))?.username || userMap.value.get(String(row.user_id))?.email || row.user_id
-      : row.external_user_id || "匿名访客";
+      : row.external_user_id || "租户自身调用";
     const bucket = buckets.get(key) || {
       key,
       userLabel: fallbackLabel,
@@ -300,10 +304,9 @@ const fetchRangeBoundData = async (range: WorkbenchRangeOption, requestEpoch: nu
   analysisLoading.value = true;
   try {
     const rangeQuery = buildUsageRange(range);
-    const [summaryRes, modelsRes, errorsRes, usageRes] = await Promise.all([
+    const [summaryRes, modelsRes, usageRes] = await Promise.all([
       aiTenantApi.getDashboardSummary(rangeQuery).catch(() => null),
       aiTenantApi.getDashboardTopModels({ ...rangeQuery, limit: 8 }).catch(() => ({ items: [], total: 0 })),
-      aiTenantApi.listDashboardRecentErrors({ ...rangeQuery, limit: 5 }).catch(() => ({ items: [], total: 0 })),
       listTenantUsageRecords({
           limit: range.sampleLimit,
           offset: 0,
@@ -329,7 +332,6 @@ const fetchRangeBoundData = async (range: WorkbenchRangeOption, requestEpoch: nu
     aiStats.totalTokens = Number(summaryRes?.total_tokens ?? usageRes.stats?.total_tokens ?? 0);
     aiStats.avgLatency = Number(summaryRes?.avg_latency_ms ?? usageRes.stats?.avg_latency_ms ?? 0);
     topModels.value = modelsRes.items || [];
-    recentErrors.value = errorsRes.items || [];
     usageInsightTotal.value = usageRes.total ?? 0;
     usageInsightLogs.value = usageRes.records ?? [];
   } catch (e) {
@@ -340,7 +342,6 @@ const fetchRangeBoundData = async (range: WorkbenchRangeOption, requestEpoch: nu
     aiStats.totalTokens = 0;
     aiStats.avgLatency = 0;
     topModels.value = [];
-    recentErrors.value = [];
     usageInsightTotal.value = 0;
     usageInsightLogs.value = [];
   } finally {
@@ -434,8 +435,6 @@ onMounted(() => {
         />
 
         <AiWorkbenchQualitySection
-          :recent-errors="recentErrors"
-          :errors-loading="gatewayLoading"
           :user-insights="topUserInsights"
           :users-loading="analysisLoading"
           :range-label="selectedRangeLabel"
