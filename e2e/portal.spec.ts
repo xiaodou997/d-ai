@@ -533,6 +533,23 @@ test("tenant and customer AI, user, usage, account, recharge, and subscription p
   expect(errors).toEqual([]);
 });
 
+test("tenant finance cockpit surfaces operating conclusions and action panels", async ({ page }) => {
+  test.skip(!useMockApi, "uses deterministic tenant finance fixtures; run with DAI_E2E_MOCK=1");
+  const errors = watchBrowserErrors(page);
+  await loginAs(page, roles[2], "/tenant/overview/finance");
+  await page.goto("/tenant/overview/finance");
+
+  await expect(page.getByRole("heading", { name: "经营与结算" })).toBeVisible();
+  await expect(page.getByText("本期经营结果", { exact: true })).toBeVisible();
+  await expect(page.getByText("服务额度安全垫", { exact: true })).toBeVisible();
+  await expect(page.getByText("用户资金健康", { exact: true })).toBeVisible();
+  await expect(page.getByText("需要关注", { exact: true })).toBeVisible();
+  await expect(page.getByText("模型成本结构", { exact: true })).toBeVisible();
+  await expect(page.getByText("最近账务动作", { exact: true })).toBeVisible();
+  await expectNoAccessibilityViolations(page);
+  expect(errors).toEqual([]);
+});
+
 test("admin billing and usage paths expose recharge/refund workflow surfaces", async ({ page }) => {
   test.skip(!useMockApi, "uses deterministic billing fixtures; run with DAI_E2E_MOCK=1");
   const errors = watchBrowserErrors(page);
@@ -941,8 +958,125 @@ function adminRechargeOrderFixture(state: MockState) {
 function fixtureFor(path: string, method: string, state: MockState): unknown {
   if (path === "/api/v1/customer/portal-brand") return { siteName: "D-AI", faviconPath: "" };
   if (path.includes("topup-config")) return topupConfigFixture();
+  if (path === "/api/v1/tenant/balance-ledger") {
+    return {
+      items: [
+        {
+          txnId: "e2e-ledger-1",
+          txnType: "topup_income",
+          currency: "USD",
+          amountMicroUsd: 5_000_000,
+          balanceAfterMicroUsd: 15_000_000,
+          note: "用户充值入账",
+          createdAt: Date.parse("2026-09-05T02:20:00Z")
+        },
+        {
+          txnId: "e2e-ledger-2",
+          txnType: "consumption",
+          currency: "USD",
+          amountMicroUsd: -4_200_000,
+          balanceAfterMicroUsd: 10_000_000,
+          note: "AI 服务消费",
+          createdAt: Date.parse("2026-09-05T01:55:00Z")
+        }
+      ],
+      total: 2,
+      page: 1,
+      size: 8
+    };
+  }
   if (path.includes("balance")) return balanceFixture(state);
   if (path.endsWith("/subscriptions/current")) return null;
+  if (path === "/api/v1/tenants/analytics/overview") {
+    return {
+      endUserCount: 12,
+      inviteCodeCount: 2,
+      userDeductionUsd: 86.4,
+      userTotalBalanceUsd: 142.8,
+      activeUserCount: 9,
+      userConsumptionCount: 184,
+      settlementIncomeMicroUsd: 120_000_000
+    };
+  }
+  if (path === "/api/v1/tenants/analytics/app-consumption") {
+    return [
+      { clientId: "api_key", clientName: "API 调用", amountUsd: 52.4, percentage: "60.6" },
+      { clientId: "web_chat", clientName: "网页对话", amountUsd: 25.2, percentage: "29.2" },
+      { clientId: "web_image", clientName: "网页生图", amountUsd: 8.8, percentage: "10.2" }
+    ];
+  }
+  if (path === "/api/v1/tenants/analytics/user-consumption") {
+    return [
+      { userId: "e2e-end-user", username: "e2e-end-user", amountUsd: 32.8, transactionCount: 81, percentage: "38.0" },
+      { userId: "e2e-user-2", username: "growth-user", amountUsd: 18.4, transactionCount: 42, percentage: "21.3" }
+    ];
+  }
+  if (path === "/api/v1/tenants/me/dashboard/summary") {
+    return {
+      total_requests: 186,
+      successful_requests: 181,
+      failed_requests: 5,
+      total_tokens: 2_840_000,
+      total_prompt_tokens: 1_920_000,
+      total_completion_tokens: 920_000,
+      total_catalog_base_usd: 64.5,
+      total_tenant_payable_usd: 71.2,
+      total_retail_base_usd: 96.8,
+      total_user_payable_usd: 92.1,
+      total_user_charged_usd: 86.4,
+      avg_latency_ms: 640
+    };
+  }
+  if (path === "/api/v1/tenants/me/dashboard/top-models") {
+    return {
+      items: [
+        { model_code: "gpt-5-mini", request_count: 92, total_tokens: 1_320_000, total_tenant_payable_usd: 38.4 },
+        { model_code: "claude-sonnet", request_count: 54, total_tokens: 940_000, total_tenant_payable_usd: 21.6 },
+        { model_code: "gemini-2.5-pro", request_count: 40, total_tokens: 580_000, total_tenant_payable_usd: 11.2 }
+      ],
+      total: 3
+    };
+  }
+  if (path === "/api/v1/tenants/me/usage-logs") {
+    return {
+      records: [
+        {
+          id: "e2e-usage-1",
+          request_id: "e2e-request-1",
+          tenant_id: "e2e-tenant",
+          user_id: "e2e-end-user",
+          username: "e2e-end-user",
+          model_code: "gpt-5-mini",
+          request_source: "api_key",
+          request_status: "success",
+          billing_status: "settled",
+          billing_status_label: "已结算",
+          billing_source: "payg",
+          user_charged_usd: 0.42,
+          tenant_payable_usd: 0.36,
+          user_payable_usd: 0.42,
+          retail_base_usd: 0.42,
+          total_tokens: 4800,
+          prompt_tokens: 3200,
+          completion_tokens: 1600,
+          created_at: Date.parse("2026-09-05T02:35:00Z")
+        }
+      ],
+      stats: {
+        total_requests: 186,
+        success_count: 181,
+        failed_count: 5,
+        total_tokens: 2_840_000,
+        total_catalog_base_usd: 64.5,
+        total_tenant_payable_usd: 71.2,
+        total_user_charged_usd: 86.4,
+        avg_latency_ms: 640,
+        avg_request_total_ms: 720,
+        avg_first_response_byte_ms: 280
+      },
+      total: 186
+    };
+  }
   if (path.includes("dashboard/summary")) return { total_requests: 0, success_requests: 0, failed_requests: 0, total_tokens: 0, total_amount_usd: 0, avg_latency_ms: 0, total_tenant_payable_usd: 0, total_user_charged_usd: 0 };
   if (path.includes("summary") && path.includes("usage")) return { total_requests: 0, success_requests: 0, failed_requests: 0, total_tokens: 0, total_amount_usd: 0, avg_latency_ms: 0 };
   if (path.includes("public/invitations")) return invitationFixture();

@@ -6,20 +6,33 @@ const apiMocks = vi.hoisted(() => ({
   getAccountBalance: vi.fn(),
   getAnalyticsOverview: vi.fn(),
   getUserConsumption: vi.fn(),
+  getAppConsumption: vi.fn(),
+  getUsers: vi.fn(),
   getDashboardSummary: vi.fn(),
-  listRecords: vi.fn()
+  getDashboardTopModels: vi.fn(),
+  listRecords: vi.fn(),
+  listBalanceLedger: vi.fn()
 }));
 
 vi.mock("@/api/platformTenant", () => ({
   platformTenantApi: {
     getAccountBalance: apiMocks.getAccountBalance,
     getAnalyticsOverview: apiMocks.getAnalyticsOverview,
-    getUserConsumption: apiMocks.getUserConsumption
+    getUserConsumption: apiMocks.getUserConsumption,
+    getAppConsumption: apiMocks.getAppConsumption,
+    getUsers: apiMocks.getUsers
   }
 }));
 
 vi.mock("@/api/aiTenant", () => ({
-  aiTenantApi: { getDashboardSummary: apiMocks.getDashboardSummary }
+  aiTenantApi: {
+    getDashboardSummary: apiMocks.getDashboardSummary,
+    getDashboardTopModels: apiMocks.getDashboardTopModels
+  }
+}));
+
+vi.mock("@/api/tenant", () => ({
+  tenantApi: { listBalanceLedger: apiMocks.listBalanceLedger }
 }));
 
 vi.mock("@/features/ai/usage", () => ({
@@ -79,8 +92,12 @@ describe("useTenantOperationsDashboard", () => {
       settlementIncomeMicroUsd: 7_000_000
     });
     apiMocks.getUserConsumption.mockResolvedValue([]);
+    apiMocks.getAppConsumption.mockResolvedValue([]);
+    apiMocks.getUsers.mockResolvedValue({ items: [], total: 0, page: 1, size: 200 });
     apiMocks.getDashboardSummary.mockResolvedValue(financialSummary);
+    apiMocks.getDashboardTopModels.mockResolvedValue({ items: [], total: 0 });
     apiMocks.listRecords.mockResolvedValue({ records: [], total: 0 });
+    apiMocks.listBalanceLedger.mockResolvedValue({ items: [], total: 0, page: 1, size: 8 });
   });
 
   it("loads the AI settlement cost into the financial overview", async () => {
@@ -92,6 +109,13 @@ describe("useTenantOperationsDashboard", () => {
       date_from: expect.any(String),
       date_to: expect.any(String)
     });
+    expect(apiMocks.getDashboardTopModels).toHaveBeenCalledWith({
+      date_from: expect.any(String),
+      date_to: expect.any(String),
+      limit: 6
+    });
+    expect(apiMocks.getAccountBalance).toHaveBeenCalledWith(true);
+    expect(apiMocks.listBalanceLedger).toHaveBeenCalledWith({ page: 1, size: 8 });
     wrapper.unmount();
   });
 
