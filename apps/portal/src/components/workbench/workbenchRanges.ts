@@ -17,7 +17,7 @@ export interface WorkbenchRangeWindow {
   date_to: string;
 }
 
-export const DEFAULT_WORKBENCH_RANGE_ID: WorkbenchRangeId = "30d";
+export const DEFAULT_WORKBENCH_RANGE_ID: WorkbenchRangeId = "today";
 
 export const WORKBENCH_RANGE_OPTIONS: WorkbenchRangeOption[] = [
   { id: "today", label: "今天", caption: "从今天 00:00 起的自然日用量", hours: 24, sampleLimit: 120 },
