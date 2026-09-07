@@ -53,9 +53,8 @@ type SubmitResult struct {
 
 // Submit validates, gates, persists and enqueues a task.
 //
-// The order matters. The cheap local cap runs before the handler's admission
-// gate, and both run before anything is written, so a tenant with no balance or
-// a full queue is turned away without ever occupying a row.
+// Prepare runs outside the insertion transaction. The store then checks the
+// tenant cap and inserts atomically, serializing concurrent submissions.
 func (e *Engine) Submit(ctx context.Context, req SubmitRequest) (SubmitResult, error) {
 	reg, ok := e.registry.lookup(req.Type)
 	if !ok {
@@ -75,18 +74,6 @@ func (e *Engine) Submit(ctx context.Context, req SubmitRequest) (SubmitResult, e
 		if err != nil {
 			return SubmitResult{}, Errorf(http.StatusBadRequest, "invalid_webhook_url", "%s", err.Error())
 		}
-	}
-
-	// Checked before Prepare so a tenant that is already at its cap does not get
-	// to spend the gate's database work, and cannot flood the queue while
-	// waiting on upstream admission.
-	inFlight, err := e.store.countInFlight(ctx, ref.TenantID)
-	if err != nil {
-		return SubmitResult{}, err
-	}
-	if inFlight >= e.cfg.MaxInFlightPerTenant {
-		return SubmitResult{}, Errorf(http.StatusTooManyRequests, "too_many_tasks_in_flight",
-			"at most %d tasks may be pending or running at once", e.cfg.MaxInFlightPerTenant)
 	}
 
 	// Prepare decodes, validates and runs the capability's admission gate. It
@@ -110,14 +97,15 @@ func (e *Engine) Submit(ctx context.Context, req SubmitRequest) (SubmitResult, e
 	}
 
 	rec := insertRecord{
-		Type:        req.Type,
-		SubjectRef:  ref,
-		ModelCode:   prepared.ModelCode,
-		Input:       prepared.Input,
-		Metadata:    req.Metadata,
-		WebhookURL:  webhookURL,
-		MaxAttempts: reg.opts.MaxAttempts,
-		ExpiresAt:   time.Now().Add(ttl),
+		Type:                 req.Type,
+		SubjectRef:           ref,
+		ModelCode:            prepared.ModelCode,
+		Input:                prepared.Input,
+		Metadata:             req.Metadata,
+		WebhookURL:           webhookURL,
+		MaxAttempts:          reg.opts.MaxAttempts,
+		MaxInFlightPerTenant: e.cfg.MaxInFlightPerTenant,
+		ExpiresAt:            time.Now().Add(ttl),
 	}
 	if req.IdempotencyKey != "" {
 		rec.IdempotencyKey = req.IdempotencyKey

@@ -72,7 +72,8 @@ func capabilityTypeFromProtocol(protocol domain.UpstreamProtocol) domain.Capabil
 // routeRow holds one resolved candidate (a row of ai_group_targets joined to its
 // group, target account/pool, and explicit upstream model binding).
 type routeRow struct {
-	RouteID string // ai_group_targets.id
+	RouteID   string // ai_group_targets.id
+	ModelCode string
 
 	PriceBookID      *string // 租户结算价格表（COALESCE account→pool）
 	TenantMultiplier float64
@@ -111,9 +112,17 @@ type routeRow struct {
 // given groups (in failover order), protocol-matched and explicit-binding filtered.
 // Results are ordered by group failover order and binding ID.
 func (s *RouteInspector) listRoutesForGroups(ctx context.Context, modelCode string, capType domain.CapabilityType, groupIDs []string) ([]routeRow, error) {
+	return s.listRoutesForModels(ctx, []string{modelCode}, capType, groupIDs)
+}
+
+// listRoutesForModels shares the same route eligibility rules with catalog reads.
+func (s *RouteInspector) listRoutesForModels(ctx context.Context, modelCodes []string, capType domain.CapabilityType, groupIDs []string) ([]routeRow, error) {
+	if len(modelCodes) == 0 || len(groupIDs) == 0 {
+		return nil, nil
+	}
 	const q = `
 			SELECT
-			  gt.id::text,
+			  gt.id::text, um.model_code,
 		  COALESCE(a.price_book_id, cp.price_book_id)::text        AS cost_price_book_id,
 		  COALESCE(tp.tenant_multiplier_override, a.tenant_multiplier, cp.tenant_multiplier, 1) AS tenant_multiplier,
 		  um.upstream_model_name                                    AS upstream_model,
@@ -137,7 +146,7 @@ func (s *RouteInspector) listRoutesForGroups(ctx context.Context, modelCode stri
 		JOIN ai_upstream_models um
 		  ON um.upstream_kind = gt.target_kind
 		 AND um.upstream_id = gt.target_id
-		 AND um.model_code = $1
+		 AND um.model_code = ANY($1::text[])
 		 AND um.capability_type = $2
 		 AND um.status = 'active'
 		LEFT JOIN ai_upstream_accounts a
@@ -175,7 +184,7 @@ func (s *RouteInspector) listRoutesForGroups(ctx context.Context, modelCode stri
 	if groupIDs == nil {
 		groupIDs = []string{}
 	}
-	pgRows, err := s.pool.Query(ctx, q, modelCode, string(capType), groupIDs)
+	pgRows, err := s.pool.Query(ctx, q, modelCodes, string(capType), groupIDs)
 	if err != nil {
 		return nil, fmt.Errorf("list routes for groups: %w", err)
 	}
@@ -185,7 +194,7 @@ func (s *RouteInspector) listRoutesForGroups(ctx context.Context, modelCode stri
 	for pgRows.Next() {
 		var r routeRow
 		if err := pgRows.Scan(
-			&r.RouteID,
+			&r.RouteID, &r.ModelCode,
 			&r.PriceBookID, &r.TenantMultiplier, &r.UpstreamModel, &r.CostPer1kTokens,
 			&r.AccountID, &r.AccountName, &r.BaseURL, &r.APIKeyCiphertext, &r.ExtraHeaders,
 			&r.APIFormat, &r.ConfigJSON,

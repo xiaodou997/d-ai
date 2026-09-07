@@ -34,11 +34,11 @@ func (r *fakeSettingRepo) GetSetting(_ context.Context, _ string) (json.RawMessa
 	return r.value, nil
 }
 
-func (r *fakeSettingRepo) UpsertSetting(_ context.Context, _ string, value json.RawMessage) error {
+func (r *fakeSettingRepo) UpsertVersionedSetting(_ context.Context, _ string, value json.RawMessage, _ int64) (json.RawMessage, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.value = value
-	return nil
+	return value, nil
 }
 
 type fakeModerationLogRepo struct {

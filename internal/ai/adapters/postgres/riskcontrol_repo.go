@@ -39,8 +39,7 @@ func pgTimestamptz(t time.Time) pgtype.Timestamptz {
 
 // RiskControlRepo implements riskcontrol.SettingRepository,
 // riskcontrol.LogRepository and riskcontrol.EventRepository on top of sqlc.
-// Config reads/writes reuse the generic ai_settings GetSetting/UpsertSetting
-// queries used by the pricing control plane.
+// Configuration writes allocate revisions atomically in ai_settings.
 type RiskControlRepo struct {
 	q *dbgen.Queries
 }
@@ -70,6 +69,16 @@ func (r *RiskControlRepo) GetSetting(ctx context.Context, key string) (json.RawM
 
 func (r *RiskControlRepo) UpsertSetting(ctx context.Context, key string, value json.RawMessage) error {
 	return r.q.UpsertSetting(ctx, dbgen.UpsertSettingParams{Key: key, Value: []byte(value)})
+}
+
+// UpsertVersionedSetting allocates a new revision under PostgreSQL's row lock,
+// including concurrent writes from different application instances.
+func (r *RiskControlRepo) UpsertVersionedSetting(ctx context.Context, key string, value json.RawMessage, expectedRevision int64) (json.RawMessage, error) {
+	saved, err := r.q.UpsertVersionedSetting(ctx, dbgen.UpsertVersionedSettingParams{Key: key, ConfigValue: value, ExpectedRevision: expectedRevision})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, domain.ErrConflict
+	}
+	return saved, err
 }
 
 // ---- content moderation logs ----

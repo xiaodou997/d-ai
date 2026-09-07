@@ -256,7 +256,7 @@ func TestEngineEnforcesInFlightCap(t *testing.T) {
 
 	ctx := context.Background()
 	for i := range 2 {
-		if _, err := e.Submit(ctx, SubmitRequest{Subject: testSubject(), Type: probeType, Body: []byte(`{}`)}); err != nil {
+		if _, err := e.Submit(ctx, SubmitRequest{Subject: testSubject(), Type: probeType, Body: []byte(`{}`), IdempotencyKey: fmt.Sprint(i)}); err != nil {
 			t.Fatalf("submit %d: %v", i, err)
 		}
 	}
@@ -267,6 +267,11 @@ func TestEngineEnforcesInFlightCap(t *testing.T) {
 	if got := AsError(err); got.Status != http.StatusTooManyRequests || got.Code != "too_many_tasks_in_flight" {
 		t.Fatalf("error = %+v, want 429 too_many_tasks_in_flight", got)
 	}
+	replay, err := e.Submit(ctx, SubmitRequest{Subject: testSubject(), Type: probeType, Body: []byte(`{}`), IdempotencyKey: "0"})
+	if err != nil || !replay.Duplicate {
+		t.Fatalf("replay at capacity = %+v, err=%v", replay, err)
+	}
+
 }
 
 func TestEngineIdempotentSubmitReturnsSameTask(t *testing.T) {

@@ -2,6 +2,7 @@ package serving
 
 import (
 	"context"
+	"go.uber.org/zap"
 
 	"xiaodou/dai/internal/ai/audit"
 	"xiaodou/dai/internal/ai/domain"
@@ -33,7 +34,13 @@ func (s *ContentModerationStep) Execute(ctx context.Context, req *Request) error
 		return nil
 	}
 	cfg, err := s.Checker.Config.Get(ctx)
-	if err != nil || (!cfg.Keyword.Enabled && !cfg.Provider.Enabled) {
+	if err != nil {
+		if s.Checker.Logger != nil {
+			s.Checker.Logger.Error("risk control configuration unavailable; moderation skipped", requestLogFields(req, zap.Error(err))...)
+		}
+		return nil
+	}
+	if !cfg.Keyword.Enabled && !cfg.Provider.Enabled {
 		return nil
 	}
 

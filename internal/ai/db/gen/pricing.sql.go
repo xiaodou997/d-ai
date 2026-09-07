@@ -466,3 +466,28 @@ func (q *Queries) UpsertSetting(ctx context.Context, arg UpsertSettingParams) er
 	_, err := q.db.Exec(ctx, upsertSetting, arg.Key, arg.Value)
 	return err
 }
+
+const upsertVersionedSetting = `-- name: UpsertVersionedSetting :one
+INSERT INTO ai_settings (key, value, updated_at)
+VALUES ($1, jsonb_set($2::jsonb, '{config_revision}', '1'::jsonb), now())
+ON CONFLICT (key) DO UPDATE SET
+  value = jsonb_set(EXCLUDED.value, '{config_revision}',
+    to_jsonb(COALESCE((ai_settings.value->>'config_revision')::bigint, 0) + 1)),
+  updated_at = now()
+WHERE COALESCE((ai_settings.value->>'config_revision')::bigint, 0) = $3::bigint
+RETURNING value
+`
+
+type UpsertVersionedSettingParams struct {
+	Key              string `json:"key"`
+	ConfigValue      []byte `json:"config_value"`
+	ExpectedRevision int64  `json:"expected_revision"`
+}
+
+// Allocate revisions while holding the conflicting row's database lock.
+func (q *Queries) UpsertVersionedSetting(ctx context.Context, arg UpsertVersionedSettingParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, upsertVersionedSetting, arg.Key, arg.ConfigValue, arg.ExpectedRevision)
+	var value []byte
+	err := row.Scan(&value)
+	return value, err
+}

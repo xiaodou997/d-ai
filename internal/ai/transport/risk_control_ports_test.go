@@ -33,9 +33,10 @@ func (s *riskControlConfigStoreStub) Get(context.Context) (domain.RiskControlCon
 	return s.config, nil
 }
 
-func (s *riskControlConfigStoreStub) Update(_ context.Context, config domain.RiskControlConfig) error {
+func (s *riskControlConfigStoreStub) Update(_ context.Context, config domain.RiskControlConfig) (domain.RiskControlConfig, error) {
+	config.ConfigRevision = s.config.ConfigRevision + 1
 	s.updated = config
-	return nil
+	return config, nil
 }
 
 type riskControlDetectorStub struct {
@@ -126,9 +127,15 @@ func TestRiskControlRoutesUsePorts(t *testing.T) {
 		t.Fatalf("config response = %#v", config)
 	}
 
-	updateBody := `{"enabled":true,"mode":"pre_block","keyword":{"enabled":false,"entries":[],"homoglyph_map_extra":{},"pinyin":{"enabled":false,"entries":[],"include_initials":false}},"provider":{"base_url":"https://moderation.example","api_key":"new-secret","model":"moderation-test","timeout_ms":1200},"thresholds":{},"sample_rate":1,"verdict_cache_ttl_seconds":600,"scope_group_ids":[],"violation_window_hours":24,"risk_event_threshold":3,"record_non_hits":false,"block_status_code":403,"block_message":"blocked"}`
+	updateBody := `{"enabled":true,"mode":"pre_block","keyword":{"enabled":false,"mode":"pre_block","entries":[],"homoglyph_map_extra":{},"pinyin":{"enabled":false,"entries":[],"include_initials":false}},"provider":{"enabled":false,"mode":"pre_block","base_url":"https://moderation.example","api_key":"new-secret","model":"moderation-test","timeout_ms":1200},"thresholds":{},"sample_rate":1,"verdict_cache_ttl_seconds":600,"scope_group_ids":[],"violation_window_hours":24,"risk_event_threshold":3,"record_non_hits":false,"block_status_code":403,"block_message":"blocked"}`
 	updateRecorder := performRiskControlRequest(router, http.MethodPut, "/api/v1/risk-control/config", updateBody)
 	requireRiskControlStatus(t, updateRecorder, http.StatusOK)
+	var saved riskControlConfigDTO
+	decodeRiskControlResponse(t, updateRecorder, &saved)
+	if saved.ConfigRevision != 8 {
+		t.Fatalf("saved revision = %d, want 8", saved.ConfigRevision)
+	}
+
 	if codec.encryptInput != "new-secret" || configStore.updated.Mode != domain.RiskControlModePreBlock || configStore.updated.Provider.APIKeyCiphertext != "encrypted-secret" {
 		t.Fatalf("updated config = %#v", configStore.updated)
 	}

@@ -46,12 +46,25 @@ func (c *WorkspaceChatCatalog) ListChatModels(ctx context.Context, owner workspa
 	if err != nil {
 		return nil, err
 	}
+	modelCodes := make([]string, 0, len(rows))
+	for _, row := range rows {
+		modelCodes = append(modelCodes, row.ModelCode)
+	}
+	routes, err := c.repo.routeInspector.listRoutesForModels(ctx, modelCodes, domain.CapabilityChat, groups)
+	if err != nil {
+		return nil, err
+	}
+	type modelKey struct{ group, model string }
+	eligible := make(map[modelKey][]routeRow)
+	for _, route := range routes {
+		if route.GroupID != nil {
+			key := modelKey{*route.GroupID, route.ModelCode}
+			eligible[key] = append(eligible[key], route)
+		}
+	}
 	out := make([]workspace.ChatModel, 0, len(rows))
 	for _, row := range rows {
-		protocols, err := c.repo.availableWorkspaceChatProtocols(ctx, row.ModelCode, []string{row.GroupID})
-		if err != nil {
-			return nil, err
-		}
+		protocols := workspaceChatProtocols(eligible[modelKey{row.GroupID, row.ModelCode}])
 		if len(protocols) == 0 {
 			continue
 		}
@@ -142,17 +155,24 @@ func workspaceBillingGroupLabel(groupName string, multiplier float64) string {
 }
 
 func (r *WorkspaceRepo) availableWorkspaceChatProtocols(ctx context.Context, modelCode string, groupIDs []string) ([]domain.UpstreamProtocol, error) {
+	rows, err := r.routeInspector.listRoutesForGroups(ctx, modelCode, domain.CapabilityChat, groupIDs)
+	if err != nil {
+		return nil, err
+	}
+	return workspaceChatProtocols(rows), nil
+}
+
+func workspaceChatProtocols(rows []routeRow) []domain.UpstreamProtocol {
 	out := make([]domain.UpstreamProtocol, 0, len(workspaceChatProtocolOrder))
 	for _, protocol := range workspaceChatProtocolOrder {
-		ok, err := r.routeInspector.ModelSupportsClientProtocolInGroups(ctx, modelCode, domain.CapabilityChat, groupIDs, protocol, true, false)
-		if err != nil {
-			return nil, err
-		}
-		if ok {
-			out = append(out, protocol)
+		for _, row := range rows {
+			if _, _, ok := chooseProviderProtocol(domain.CapabilityChat, protocol, candidateSupportedProtocols(row), row.GroupAllowConversion, true); ok {
+				out = append(out, protocol)
+				break
+			}
 		}
 	}
-	return out, nil
+	return out
 }
 
 func workspaceProtocolStrings(protocols []domain.UpstreamProtocol) []string {

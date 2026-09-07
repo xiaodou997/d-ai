@@ -3,6 +3,10 @@ package riskcontrol
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"sync"
 	"time"
 
@@ -18,11 +22,15 @@ const configCacheTTL = 15 * time.Second
 // defaultVerdictCacheCapacity is the L0 verdict cache size (entries).
 const defaultVerdictCacheCapacity = 10000
 
-// SettingRepository reads/writes the generic ai_settings key-value store.
-// Implemented directly by dbgen.Queries.GetSetting/UpsertSetting.
+var configReadFailures = promauto.NewCounterVec(prometheus.CounterOpts{
+	Name: "dai_risk_control_config_read_failures_total",
+	Help: "Risk control configuration failures, by storage or decode stage.",
+}, []string{"stage"})
+
+// SettingRepository owns configuration persistence and atomic revision allocation.
 type SettingRepository interface {
 	GetSetting(ctx context.Context, key string) (json.RawMessage, error)
-	UpsertSetting(ctx context.Context, key string, value json.RawMessage) error
+	UpsertVersionedSetting(ctx context.Context, key string, value json.RawMessage, expectedRevision int64) (json.RawMessage, error)
 }
 
 // ConfigService caches and serves the risk-control configuration. Every
@@ -31,9 +39,10 @@ type SettingRepository interface {
 type ConfigService struct {
 	repo SettingRepository
 
-	mu       sync.RWMutex
-	cached   *domain.RiskControlConfig
-	cachedAt time.Time
+	mu         sync.RWMutex
+	cached     *domain.RiskControlConfig
+	cachedAt   time.Time
+	generation uint64
 }
 
 func NewConfigService(repo SettingRepository) *ConfigService {
@@ -41,9 +50,8 @@ func NewConfigService(repo SettingRepository) *ConfigService {
 }
 
 // Get returns the current config, using the cached copy when fresh.
-// Falls back to a disabled default if ai_settings has no row yet (should
-// not happen post-migration, but keeps the pipeline fail-safe rather than
-// fail-open on a misconfigured/empty install).
+// Only a missing setting uses the disabled default. Dependency and decoding
+// failures remain errors so callers can apply an explicit failure policy.
 func (s *ConfigService) Get(ctx context.Context) (domain.RiskControlConfig, error) {
 	s.mu.RLock()
 	if s.cached != nil && time.Since(s.cachedAt) < configCacheTTL {
@@ -51,21 +59,29 @@ func (s *ConfigService) Get(ctx context.Context) (domain.RiskControlConfig, erro
 		s.mu.RUnlock()
 		return cfg, nil
 	}
+	generation := s.generation
 	s.mu.RUnlock()
 
 	raw, err := s.repo.GetSetting(ctx, domain.SettingRiskControlConfig)
+	if errors.Is(err, domain.ErrNotFound) {
+		return domain.RiskControlConfig{Mode: domain.RiskControlModeOff}, nil
+	}
 	if err != nil {
-		return domain.RiskControlConfig{Enabled: false, Mode: domain.RiskControlModeOff}, nil
+		configReadFailures.WithLabelValues("storage").Inc()
+		return domain.RiskControlConfig{}, fmt.Errorf("load risk control config: %w", err)
 	}
 	var cfg domain.RiskControlConfig
 	if err := json.Unmarshal(raw, &cfg); err != nil {
-		return domain.RiskControlConfig{Enabled: false, Mode: domain.RiskControlModeOff}, nil
+		configReadFailures.WithLabelValues("decode").Inc()
+		return domain.RiskControlConfig{}, fmt.Errorf("decode risk control config: %w", err)
 	}
 	backfillConfig(&cfg)
 
 	s.mu.Lock()
-	s.cached = &cfg
-	s.cachedAt = time.Now()
+	if generation == s.generation {
+		s.cached = &cfg
+		s.cachedAt = time.Now()
+	}
 	s.mu.Unlock()
 
 	out := cfg
@@ -75,31 +91,30 @@ func (s *ConfigService) Get(ctx context.Context) (domain.RiskControlConfig, erro
 // Update validates and persists a new config, then invalidates the cache
 // so the next Get() re-reads from Postgres. ConfigRevision is bumped
 // automatically to invalidate the L0 verdict cache.
-func (s *ConfigService) Update(ctx context.Context, cfg domain.RiskControlConfig) error {
+func (s *ConfigService) Update(ctx context.Context, cfg domain.RiskControlConfig) (domain.RiskControlConfig, error) {
 	if err := validateConfig(&cfg); err != nil {
-		return err
-	}
-
-	// Bump config_revision: read current revision and increment. If the
-	// stored config is missing/old, start at 1.
-	current, _ := s.Get(ctx)
-	if current.ConfigRevision > 0 {
-		cfg.ConfigRevision = current.ConfigRevision + 1
-	} else {
-		cfg.ConfigRevision = 1
+		return domain.RiskControlConfig{}, err
 	}
 
 	raw, err := json.Marshal(cfg)
 	if err != nil {
-		return err
+		return domain.RiskControlConfig{}, err
 	}
-	if err := s.repo.UpsertSetting(ctx, domain.SettingRiskControlConfig, raw); err != nil {
-		return err
+	saved, err := s.repo.UpsertVersionedSetting(ctx, domain.SettingRiskControlConfig, raw, cfg.ConfigRevision)
+	if err != nil && !errors.Is(err, domain.ErrConflict) {
+		return domain.RiskControlConfig{}, err
 	}
 	s.mu.Lock()
+	s.generation++
 	s.cached = nil
 	s.mu.Unlock()
-	return nil
+	if err != nil {
+		return domain.RiskControlConfig{}, err
+	}
+	if err := json.Unmarshal(saved, &cfg); err != nil {
+		return domain.RiskControlConfig{}, fmt.Errorf("decode saved risk control config: %w", err)
+	}
+	return cfg, nil
 }
 
 // backfillConfig applies default values for any missing/zero fields so

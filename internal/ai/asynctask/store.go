@@ -14,9 +14,9 @@ import (
 // the module's semantics, not an incidental detail of storing it: reading
 // "how does a claim work" should not require jumping packages.
 type store interface {
-	// insert writes a new pending task. When rec.IdempotencyKey is set and the
-	// (scope, key) pair already exists, it returns the existing row's id and
-	// inserted=false instead of creating a second task.
+	// insert checks the tenant cap and writes a pending task atomically.
+	// An existing (scope, key) returns inserted=false, including at capacity;
+	// callers resolve its identity and fingerprint with findByIdempotencyKey.
 	insert(ctx context.Context, rec insertRecord) (id string, inserted bool, err error)
 
 	// findByIdempotencyKey returns the existing row for a (scope, key) pair.
@@ -72,14 +72,15 @@ type store interface {
 
 // insertRecord is a submission ready to persist.
 type insertRecord struct {
-	Type        string
-	SubjectRef  SubjectRef
-	ModelCode   string
-	Input       json.RawMessage
-	Metadata    json.RawMessage
-	WebhookURL  string
-	MaxAttempts int
-	ExpiresAt   time.Time
+	Type                 string
+	SubjectRef           SubjectRef
+	ModelCode            string
+	Input                json.RawMessage
+	Metadata             json.RawMessage
+	WebhookURL           string
+	MaxAttempts          int
+	MaxInFlightPerTenant int
+	ExpiresAt            time.Time
 
 	IdempotencyKey         string
 	IdempotencyScope       string

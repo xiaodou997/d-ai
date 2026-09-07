@@ -141,6 +141,17 @@ ON CONFLICT (key) DO UPDATE SET
   value      = EXCLUDED.value,
   updated_at = now();
 
+-- name: UpsertVersionedSetting :one
+-- Allocate revisions while holding the conflicting row's database lock.
+INSERT INTO ai_settings (key, value, updated_at)
+VALUES ($1, jsonb_set(sqlc.arg(config_value)::jsonb, '{config_revision}', '1'::jsonb), now())
+ON CONFLICT (key) DO UPDATE SET
+  value = jsonb_set(EXCLUDED.value, '{config_revision}',
+    to_jsonb(COALESCE((ai_settings.value->>'config_revision')::bigint, 0) + 1)),
+  updated_at = now()
+WHERE COALESCE((ai_settings.value->>'config_revision')::bigint, 0) = sqlc.arg(expected_revision)::bigint
+RETURNING value;
+
 -- ----------------------------------------------------------------------------
 -- 分组零售定价：ai_groups.retail_price_book_id + default_user_multiplier；
 -- ai_user_groups.user_multiplier_override 可直接覆盖分组默认倍率；关系存在即授权。

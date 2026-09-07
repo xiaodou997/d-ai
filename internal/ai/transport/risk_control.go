@@ -246,7 +246,8 @@ func registerRiskControl(api huma.API, d RiskControlHTTPDeps) {
 		if err != nil {
 			return nil, err
 		}
-		if err := d.RiskControlConfig.Update(ctx, cfg); err != nil {
+		cfg, err = d.RiskControlConfig.Update(ctx, cfg)
+		if err != nil {
 			return nil, mapServiceError(err)
 		}
 		out := &riskControlConfigOutput{Body: riskControlConfigToDTO(cfg)}
@@ -439,9 +440,10 @@ func keywordConfigToDTO(kc domain.KeywordConfig) keywordConfigDTO {
 // explicitly set (nil = keep, "" = clear, non-empty = re-encrypt).
 func riskControlConfigFromWriteDTO(in riskControlConfigWriteDTO, current domain.RiskControlConfig, providerSecrets ProviderSecretCodec) (domain.RiskControlConfig, error) {
 	cfg := domain.RiskControlConfig{
-		Enabled: in.Enabled,
-		Mode:    in.Mode,
-		Keyword: keywordConfigFromDTO(in.Keyword),
+		ConfigRevision: current.ConfigRevision,
+		Enabled:        in.Enabled,
+		Mode:           in.Mode,
+		Keyword:        keywordConfigFromDTO(in.Keyword),
 		Provider: domain.RiskControlProviderConfig{
 			Enabled:          in.Provider.Enabled,
 			Mode:             in.Provider.Mode,

@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -193,5 +194,94 @@ func TestRiskControlRepo_EventInsertListResolve(t *testing.T) {
 
 	if _, err := repo.ResolveEvent(ctx, "00000000-0000-0000-0000-000000000000", domain.RiskEventStatusResolved, "admin-1", ""); err != domain.ErrNotFound {
 		t.Fatalf("resolve missing event: err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestRiskControlRevisionConcurrentWriters(t *testing.T) {
+	ctx := context.Background()
+	const writers = 12
+	pool, cleanup, err := testsupport.OpenAsyncTaskTestPool(ctx, testsupport.AsyncTaskPoolOptions{MaxConns: writers})
+	if err != nil {
+		t.Skipf("database unavailable: %v", err)
+	}
+	defer func() { _ = cleanup(ctx) }()
+	const key = "concurrent-risk-config"
+	start := make(chan struct{})
+	results := make(chan error, writers)
+	revisions := make(chan int64, writers)
+	for range writers {
+		go func() {
+			<-start
+			repo := NewRiskControlRepo(dbgen.New(pool))
+			var raw json.RawMessage
+			var err error
+			var expected int64
+			for attempt := 0; attempt <= writers; attempt++ {
+				raw, err = repo.UpsertVersionedSetting(ctx, key, []byte(`{"mode":"off","config_revision":999}`), expected)
+				if !errors.Is(err, domain.ErrConflict) {
+					break
+				}
+				current, readErr := repo.GetSetting(ctx, key)
+				if readErr != nil {
+					err = readErr
+					break
+				}
+				var cfg domain.RiskControlConfig
+				if readErr := json.Unmarshal(current, &cfg); readErr != nil {
+					err = readErr
+					break
+				}
+				expected = cfg.ConfigRevision
+			}
+			if err == nil {
+				var cfg domain.RiskControlConfig
+				err = json.Unmarshal(raw, &cfg)
+				revisions <- cfg.ConfigRevision
+			}
+			results <- err
+		}()
+	}
+	close(start)
+	for range writers {
+		if err := <-results; err != nil {
+			t.Fatal(err)
+		}
+	}
+	seen := map[int64]bool{}
+	for range writers {
+		seen[<-revisions] = true
+	}
+	for revision := int64(1); revision <= writers; revision++ {
+		if !seen[revision] {
+			t.Fatalf("missing revision %d: %v", revision, seen)
+		}
+	}
+}
+
+func TestRiskControlRevisionRejectsStaleWrite(t *testing.T) {
+	ctx := context.Background()
+	pool, cleanup, err := testsupport.OpenAsyncTaskTestPool(ctx, testsupport.AsyncTaskPoolOptions{})
+	if err != nil {
+		t.Skipf("database unavailable: %v", err)
+	}
+	defer func() { _ = cleanup(ctx) }()
+	repo := NewRiskControlRepo(dbgen.New(pool))
+	const key = "risk-config-cas"
+	if _, err := repo.UpsertVersionedSetting(ctx, key, []byte(`{"mode":"observe"}`), 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.UpsertVersionedSetting(ctx, key, []byte(`{"mode":"off"}`), 0); !errors.Is(err, domain.ErrConflict) {
+		t.Fatalf("stale write error = %v", err)
+	}
+	raw, err := repo.GetSetting(ctx, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg domain.RiskControlConfig
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Mode != "observe" || cfg.ConfigRevision != 1 {
+		t.Fatalf("stale write changed config: %+v", cfg)
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -32,22 +33,35 @@ func (s *postgresStore) insert(ctx context.Context, rec insertRecord) (string, b
 		expiresAt = rec.ExpiresAt
 	}
 
+	// Use a transaction-scoped tenant lock: a second statement takes a fresh
+	// READ COMMITTED snapshot after a concurrent submit commits. A lock inside
+	// the INSERT's CTE alone would leave its count using the pre-lock snapshot.
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+	if err != nil {
+		return "", false, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, "asynctask:submit:"+rec.SubjectRef.TenantID); err != nil {
+		return "", false, fmt.Errorf("lock task admission: %w", err)
+	}
+
 	// ON CONFLICT DO NOTHING makes a concurrent duplicate submit lose the race
 	// cleanly instead of returning a unique-violation the caller has to decode.
 	// The partial unique index only covers non-null idempotency keys, so tasks
 	// without one never conflict.
-	err := s.pool.QueryRow(ctx, `
+	err = tx.QueryRow(ctx, `
 			INSERT INTO ai_async_tasks (
 			  task_type, auth_method, tenant_id, user_id, api_key_id,
 			  model_code, input_payload, metadata, webhook_url,
 			  idempotency_key, idempotency_scope, idempotency_fingerprint,
 			  max_attempts, status, available_at, expires_at
-			) VALUES (
+				) SELECT
 			  $1, $2, $3, NULLIF($4,''), NULLIF($5,'')::uuid,
 			  $6, $7, $8, NULLIF($9,''),
 			  NULLIF($10,''), NULLIF($11,''), $12,
 			  $13, 'pending', now(), $14
-		)
+			WHERE $15::int <= 0 OR (SELECT count(*) FROM ai_async_tasks
+			  WHERE tenant_id = $3 AND status IN ('pending', 'running')) < $15
 		ON CONFLICT (idempotency_scope, idempotency_key)
 		  WHERE idempotency_key IS NOT NULL
 		DO NOTHING
@@ -57,15 +71,26 @@ func (s *postgresStore) insert(ctx context.Context, rec insertRecord) (string, b
 		rec.SubjectRef.UserID, rec.SubjectRef.APIKeyID,
 		rec.ModelCode, []byte(rec.Input), nullableJSON(rec.Metadata), rec.WebhookURL,
 		rec.IdempotencyKey, rec.IdempotencyScope, rec.IdempotencyFingerprint,
-		rec.MaxAttempts, expiresAt,
+		rec.MaxAttempts, expiresAt, rec.MaxInFlightPerTenant,
 	).Scan(&id)
 
 	if errors.Is(err, pgx.ErrNoRows) {
-		// DO NOTHING fired: an identical key already exists.
-		return "", false, nil
+		// A replay is valid even when the tenant is now at capacity.
+		var duplicate bool
+		if lookupErr := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM ai_async_tasks WHERE idempotency_scope = $1 AND idempotency_key = $2)`, rec.IdempotencyScope, rec.IdempotencyKey).Scan(&duplicate); lookupErr != nil {
+			return "", false, lookupErr
+		}
+		if duplicate {
+			return "", false, nil
+		}
+		return "", false, Errorf(http.StatusTooManyRequests, "too_many_tasks_in_flight",
+			"at most %d tasks may be pending or running at once", rec.MaxInFlightPerTenant)
 	}
 	if err != nil {
 		return "", false, fmt.Errorf("insert async task: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return "", false, err
 	}
 	return id, true, nil
 }

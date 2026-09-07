@@ -30,7 +30,7 @@ type Config struct {
 	LeaseTTL time.Duration
 
 	// MaxInFlightPerTenant caps a tenant's pending+running tasks. It is enforced
-	// twice: at submit (429) and in the claim query (fairness).
+	// atomically with insertion (429) and in the claim query (fairness).
 	MaxInFlightPerTenant int
 
 	// Retention is the default task TTL when neither the registration nor the

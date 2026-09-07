@@ -857,3 +857,56 @@ func TestCountInFlightIgnoresTerminalTasks(t *testing.T) {
 		t.Fatalf("in-flight after completion = %d, want 1", n)
 	}
 }
+
+func TestStoreConcurrentSubmissionCapAndReplay(t *testing.T) {
+	const writers, cap = 12, 3
+	store, pool := openStore(t, writers)
+	ctx := context.Background()
+	start := make(chan struct{})
+	results := make(chan error, writers)
+	records := make(chan insertRecord, writers)
+	for i := range writers {
+		go func() {
+			<-start
+			rec := insertRecord{
+				Type: probeType, SubjectRef: SubjectRef{AuthMethod: identity.AuthMethodAPIKey, TenantID: "tenant-cap"},
+				ModelCode: "model", Input: []byte(`{}`), MaxAttempts: 1, MaxInFlightPerTenant: cap,
+				IdempotencyScope: "tenant-cap", IdempotencyKey: fmt.Sprint(i),
+			}
+			// Independent stores represent application replicas sharing PostgreSQL.
+			_, inserted, err := newPostgresStore(pool).insert(ctx, rec)
+			if inserted {
+				records <- rec
+			}
+			results <- err
+		}()
+	}
+	close(start)
+	accepted := 0
+	for range writers {
+		err := <-results
+		if err == nil {
+			accepted++
+			continue
+		}
+		if AsError(err).Code != "too_many_tasks_in_flight" {
+			t.Fatal(err)
+		}
+	}
+	if accepted != cap {
+		t.Fatalf("accepted = %d, want %d", accepted, cap)
+	}
+	replay := <-records
+	if _, inserted, err := store.insert(ctx, replay); err != nil || inserted {
+		t.Fatalf("replay at capacity: inserted=%v err=%v", inserted, err)
+	}
+	n, err := store.countInFlight(ctx, "tenant-cap")
+	if err != nil || n != cap {
+		t.Fatalf("in flight = %d, err=%v", n, err)
+	}
+	replay.SubjectRef.TenantID = "other-tenant"
+	replay.IdempotencyScope = "other-tenant"
+	if _, inserted, err := store.insert(ctx, replay); err != nil || !inserted {
+		t.Fatalf("other tenant affected by cap: inserted=%v err=%v", inserted, err)
+	}
+}

@@ -3,6 +3,8 @@ package postgres
 import (
 	"context"
 	"errors"
+	"fmt"
+	"github.com/google/uuid"
 
 	"testing"
 
@@ -133,5 +135,55 @@ func assertWorkspaceRowCount(t *testing.T, ctx context.Context, pool *pgxpool.Po
 	}
 	if got != want {
 		t.Fatalf("%s rows for session %s = %d, want %d", table, sessionID, got, want)
+	}
+}
+
+func TestWorkspaceChatCatalogBatchPreservesGroupProtocolIsolation(t *testing.T) {
+	pool, ctx := openWorkspaceRepoTestPool(t)
+	book := uuid.NewString()
+	if _, err := pool.Exec(ctx, `INSERT INTO ai_price_book_entries
+ (price_book_id, model_code, capability_type, token_price_tiers)
+ VALUES ($1::uuid, 'shared-model', 'chat', '[{"input_per_token":0.01,"output_per_token":0.02}]')`, book); err != nil {
+		t.Fatal(err)
+	}
+	expected := map[string]string{}
+	protocols := []string{string(domain.ProtocolOpenAIChat), string(domain.ProtocolAnthropicMessages), string(domain.ProtocolGeminiGenerate)}
+	for i, protocol := range protocols {
+		group, account := uuid.NewString(), uuid.NewString()
+		tenant := "tenant-1"
+		if i == 2 {
+			tenant = "tenant-2"
+		} else {
+			expected[group] = protocol
+		}
+		statements := []struct {
+			sql  string
+			args []any
+		}{
+			{`INSERT INTO ai_groups (id, tenant_id, name, retail_price_book_id, allow_protocol_conversion) VALUES ($1::uuid, $2, $3, $4::uuid, false)`, []any{group, tenant, fmt.Sprint(i), book}},
+			{`INSERT INTO ai_upstream_accounts (id, name, tenant_display_name, api_key_ciphertext, tenant_access_mode, price_book_id, status) VALUES ($1::uuid, $2, $2, 'x', 'public', $3::uuid, 'active')`, []any{account, fmt.Sprint(i), book}},
+			{`INSERT INTO ai_upstream_account_endpoints (account_id, api_format, base_url) VALUES ($1::uuid, $2, 'https://example.test')`, []any{account, protocol}},
+			{`INSERT INTO ai_group_targets (group_id, target_kind, target_id) VALUES ($1::uuid, 'direct_upstream', $2::uuid)`, []any{group, account}},
+			{`INSERT INTO ai_upstream_models (upstream_kind, upstream_id, model_code, capability_type, upstream_model_name) VALUES ('direct_upstream', $1::uuid, 'shared-model', 'chat', 'upstream-model')`, []any{account}},
+		}
+		for _, statement := range statements {
+			if _, err := pool.Exec(ctx, statement.sql, statement.args...); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	repo := NewWorkspaceRepo(pool, NewGroupAccessReader(pool), NewRouteInspector(pool))
+	models, err := NewWorkspaceChatCatalog(repo).ListChatModels(ctx, workspace.Owner{Scope: identity.ScopeTenant, TenantID: "tenant-1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(models) != len(expected) {
+		t.Fatalf("models = %+v", models)
+	}
+	for _, model := range models {
+		protocol, ok := expected[model.GroupID]
+		if !ok || len(model.AvailableProtocols) != 1 || model.AvailableProtocols[0] != protocol || model.DefaultProtocol != protocol {
+			t.Fatalf("protocols crossed group boundary: %+v", model)
+		}
 	}
 }

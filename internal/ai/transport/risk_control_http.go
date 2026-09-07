@@ -45,7 +45,7 @@ type PromptAuditRuntimeReader interface {
 // RiskControlConfigStore owns the mutable moderation configuration.
 type RiskControlConfigStore interface {
 	Get(ctx context.Context) (domain.RiskControlConfig, error)
-	Update(ctx context.Context, config domain.RiskControlConfig) error
+	Update(ctx context.Context, config domain.RiskControlConfig) (domain.RiskControlConfig, error)
 }
 
 // RiskControlDetector executes a non-persisting moderation check for the
