@@ -12,8 +12,8 @@ withDefaults(
 
 <template>
   <span class="usage-latency-cell mono">
-    <span class="usage-latency-cell__main">{{ formatMs(latencyMs) }}</span>
-    <span v-if="firstTokenMs" class="usage-latency-cell__first">首字节 {{ formatMs(firstTokenMs) }}</span>
+    <span class="usage-latency-cell__first">首字 {{ formatMs(firstTokenMs) }}</span>
+    <span class="usage-latency-cell__total">总延迟 {{ formatMs(latencyMs) }}</span>
   </span>
 </template>
 
@@ -25,14 +25,17 @@ withDefaults(
   line-height: 1.4;
 }
 
-.usage-latency-cell__main {
-  color: var(--ds-ink);
-  font-size: 12px;
+.usage-latency-cell__first {
+  color: var(--ds-info);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
-.usage-latency-cell__first {
-  color: var(--ds-faint);
-  font-size: 11px;
+.usage-latency-cell__total {
+  color: var(--ds-ink);
+  font-size: 12px;
+  font-weight: 700;
   white-space: nowrap;
 }
 

@@ -18,9 +18,9 @@ const props = withDefaults(
 
 const extraParts = computed(() => {
   const parts: string[] = [];
-  if (props.cacheRead) parts.push(`缓存读 ${formatTokenCount(props.cacheRead)}`);
-  if (props.cacheWrite) parts.push(`缓存写 ${formatTokenCount(props.cacheWrite)}`);
-  if (props.reasoning) parts.push(`推理 ${formatTokenCount(props.reasoning)}`);
+  if (props.cacheRead) parts.push(`缓存读 ${formatCompactToken(props.cacheRead)}`);
+  if (props.cacheWrite) parts.push(`缓存写 ${formatCompactToken(props.cacheWrite)}`);
+  if (props.reasoning) parts.push(`推理 ${formatCompactToken(props.reasoning)}`);
   return parts;
 });
 

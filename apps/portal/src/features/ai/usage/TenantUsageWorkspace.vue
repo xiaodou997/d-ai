@@ -12,7 +12,7 @@ import { Refresh } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 import { ScrollText } from "lucide-vue-next";
 import { PortalMetricGrid, PortalPagePanel } from "@/platform";
-import { formatNumber, formatUSD } from "@/platform/ai/usage";
+import { formatCompactToken, formatUSD2 } from "@/platform/ai/usage";
 
 import { tenantUsageApi } from "./api";
 import TenantUsageDetailDrawer from "./components/TenantUsageDetailDrawer.vue";
@@ -34,7 +34,6 @@ const {
   search,
   selectedRecord,
   stats,
-  successRate,
   total,
   users
 } = useTenantUsage({ api: tenantUsageApi, onError: (message) => ElMessage.error(message) });
@@ -46,12 +45,11 @@ const metrics = computed(() => [
     value: stats.value.total_requests.toLocaleString(),
     hint: `${stats.value.success_count.toLocaleString()} 成功 / ${stats.value.failed_count.toLocaleString()} 失败`
   },
-  { label: "成功率", value: successRate.value, hint: "当前过滤范围" },
-  { label: "总 Token", value: formatNumber(stats.value.total_tokens), hint: "当前过滤范围" },
-  { label: "平台应收", value: formatUSD(stats.value.total_tenant_payable_usd), hint: "本租户应付平台" },
+  { label: "总 Token", value: formatCompactToken(stats.value.total_tokens), hint: "输入、输出和缓存合计" },
+  { label: "平台应收", value: formatUSD2(stats.value.total_tenant_payable_usd), hint: "本租户应付平台" },
   {
     label: "用户扣款",
-    value: formatUSD(stats.value.total_user_charged_usd),
+    value: formatUSD2(stats.value.total_user_charged_usd),
     hint: `终端用户消费 · 平均总耗时 ${Math.round(stats.value.avg_request_total_ms)} ms`
   }
 ]);

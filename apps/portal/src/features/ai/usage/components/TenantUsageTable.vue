@@ -11,7 +11,8 @@ import {
   UsageLatencyCell,
   UsageTag,
   UsageTokenCell,
-  formatUSD,
+  formatMaskedApiKey,
+  formatUSD2,
   formatUsageTimestamp
 } from "@/platform/ai/usage";
 import { DsPagination, DsTable, type DsTableColumn } from "@/shared/ui";
@@ -33,10 +34,14 @@ defineEmits<{
   select: [row: TenantUsageRow];
 }>();
 
-// 用户列仅在租户全量记录场景展示(用户管理-使用记录面板传 showUser=false)
+// 租户全量记录展示调用用户；出现终端用户记录时改用更明确的“终端用户”列。
+// 用户管理-使用记录面板传 showUser=false，避免重复展示当前已选用户。
+const hasTerminalUser = computed(() => props.showUser !== false && props.rows.some((row) => Boolean(row.user_id)));
+
 const columns = computed<DsTableColumn[]>(() => [
   { key: "created_at", title: "时间", width: 140 },
-  ...(props.showUser !== false ? [{ key: "user", title: "用户", width: 130 }] : []),
+  ...(props.showUser !== false && !hasTerminalUser.value ? [{ key: "user", title: "用户", width: 130 }] : []),
+  ...(hasTerminalUser.value ? [{ key: "terminal_user", title: "终端用户", width: 130 }] : []),
   { key: "api_key", title: "API 密钥", width: 160 },
   { key: "model", title: "模型" },
   { key: "group", title: "分组/倍率", width: 160 },
@@ -54,6 +59,14 @@ function targetLabel(row: TenantUsageRow) {
 
 function groupLabel(row: TenantUsageRow) {
   return row.billing_group_label_snapshot || row.group_name_snapshot || row.group_id || "-";
+}
+
+function terminalUserLabel(row: TenantUsageRow) {
+  return row.user_id ? row.username || row.userLabel || row.user_id : "-";
+}
+
+function apiKeyFallback(row: TenantUsageRow) {
+  return row.api_key_id ? `ID ${row.api_key_id.slice(0, 8)}…` : "-";
 }
 </script>
 
@@ -76,11 +89,15 @@ function groupLabel(row: TenantUsageRow) {
         <PortalIdentityCell :label="row.userLabel" />
       </template>
 
+      <template #cell-terminal_user="{ row }">
+        <PortalIdentityCell :label="terminalUserLabel(row)" />
+      </template>
+
       <template #cell-api_key="{ row }">
         <div v-if="row.api_key_id" class="api-key-cell">
           <span class="api-key-cell__name">{{ row.api_key_name || "未命名密钥" }}</span>
           <span class="api-key-cell__meta">
-            {{ row.api_key_last_four ? `末四位 ${row.api_key_last_four}` : `ID ${row.api_key_id.slice(0, 8)}…` }}
+            {{ row.api_key_last_four ? formatMaskedApiKey(row.api_key_last_four) : apiKeyFallback(row) }}
           </span>
         </div>
         <span v-else class="muted-cell">-</span>
@@ -112,21 +129,20 @@ function groupLabel(row: TenantUsageRow) {
           :completion="row.completion_tokens"
           :cache-read="row.cache_read_tokens"
           :cache-write="row.cache_write_tokens"
+          :reasoning="row.reasoning_tokens"
         />
       </template>
 
       <template #cell-cost="{ row }">
         <UsageCostCell
           :amount-u-s-d="row.user_charged_usd"
-          :secondary="[
-            { label: '租户成本', value: formatUSD(row.tenant_payable_usd) },
-            { label: '零售应收', value: formatUSD(row.user_payable_usd) }
-          ]"
+          primary-label="用户扣费"
+          :secondary="[{ label: '成本', value: formatUSD2(row.tenant_payable_usd) }]"
         />
       </template>
 
       <template #cell-latency="{ row }">
-        <UsageLatencyCell :latency-ms="row.latency_ms" :first-token-ms="row.first_token_latency_ms" />
+        <UsageLatencyCell :latency-ms="row.request_total_ms ?? row.latency_ms" :first-token-ms="row.first_token_latency_ms" />
       </template>
 
       <template #cell-actions="{ row }">

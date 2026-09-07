@@ -4,6 +4,7 @@ import type {
   UsageSummaryRowDTO,
   UsageUnitSummaryRowDTO
 } from "./model";
+import { formatCompactToken as formatPlatformCompactToken } from "@/platform/ai/usage";
 
 export interface UsageSummaryTotals {
   requestCount: number;
@@ -82,9 +83,7 @@ export function formatUsageTime(value: number | string | null | undefined): { ti
 }
 
 export function formatCompactToken(value: number | null | undefined): string {
-  const amount = Number(value) || 0;
-  if (Math.abs(amount) < 1000) return String(Math.round(amount));
-  return `${(amount / 1000).toFixed(2)}K`;
+  return formatPlatformCompactToken(value);
 }
 
 export function formatShortDate(value: string): string {

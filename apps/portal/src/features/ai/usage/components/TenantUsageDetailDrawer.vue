@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import {
   UsageTag,
+  formatMaskedApiKey,
   formatMs,
   formatTokenCount,
   formatUSD,
@@ -56,7 +57,7 @@ function apiKeyLabel(row: TenantUsageRow) {
           <dt>Request ID</dt><dd class="mono">{{ row.request_id }}</dd>
           <dt>时间</dt><dd>{{ row.created_at ? new Date(row.created_at).toLocaleString("zh-CN") : "-" }}</dd>
           <dt>用户</dt><dd>{{ row.userLabel }}</dd>
-          <dt>API 密钥</dt><dd>{{ apiKeyLabel(row) }}<template v-if="row.api_key_last_four">（末四位 {{ row.api_key_last_four }}）</template></dd>
+          <dt>API 密钥</dt><dd>{{ apiKeyLabel(row) }}<template v-if="row.api_key_last_four">（{{ formatMaskedApiKey(row.api_key_last_four) }}）</template></dd>
           <dt>模型</dt><dd>{{ targetLabel(row) }}</dd>
           <dt>请求分组</dt><dd>{{ groupLabel(row) }}</dd>
           <dt>最终倍率</dt><dd class="mono">{{ multiplierLabel(row.effective_user_multiplier_snapshot) }}</dd>
