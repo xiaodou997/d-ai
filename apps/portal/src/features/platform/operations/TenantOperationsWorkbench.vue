@@ -1,8 +1,8 @@
 <!--
-  租户经营与结算驾驶舱。
+  租户经营分析驾驶舱。
 
   页面不再把财务理解成几张孤立的金额卡，而是按租户每天真正要做的判断组织信息：
-  1. 本期收入是否覆盖平台服务成本；
+  1. 本期消耗与 D-AI 可识别收入分别是多少；
   2. 统一额度还能支撑多久，是否有透支或即将到期额度；
   3. 哪些用户需要补充余额或关注消费；
   4. 成本集中在哪些模型、来源和最近账务动作。
@@ -107,14 +107,6 @@ const platformCost = computed<number | null>(() => {
 
 const topupIncome = computed(() => Number(overview.value.settlementIncomeMicroUsd) || 0);
 const userBalancePool = computed(() => Number(overview.value.userTotalBalanceUsd) || 0);
-const grossProfit = computed<number | null>(() =>
-  platformCost.value === null ? null : userRevenue.value - platformCost.value
-);
-const grossMargin = computed<number | null>(() => {
-  if (grossProfit.value === null || userRevenue.value <= 0) return null;
-  return (grossProfit.value / userRevenue.value) * 100;
-});
-
 const totalRequests = computed(() => Number(summary.value?.total_requests) || 0);
 const successfulRequests = computed(() => Number(summary.value?.successful_requests) || 0);
 const failedRequests = computed(() => Number(summary.value?.failed_requests) || 0);
@@ -352,17 +344,6 @@ const flowRows = computed<FlowRow[]>(() => [
     tone: "expense",
     icon: TrendingDown
   },
-  {
-    key: "profit",
-    label: "经营毛利（估算）",
-    detail: "用户实收减平台服务成本",
-    value:
-      dashboard.summaryLoading.value || grossProfit.value === null
-        ? "—"
-        : signedMoney(grossProfit.value),
-    tone: grossProfit.value !== null && grossProfit.value < 0 ? "expense" : "neutral",
-    icon: grossProfit.value !== null && grossProfit.value >= 0 ? TrendingUp : TrendingDown
-  }
 ]);
 
 const financeStatus = computed<{ label: string; tone: TagTone }>(() => {
@@ -374,42 +355,30 @@ const financeStatus = computed<{ label: string; tone: TagTone }>(() => {
     return { label: "暂无实收", tone: "info" };
   }
   if (balance.value.outstandingDebtMicroUsd > 0) return { label: "存在透支", tone: "danger" };
-  if (grossProfit.value !== null && grossProfit.value < 0) return { label: "需要关注利润", tone: "warning" };
-  if (grossProfit.value !== null) return { label: "经营正常", tone: "positive" };
+  if (platformCost.value !== null && platformCost.value > 0 && userRevenue.value <= 0) return { label: "存在未归因消耗", tone: "warning" };
+  if (userRevenue.value > 0) return { label: "收入已记录", tone: "positive" };
   return { label: "数据待完善", tone: "neutral" };
 });
 
 const headline = computed(() => {
   if (dashboard.loading.value) return "正在生成本期经营结论";
-  if (grossProfit.value === null) return "先把经营数据接起来";
   if (summary.value && totalRequests.value === 0 && userRevenue.value === 0 && platformCost.value === 0) {
     return "本期暂无已结算用量";
   }
-  if (summary.value && totalRequests.value > 0 && userRevenue.value === 0 && platformCost.value === 0) {
-    return "本期有调用，但尚未形成用户实收";
-  }
-  if (userRevenue.value <= 0 && platformCost.value !== null && platformCost.value > 0) return "本期已有成本，但还没有形成用户实收";
-  if (grossProfit.value < 0) return "本期服务成本暂时高于用户实收";
-  if (grossMargin.value !== null && grossMargin.value < 20) return "收入已覆盖成本，但利润空间偏薄";
-  return "本期用户收入已覆盖平台服务成本";
+  if (platformCost.value !== null && platformCost.value > 0 && userRevenue.value <= 0) return "本期有平台消耗，但暂无 D-AI 可归因收入";
+  if (userRevenue.value > 0) return "本期已记录 D-AI 可归因收入";
+  return "本期消耗与收入数据待完善";
 });
 
 const headlineDetail = computed(() => {
   if (dashboard.loading.value) return "正在汇总账户、结算、用户余额和 AI 用量数据。";
-  if (grossProfit.value === null) return "结算概览暂不可用，先检查 AI 用量服务或稍后刷新。";
   if (summary.value && totalRequests.value === 0 && userRevenue.value === 0 && platformCost.value === 0) {
     return `${rangeLabel.value}暂未产生已结算 AI 用量；可以先检查模型分组、API 密钥和用户引导是否已配置。`;
   }
-  if (summary.value && totalRequests.value > 0 && userRevenue.value === 0 && platformCost.value === 0) {
-    return `本期产生 ${formatCount(totalRequests.value)} 次请求，但用户实收为 $0；请确认是否由订阅覆盖或租户自有 API key 发起。`;
+  if (platformCost.value !== null && platformCost.value > 0 && userRevenue.value <= 0) {
+    return `本期平台服务成本 ${formatUSD(platformCost.value)}，D-AI 可归因收入为 ${formatUSD(userRevenue.value)}；外部 API 或租户自有平台产生的收入不在本系统统计。`;
   }
-  if (userRevenue.value <= 0 && platformCost.value !== null && platformCost.value > 0) {
-    return `平台服务成本 ${formatUSD(platformCost.value)}，用户实收为 ${formatUSD(userRevenue.value)}；建议检查定价、倍率和订阅覆盖流量。`;
-  }
-  if (grossProfit.value < 0) {
-    return `本期经营毛利为 ${signedMoney(grossProfit.value)}；先定位高成本模型，再确认零售价是否覆盖平台结算价。`;
-  }
-  return `本期经营毛利 ${signedMoney(grossProfit.value)}，毛利率 ${grossMargin.value === null ? "—" : formatPercent(grossMargin.value)}；继续关注用户余额和服务额度的消耗速度。`;
+  return `本期记录 D-AI 可归因收入 ${formatUSD(userRevenue.value)}、平台服务成本 ${formatUSD(platformCost.value)}；请结合外部平台账务判断整体经营结果。`;
 });
 
 const primaryAction = computed(() => {
@@ -634,7 +603,7 @@ function handleRangeChange(rangeId: string) {
     <PortalPagePanel
       fill
       :icon="Banknote"
-      :breadcrumbs="[{ label: '概览' }, { label: '经营与结算' }]"
+      :breadcrumbs="[{ label: '概览' }, { label: '经营分析' }]"
       description="把收入、平台成本、用户余额与账务风险放在同一个租户经营视图里。"
     >
       <template #actions>
@@ -642,7 +611,7 @@ function handleRangeChange(rangeId: string) {
           :model-value="dashboard.selectedRangeId.value"
           :options="WORKBENCH_RANGE_OPTIONS"
           :loading="dashboard.loading.value"
-          aria-label="经营与结算时间范围"
+          aria-label="经营分析时间范围"
           @update:model-value="handleRangeChange"
         />
         <DsButton variant="ghost" size="sm" @click="goTo('/tenant/account?tab=ledger')">
@@ -667,14 +636,12 @@ function handleRangeChange(rangeId: string) {
             <p class="finance-hero__detail">{{ headlineDetail }}</p>
             <div class="finance-hero__numbers">
               <div class="hero-number">
-                <span>经营毛利（估算）</span>
-                <strong :class="grossProfit !== null && grossProfit < 0 ? 'amount-negative' : 'amount-positive'">
-                  {{ grossProfit === null || dashboard.summaryLoading.value ? "—" : signedMoney(grossProfit) }}
-                </strong>
+                <span>D-AI 可归因收入</span>
+                <strong class="amount-positive">{{ dashboard.summaryLoading.value ? "—" : formatUSD(userRevenue) }}</strong>
               </div>
               <div class="hero-number">
-                <span>毛利率</span>
-                <strong>{{ dashboard.summaryLoading.value ? "—" : formatPercent(grossMargin) }}</strong>
+                <span>平台服务成本</span>
+                <strong class="amount-negative">{{ dashboard.summaryLoading.value || platformCost === null ? "—" : formatUSD(platformCost) }}</strong>
               </div>
               <div class="hero-number">
                 <span>本期请求</span>
@@ -705,7 +672,7 @@ function handleRangeChange(rangeId: string) {
           <div class="section-heading">
             <div>
               <span class="section-heading__eyebrow">MONEY IN MOTION</span>
-              <h2 id="financial-metrics-title">本期经营结果</h2>
+              <h2 id="financial-metrics-title">本期消耗与收入</h2>
             </div>
             <span class="section-heading__note">{{ rangeLabel }} · 已结算口径</span>
           </div>
@@ -826,12 +793,12 @@ function handleRangeChange(rangeId: string) {
 
             <div class="flow-card__summary">
               <div>
-                <span>参考现金净流入</span>
+                <span>参考资金变化</span>
                 <strong :class="netCashReference === null || netCashReference >= 0 ? 'amount-positive' : 'amount-negative'">
                   {{ dashboard.summaryLoading.value || netCashReference === null ? "—" : signedMoney(netCashReference) }}
                 </strong>
               </div>
-              <small>按用户充值入账减平台服务成本估算；不含支付手续费、退款和其他经营费用。</small>
+              <small>仅按 D-AI 账户充值入账减平台服务成本计算，不代表租户在其他平台的真实收入或利润。</small>
             </div>
           </article>
         </section>
@@ -1027,7 +994,7 @@ function handleRangeChange(rangeId: string) {
 
         <footer class="finance-footnote">
           <span class="finance-footnote__icon"><CircleAlert :size="14" /></span>
-          <span>口径说明：用户实收来自实际扣款，平台服务成本来自租户结算；经营毛利未扣支付手续费、退款、税费和人工成本，仅用于快速经营判断。</span>
+          <span>口径说明：D-AI 可归因收入来自系统内实际扣款，平台服务成本来自租户结算；外部 API 和租户自有平台的收入不在本页统计。</span>
           <button type="button" @click="goTo('/tenant/account?tab=ledger')">查看原始流水 <ArrowRight :size="13" /></button>
         </footer>
       </div>

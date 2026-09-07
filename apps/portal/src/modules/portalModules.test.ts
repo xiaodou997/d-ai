@@ -79,7 +79,7 @@ describe("portal module registry", () => {
       active: true,
       children: [
         { label: "业务概览", to: "/tenant/overview/business", active: true },
-        { label: "经营与结算", to: "/tenant/overview/finance", active: false }
+        { label: "经营分析", to: "/tenant/overview/finance", active: false }
       ]
     });
   });
