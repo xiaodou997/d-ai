@@ -14,6 +14,7 @@ export { default as DsSelect } from "./controls/DsSelect.vue";
 export { default as DsTable } from "./data/DsTable.vue";
 export { default as DsFilterBar } from "./data/DsFilterBar.vue";
 export { default as DsFilterField } from "./data/DsFilterField.vue";
+export { default as DsTrendChart } from "./data/DsTrendChart.vue";
 export type { DsTableColumn } from "./data/types";
 export { default as DsEmpty } from "./feedback/DsEmpty.vue";
 export { default as DsSkeleton } from "./feedback/DsSkeleton.vue";

@@ -258,13 +258,18 @@ const workspaceRequestSourceOptions = [{ label: "全部来源", value: "" }, ...
 
 const renderCharts = async () => {
   await nextTick();
+  const axisColor = resolveTokenColor("--ds-muted");
+  const faintColor = resolveTokenColor("--ds-faint");
+  const lineColor = resolveTokenColor("--ds-line");
+  const panelColor = resolveTokenColor("--ds-panel");
 
   if (chartModelRef.value) {
     if (chartModel) chartModel.dispose();
     chartModel = init(chartModelRef.value);
     chartModel.setOption({
-      tooltip: { trigger: "item", formatter: "{b}: ${c} USD ({d}%)" },
-      legend: { orient: "vertical", right: 10, top: "center" },
+      animationDuration: 500,
+      tooltip: { trigger: "item", backgroundColor: panelColor, borderColor: lineColor, textStyle: { color: axisColor, fontSize: 12 }, formatter: "{b}: ${c} USD ({d}%)" },
+      legend: { orient: "vertical", right: 10, top: "center", textStyle: { color: axisColor, fontSize: 11 }, itemWidth: 10, itemHeight: 10 },
       series: [
         {
           type: "pie",
@@ -284,17 +289,19 @@ const renderCharts = async () => {
     if (chartTimeline) chartTimeline.dispose();
     chartTimeline = init(chartTimelineRef.value);
     chartTimeline.setOption({
-      tooltip: { trigger: "axis" },
-      grid: { left: "3%", right: "4%", bottom: "3%", containLabel: true },
-      xAxis: { type: "category", boundaryGap: false, data: timelineLabels.value },
-      yAxis: { type: "value", name: "USD" },
+      animationDuration: 500,
+      tooltip: { trigger: "axis", backgroundColor: panelColor, borderColor: lineColor, textStyle: { color: axisColor, fontSize: 12 } },
+      grid: { left: "3%", right: "4%", bottom: "8%", top: "8%", containLabel: true },
+      xAxis: { type: "category", boundaryGap: false, data: timelineLabels.value, axisLine: { lineStyle: { color: lineColor } }, axisTick: { show: false }, axisLabel: { color: faintColor, fontSize: 10 } },
+      yAxis: { type: "value", name: "USD", nameTextStyle: { color: faintColor, fontSize: 10 }, axisLabel: { color: faintColor, fontSize: 10 }, splitLine: { lineStyle: { color: lineColor, type: "dashed" } } },
       series: [
         {
           name: "消耗",
           type: "line",
           smooth: true,
-          areaStyle: { opacity: 0.3 },
-          lineStyle: { width: 3 },
+          areaStyle: { opacity: 0.12 },
+          lineStyle: { width: 2.5, color: resolveTokenColor("--ds-accent") },
+          itemStyle: { color: resolveTokenColor("--ds-accent") },
           emphasis: { focus: "series" },
           data: timelineValues.value
         }
@@ -306,18 +313,19 @@ const renderCharts = async () => {
     if (chartToken) chartToken.dispose();
     chartToken = init(chartTokenRef.value);
     chartToken.setOption({
-      tooltip: { trigger: "axis" },
-      legend: { data: ["输入 Token", "输出 Token"], bottom: 0 },
+      animationDuration: 500,
+      tooltip: { trigger: "axis", backgroundColor: panelColor, borderColor: lineColor, textStyle: { color: axisColor, fontSize: 12 } },
+      legend: { data: ["输入 Token", "输出 Token"], bottom: 0, textStyle: { color: axisColor, fontSize: 11 }, itemWidth: 12, itemHeight: 3 },
       grid: { left: "3%", right: "4%", bottom: "12%", top: "8%", containLabel: true },
-      xAxis: { type: "category", boundaryGap: false, data: timelineLabels.value },
-      yAxis: { type: "value", name: "Token" },
+      xAxis: { type: "category", boundaryGap: false, data: timelineLabels.value, axisLine: { lineStyle: { color: lineColor } }, axisTick: { show: false }, axisLabel: { color: faintColor, fontSize: 10 } },
+      yAxis: { type: "value", name: "Token", nameTextStyle: { color: faintColor, fontSize: 10 }, axisLabel: { color: faintColor, fontSize: 10 }, splitLine: { lineStyle: { color: lineColor, type: "dashed" } } },
       series: [
         {
           name: "输入 Token",
           type: "line",
           smooth: true,
           stack: "tokens",
-          areaStyle: { opacity: 0.3 },
+          areaStyle: { opacity: 0.12 },
           lineStyle: { width: 2 },
           itemStyle: { color: resolveTokenColor("--ds-info") },
           emphasis: { focus: "series" },
@@ -328,7 +336,7 @@ const renderCharts = async () => {
           type: "line",
           smooth: true,
           stack: "tokens",
-          areaStyle: { opacity: 0.3 },
+          areaStyle: { opacity: 0.12 },
           lineStyle: { width: 2 },
           itemStyle: { color: resolveTokenColor("--ds-warning") },
           emphasis: { focus: "series" },
