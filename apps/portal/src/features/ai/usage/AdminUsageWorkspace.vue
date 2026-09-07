@@ -10,14 +10,12 @@ import { ElMessage } from "element-plus";
 import { ScrollText } from "lucide-vue-next";
 
 import { PortalPagePanel } from "@/platform";
-import { DsTabs } from "@/shared/ui";
 
-import UsageErrorsPanel from "./components/UsageErrorsPanel.vue";
 import UsageExplorerWorkspace from "./components/UsageExplorerWorkspace.vue";
 import UsageRangeSelector from "./components/UsageRangeSelector.vue";
 import { adminUsageApi } from "./api";
 import { useAdminUsageExplorer } from "./composables/useAdminUsageExplorer";
-import type { AdminUsageRow, UsageFilters, UsageWorkbenchTab } from "./model";
+import type { AdminUsageRow, UsageFilters } from "./model";
 import { restoreUsageRecordRouteQuery } from "./usageNavigation";
 import { useAuthStore } from "@/stores/auth";
 
@@ -26,24 +24,16 @@ const router = useRouter();
 
 const {
   WORKBENCH_RANGE_OPTIONS,
-  activeTab,
   applyFilters,
-  changeErrorPage,
-  changeErrorPageSize,
   changePage,
   changePageSize,
   changeRange,
   customRange,
-  changeTab,
-  errorPagination,
-  errorRows,
-  errorsLoading,
   explorerHighlights,
   explorerMetrics,
   filterChips,
   filters,
   isPlatformAdmin,
-  loadErrors,
   logs,
   logsLoading,
   pagination,
@@ -73,18 +63,6 @@ const filtersModel = computed<UsageFilters>({
   set: (value) => Object.assign(filters, value)
 });
 
-const tabOptions = [
-  { key: "records", label: "全部请求" },
-  { key: "errors", label: "错误请求" }
-];
-
-function handleTabChange(key: string) {
-  void changeTab(key as UsageWorkbenchTab);
-}
-
-function switchToRecords() {
-  void changeTab("records");
-}
 </script>
 
 <template>
@@ -109,14 +87,7 @@ function switchToRecords() {
       </template>
 
       <div class="usage-body">
-        <DsTabs
-          :tabs="tabOptions"
-          :model-value="activeTab"
-          @update:model-value="handleTabChange"
-        />
-
         <UsageExplorerWorkspace
-          v-if="activeTab === 'records'"
           v-model:filters="filtersModel"
           :filter-chips="filterChips"
           :highlights="explorerHighlights"
@@ -133,21 +104,6 @@ function switchToRecords() {
           @reset-filters="resetFilters"
           @search="applyFilters"
           @select-record="openDetail"
-        />
-
-        <UsageErrorsPanel
-          v-else
-          :filter-chips="filterChips"
-          :is-platform-admin="isPlatformAdmin"
-          :loading="errorsLoading"
-          :pagination="errorPagination"
-          :rows="errorRows"
-          :total="errorPagination.total"
-          @page-change="changeErrorPage"
-          @page-size-change="changeErrorPageSize"
-          @refresh="loadErrors"
-          @select-record="openDetail"
-          @switch-to-records="switchToRecords"
         />
       </div>
     </PortalPagePanel>

@@ -201,6 +201,14 @@ interface BillingPriceLineSnapshot {
   input_context_tokens?: number;
   token_price_tier_index?: number;
   token_price_tier_up_to_input_tokens?: number | null;
+  input_unit_price_per_1m_usd?: number;
+  output_unit_price_per_1m_usd?: number;
+  cache_read_unit_price_per_1m_usd?: number;
+  cache_write_unit_price_per_1m_usd?: number;
+  image_unit_price_usd?: number;
+  video_unit_price_usd?: number;
+  image_resolution?: string;
+  video_resolution?: string;
 }
 
 interface BillingCostLineSnapshot {
@@ -241,6 +249,18 @@ const billingContext = computed(() => {
     providerTier: formatContextTier(provider)
   };
 });
+
+const billingPriceSnapshot = computed(() => {
+  const value = parseBillingBreakdown(props.detail?.billing_breakdown);
+  if (!value || Number(value.version) < 2) return null;
+  const sell = value.user_payable?.price_lines || value.price_lines;
+  const provider = value.catalog_base?.price_lines;
+  return { sell, provider, sellMultiplier: value.user_payable?.applied_multiplier, providerMultiplier: value.catalog_base?.applied_multiplier };
+});
+
+function unitPriceLabel(value?: number) {
+  return value == null ? "—" : `$${Number(value).toFixed(6)}`;
+}
 
 function formatContextTier(line?: BillingPriceLineSnapshot) {
   if (!line || line.token_price_tier_index == null) return "—";
@@ -394,6 +414,19 @@ function copyActivePayload() {
             <div><span>结算时间</span><strong>{{ timestampLabel(detail?.settled_at) }}</strong></div>
             <div><span>退款状态</span><strong>{{ refundStatusLabel(detail?.refund_status) }}</strong></div>
           </div>
+        </div>
+      </div>
+
+      <div v-if="billingPriceSnapshot" class="billing-snapshot">
+        <div class="billing-info-block__title">请求时价格快照</div>
+        <p class="billing-snapshot__note">以下单价来自请求发生时保存的计费明细，不会随当前价格表变更。</p>
+        <div class="billing-facts billing-snapshot__facts">
+          <div><span>平台成本输入 / 1M</span><strong>{{ unitPriceLabel(billingPriceSnapshot.provider?.input_unit_price_per_1m_usd) }}</strong></div>
+          <div><span>平台成本输出 / 1M</span><strong>{{ unitPriceLabel(billingPriceSnapshot.provider?.output_unit_price_per_1m_usd) }}</strong></div>
+          <div><span>对用户输入 / 1M</span><strong>{{ unitPriceLabel(billingPriceSnapshot.sell?.input_unit_price_per_1m_usd) }}</strong></div>
+          <div><span>对用户输出 / 1M</span><strong>{{ unitPriceLabel(billingPriceSnapshot.sell?.output_unit_price_per_1m_usd) }}</strong></div>
+          <div><span>平台成本倍率</span><strong>{{ multiplierLabel(billingPriceSnapshot.providerMultiplier) }}</strong></div>
+          <div><span>用户计费倍率</span><strong>{{ multiplierLabel(billingPriceSnapshot.sellMultiplier) }}</strong></div>
         </div>
       </div>
 
@@ -774,6 +807,24 @@ function copyActivePayload() {
   color: var(--ds-ink-soft);
   font-size: 12px;
   font-weight: 750;
+}
+
+.billing-snapshot {
+  margin-top: 12px;
+  border: 1px solid var(--ds-line);
+  border-radius: var(--ds-radius-control);
+  background: var(--ds-panel-muted);
+  padding: 13px 14px;
+}
+
+.billing-snapshot__note {
+  margin: -3px 0 10px;
+  color: var(--ds-muted);
+  font-size: 11px;
+}
+
+.billing-snapshot__facts {
+  gap: 9px 18px;
 }
 
 .billing-facts {

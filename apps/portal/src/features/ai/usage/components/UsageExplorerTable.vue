@@ -5,6 +5,7 @@
 -->
 <script setup lang="ts">
 import { formatMs, UsageTag } from "@/platform/ai/usage";
+import { formatMultiplier } from "@/platform/ai/utils";
 import { DsTable, type DsTableColumn } from "@/shared/ui";
 
 import type { AdminUsageRow } from "../model";
@@ -19,7 +20,6 @@ import {
 const props = defineProps<{
   rows: AdminUsageRow[];
   loading: boolean;
-  showUpstreamDetails?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -77,7 +77,10 @@ function totalDurationText(row: AdminUsageRow) {
 function upstreamNames(row: AdminUsageRow) {
   const management = row.upstream_account_name || row.provider_code || "—";
   const tenant = row.upstream_tenant_display_name;
-  return { management, tenant: tenant && tenant !== management ? tenant : "" };
+  const catalog = Number(row.catalog_base_usd) || 0;
+  const payable = Number(row.tenant_payable_usd) || 0;
+  const multiplier = catalog > 0 ? `×${formatMultiplier(payable / catalog)}` : "";
+  return { management, tenant: tenant && tenant !== management ? tenant : "", multiplier };
 }
 </script>
 
@@ -110,7 +113,7 @@ function upstreamNames(row: AdminUsageRow) {
 
       <template #cell-upstream="{ row }">
         <div class="stack-cell">
-          <span class="stack-cell__main">{{ upstreamNames(row).management }}</span>
+          <span class="stack-cell__main">{{ upstreamNames(row).management }}<span v-if="upstreamNames(row).multiplier" class="profile-chip">{{ upstreamNames(row).multiplier }}</span></span>
           <span v-if="upstreamNames(row).tenant" class="stack-cell__sub">{{ upstreamNames(row).tenant }}</span>
         </div>
       </template>
@@ -135,7 +138,7 @@ function upstreamNames(row: AdminUsageRow) {
           <span class="stack-cell__sub stack-cell__sub--inline">
             <UsageTag kind="source" :value="row.request_source" />
             <UsageTag kind="stream" :value="row.stream" />
-            <span v-if="row.group_default_user_multiplier_snapshot" class="profile-chip">×{{ row.group_default_user_multiplier_snapshot }}</span>
+            <span v-if="row.group_default_user_multiplier_snapshot != null" class="profile-chip">分组 ×{{ row.group_default_user_multiplier_snapshot }}</span>
           </span>
         </div>
       </template>

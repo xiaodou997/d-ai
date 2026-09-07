@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { shallowRef } from "vue";
 import { Refresh } from "@element-plus/icons-vue";
 import {
   PortalContentCard,
@@ -31,7 +30,6 @@ const props = defineProps<{
 }>();
 
 const filters = defineModel<UsageFilters>("filters", { required: true });
-const showUpstreamDetails = shallowRef(true);
 
 const emit = defineEmits<{
   pageChange: [page: number];
@@ -104,13 +102,6 @@ function selectRecord(row: AdminUsageRow) {
               />
             </el-select>
             <template #actions>
-              <el-switch
-                v-model="showUpstreamDetails"
-                inline-prompt
-                active-text="显示上游信息"
-                inactive-text="隐藏上游信息"
-                class="usage-filter-switch"
-              />
               <el-button type="primary" @click="emit('search')">应用筛选</el-button>
               <el-button @click="emit('resetFilters')">重置</el-button>
               <el-button :icon="Refresh" :loading="loading" @click="emit('refresh')">刷新</el-button>
@@ -124,7 +115,6 @@ function selectRecord(row: AdminUsageRow) {
         <UsageExplorerTable
           :rows="logs"
           :loading="loading"
-          :show-upstream-details="showUpstreamDetails"
           @select-record="selectRecord"
         />
 
