@@ -44,10 +44,12 @@ function makeOptions(prefix: string, overrides: Partial<Parameters<typeof create
 beforeEach(() => {
   setActivePinia(createPinia());
   localStorage.clear();
+  sessionStorage.clear();
 });
 
 afterEach(() => {
   localStorage.clear();
+  sessionStorage.clear();
 });
 
 describe("Portal auth memory and cookie session", () => {
@@ -67,7 +69,7 @@ describe("Portal auth memory and cookie session", () => {
 
   it("rebuilds in-memory access state from the HttpOnly-cookie refresh path", async () => {
     const options = makeOptions("reload");
-    localStorage.setItem(`${options.storagePrefix}:userInfo`, JSON.stringify(user));
+    sessionStorage.setItem(`${options.storagePrefix}:userInfo`, JSON.stringify(user));
     const store = createPortalAuthStore(options)();
 
     await store.ensureSession();
@@ -78,7 +80,7 @@ describe("Portal auth memory and cookie session", () => {
     store.stopAutoRefresh();
   });
 
-  it("coordinates a login signaled by another tab through the storage event", async () => {
+  it("does not let another tab overwrite this tab's identity", async () => {
     const options = makeOptions("tabs");
     const store = createPortalAuthStore(options)();
     store.init();
@@ -90,10 +92,9 @@ describe("Portal auth memory and cookie session", () => {
         storageArea: window.localStorage
       })
     );
-    await vi.waitFor(() => expect(store.accessToken).toBe("access-refresh"));
-
-    expect(options.refreshToken).toHaveBeenCalledOnce();
-    expect(store.userInfo?.sub).toBe(user.sub);
+    await Promise.resolve();
+    expect(options.refreshToken).not.toHaveBeenCalled();
+    expect(store.userInfo).toBeNull();
     store.stopAutoRefresh();
   });
 
@@ -133,7 +134,7 @@ describe("Portal auth memory and cookie session", () => {
     expect(store.tenantName).toBe("Operations Tenant");
     expect(store.isTenantOperations).toBe(true);
     expect(localStorage.getItem(`${options.storagePrefix}:accessToken`)).toBeNull();
-    expect(JSON.parse(localStorage.getItem(`${options.storagePrefix}:userInfo`) || "{}").userType).toBe(2);
+    expect(JSON.parse(sessionStorage.getItem(`${options.storagePrefix}:userInfo`) || "{}").userType).toBe(2);
 
     expect(store.exitTenantOperations()).toBe(true);
     expect(store.accessToken).toBe("access-1");

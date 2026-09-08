@@ -43,6 +43,10 @@ export function createPortalAuthStore(options: AuthStoreOptions) {
     // refresh token is HttpOnly; the access token only lives in this tab's heap.
     const accessToken = ref("");
     const expiresIn = ref(0);
+    // User info belongs to the same browser tab as the in-memory access token.
+    // Keeping it in localStorage lets another tab overwrite this tab's identity
+    // (or clear it on logout), which can silently downgrade the shell to the
+    // customer surface while the current tab still has an admin session.
     const userInfo = ref<UserInfoResponse | null>(readUserInfo(options.storagePrefix));
     const mfaChallengeToken = ref("");
     const sessionValidatedAt = ref(0);
@@ -51,7 +55,6 @@ export function createPortalAuthStore(options: AuthStoreOptions) {
     let tenantOperationsTimer: ReturnType<typeof setTimeout> | null = null;
     let refreshInFlight: Promise<AuthTokenResponse> | null = null;
     let sessionValidationInFlight: Promise<UserInfoResponse> | null = null;
-    let storageListenerInstalled = false;
     let operatorState: RestorableAuthState | null = null;
 
     const isAuthenticated = computed(() => Boolean(accessToken.value && userInfo.value));
@@ -61,12 +64,10 @@ export function createPortalAuthStore(options: AuthStoreOptions) {
     const isTenantOperations = computed(() => tenantOperations.value !== null);
 
     function persist() {
-      // Tenant operations is deliberately tab-local. Publishing its effective
-      // user info would make other tabs show tenant menus while they still hold
-      // the platform administrator access token.
+      // Tenant operations and its effective user info are deliberately tab-local.
       if (isTenantOperations.value) return;
       if (userInfo.value) {
-        localStorage.setItem(`${options.storagePrefix}:userInfo`, JSON.stringify(userInfo.value));
+        sessionStorage.setItem(`${options.storagePrefix}:userInfo`, JSON.stringify(userInfo.value));
       }
     }
 
@@ -86,7 +87,7 @@ export function createPortalAuthStore(options: AuthStoreOptions) {
 
     function clear() {
       clearState();
-      localStorage.removeItem(`${options.storagePrefix}:userInfo`);
+      sessionStorage.removeItem(`${options.storagePrefix}:userInfo`);
     }
 
     function startAutoRefresh() {
@@ -301,31 +302,8 @@ export function createPortalAuthStore(options: AuthStoreOptions) {
     }
 
     function init() {
-      if (!storageListenerInstalled && typeof window !== "undefined") {
-        storageListenerInstalled = true;
-        const userInfoKey = `${options.storagePrefix}:userInfo`;
-        window.addEventListener("storage", (event) => {
-          if (event.storageArea && event.storageArea !== window.localStorage) return;
-          if (event.key !== userInfoKey) return;
-          if (event.newValue === null) {
-            clearState();
-            return;
-          }
-          if (isTenantOperations.value) return;
-          let next: UserInfoResponse;
-          try {
-            next = JSON.parse(event.newValue) as UserInfoResponse;
-          } catch {
-            return;
-          }
-          const sameUser = userInfo.value?.sub === next.sub;
-          userInfo.value = next;
-          if (sameUser && accessToken.value) return;
-          clearState();
-          userInfo.value = next;
-          void ensureSession().catch(() => clearState());
-        });
-      }
+      // sessionStorage is tab-scoped, so there is intentionally no cross-tab
+      // identity synchronization here. Access tokens are also tab-local.
       if (accessToken.value) {
         startAutoRefresh();
       }
@@ -408,7 +386,7 @@ function resolveLogoutRedirectUrl(
 }
 
 function readUserInfo(storagePrefix: string): UserInfoResponse | null {
-  const raw = localStorage.getItem(`${storagePrefix}:userInfo`);
+  const raw = sessionStorage.getItem(`${storagePrefix}:userInfo`);
   if (!raw) return null;
   try {
     return JSON.parse(raw) as UserInfoResponse;
