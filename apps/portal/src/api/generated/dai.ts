@@ -1781,7 +1781,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 探测提示词审计节点 */
+        /** 测试提示词审计节点 */
         post: operations["ai-probe-prompt-audit-endpoint"];
         delete?: never;
         options?: never;
@@ -3480,42 +3480,8 @@ export interface paths {
         /** 更新租户 */
         put: operations["admin-update-tenant"];
         post?: never;
-        /** 申请删除租户 */
+        /** 删除租户 */
         delete: operations["admin-delete-tenant"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/tenants/{id}/deletion": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 查询租户删除状态 */
-        get: operations["admin-get-tenant-deletion"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/tenants/{id}/deletion/cancel": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 取消租户删除 */
-        post: operations["admin-cancel-tenant-deletion"];
-        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -5994,6 +5960,8 @@ export interface components {
             /** Format: int64 */
             amountMicroUsd: number;
             bankName?: string;
+            /** @enum {string} */
+            feeDeductionMode?: "balance" | "payout";
             note?: string;
             paymentRef?: string;
             tenantId: string;
@@ -7278,12 +7246,12 @@ export interface components {
         };
         KeywordConfigDTO: {
             enabled: boolean;
-            mode?: string;
             entries: components["schemas"]["KeywordEntryDTO"][] | null;
             /** @description 站点自定义同形字映射 */
             homoglyph_map_extra: {
                 [key: string]: string;
             };
+            mode: string;
             pinyin: components["schemas"]["PinyinConfigDTO"];
         };
         KeywordEntryDTO: {
@@ -8668,10 +8636,10 @@ export interface components {
         RiskControlProviderDTO: {
             /** @description 审核 API Base URL，如 https://api.openai.com */
             base_url: string;
-            enabled?: boolean;
-            mode?: string;
+            enabled: boolean;
             /** @description 是否已配置审核 API Key（出于安全考虑不回显明文/密文） */
             has_api_key: boolean;
+            mode: string;
             /** @description 审核模型，如 omni-moderation-latest */
             model: string;
             /**
@@ -8684,8 +8652,8 @@ export interface components {
             /** @description 传入以更新审核 API Key 明文；省略则保留原值，传空字符串则清空 */
             api_key?: string;
             base_url: string;
-            enabled?: boolean;
-            mode?: string;
+            enabled: boolean;
+            mode: string;
             model: string;
             /** Format: int64 */
             timeout_ms: number;
@@ -9344,26 +9312,6 @@ export interface components {
             faviconPath?: string;
             tenantName: string;
         };
-        TenantDeletionJob: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/TenantDeletionJob.json
-             */
-            readonly $schema?: string;
-            /** Format: date-time */
-            completedAt?: string;
-            /** Format: date-time */
-            executeAfter: string;
-            jobId: string;
-            lastError?: string;
-            /** Format: date-time */
-            requestedAt: string;
-            /** Format: date-time */
-            startedAt?: string;
-            status: string;
-            tenantId: string;
-        };
         TenantDetailOutputBody: {
             /**
              * Format: uri
@@ -9607,20 +9555,12 @@ export interface components {
             api_key_name?: string;
             /** @description 请求时分组展示标签快照 */
             billing_group_label_snapshot?: string;
+            /** @description 计费判定原因 */
+            billing_reason?: string;
             /** @description 计费来源：payg=按量 / subscription=订阅内 */
             billing_source: string;
             /** @description 计费状态 */
             billing_status: string;
-            /** @description 上游流式终态 */
-            provider_terminal_state?: string;
-            /** @description 客户端交付状态 */
-            client_delivery_state?: string;
-            /** @description 取消来源 */
-            cancellation_origin?: string;
-            /** @description 计费判定原因 */
-            billing_reason?: string;
-            /** @description 响应摘要状态 */
-            response_summary_state?: string;
             /** @description 计费状态展示名 */
             billing_status_label: string;
             /**
@@ -9633,8 +9573,12 @@ export interface components {
              * @description 缓存写 token 数
              */
             cache_write_tokens: number;
+            /** @description 取消来源 */
+            cancellation_origin: string;
             /** @description 能力类型 */
             capability_type: string;
+            /** @description 客户端交付状态 */
+            client_delivery_state: string;
             /**
              * Format: int32
              * @description 输出 token 数
@@ -9694,6 +9638,8 @@ export interface components {
              * @description 输入 token 数
              */
             prompt_tokens: number;
+            /** @description 上游终态 */
+            provider_terminal_state: string;
             /** @description 客户端请求推理强度（归一化：low/medium/high/xhigh/max） */
             reasoning_effort?: string;
             /**
@@ -9714,6 +9660,8 @@ export interface components {
              * @description 请求总耗时，毫秒
              */
             request_total_ms?: number;
+            /** @description 响应摘要状态 */
+            response_summary_state: string;
             /**
              * Format: double
              * @description 分组零售价格表原价USD 金额
@@ -10532,20 +10480,12 @@ export interface components {
             billable_units: number;
             /** @description 请求时分组展示标签快照 */
             billing_group_label_snapshot?: string;
+            /** @description 计费判定原因 */
+            billing_reason?: string;
             /** @description 计费来源：payg=按量 / subscription=订阅内 */
             billing_source: string;
             /** @description 计费状态 */
             billing_status: string;
-            /** @description 上游流式终态 */
-            provider_terminal_state?: string;
-            /** @description 客户端交付状态 */
-            client_delivery_state?: string;
-            /** @description 取消来源 */
-            cancellation_origin?: string;
-            /** @description 计费判定原因 */
-            billing_reason?: string;
-            /** @description 响应摘要状态 */
-            response_summary_state?: string;
             /**
              * Format: int32
              * @description 缓存读 token 数
@@ -10556,6 +10496,8 @@ export interface components {
              * @description 缓存写 token 数
              */
             cache_write_tokens: number;
+            /** @description 取消来源 */
+            cancellation_origin: string;
             /** @description 能力类型 */
             capability_type: string;
             /**
@@ -10563,6 +10505,8 @@ export interface components {
              * @description 按命中上游资源价格表计算的参考成本
              */
             catalog_base_usd: number;
+            /** @description 客户端交付状态 */
+            client_delivery_state: string;
             /** @description 客户端 User-Agent 摘要 */
             client_user_agent?: string;
             /**
@@ -10650,6 +10594,8 @@ export interface components {
             protocol_conversion_enabled: boolean;
             /** @description 供应商编码 */
             provider_code?: string;
+            /** @description 上游终态：unknown/completed/failed/cancelled/incomplete */
+            provider_terminal_state: string;
             /** @description 对客户端暴露的响应模型名 */
             public_response_model?: string;
             /** @description 客户端请求推理强度（归一化：low/medium/high/xhigh/max） */
@@ -10694,6 +10640,8 @@ export interface components {
             resolved_logical_model?: string;
             /** @description 最终实际选中的上游协议家族 */
             resolved_provider_family?: string;
+            /** @description 响应摘要状态 */
+            response_summary_state: string;
             /**
              * Format: int32
              * @description 首个响应字节之后到请求结束的耗时，毫秒
@@ -10735,8 +10683,6 @@ export interface components {
             upstream_account_id?: string;
             /** @description 命中的上游账号名称 */
             upstream_account_name?: string;
-            /** @description 上游账号租户侧展示名称 */
-            upstream_tenant_display_name?: string;
             /** @description 上游模型 */
             upstream_model?: string;
             /** @description 是否发生了上游模型名映射 */
@@ -10746,6 +10692,8 @@ export interface components {
              * @description 上游状态码
              */
             upstream_status?: number;
+            /** @description 上游账号租户侧展示名称 */
+            upstream_tenant_display_name?: string;
             /** @description 是否估算用量 */
             usage_estimated: boolean;
             /**
@@ -10789,23 +10737,15 @@ export interface components {
             auth_method?: string;
             billing_breakdown?: unknown;
             billing_group_label_snapshot?: string;
+            billing_reason?: string;
             /** @description 计费来源 */
             billing_source?: string;
             billing_status: string;
-            /** @description 上游流式终态 */
-            provider_terminal_state?: string;
-            /** @description 客户端交付状态 */
-            client_delivery_state?: string;
-            /** @description 取消来源 */
-            cancellation_origin?: string;
-            /** @description 计费判定原因 */
-            billing_reason?: string;
-            /** @description 响应摘要状态 */
-            response_summary_state?: string;
             /** Format: int32 */
             cache_read_tokens: number;
             /** Format: int32 */
             cache_write_tokens: number;
+            cancellation_origin: string;
             /**
              * Format: double
              * @description 上游目录基准价USD 金额
@@ -10813,6 +10753,7 @@ export interface components {
             catalog_base_usd: number;
             /** @description 客户端 API 格式 */
             client_api_format: string;
+            client_delivery_state: string;
             client_ip?: string;
             /** Format: int32 */
             completion_tokens: number;
@@ -10859,6 +10800,7 @@ export interface components {
             protocol_conversion_enabled: boolean;
             /** @description 最终上游 API 格式 */
             provider_api_format?: string;
+            provider_terminal_state: string;
             public_response_model?: string;
             /** @description 客户端请求推理强度（归一化） */
             reasoning_effort?: string;
@@ -10885,6 +10827,7 @@ export interface components {
             resolved_logical_model?: string;
             resolved_provider_family?: string;
             response_message?: unknown;
+            response_summary_state: string;
             /** Format: int32 */
             response_tail_ms?: number;
             /**
@@ -11389,20 +11332,12 @@ export interface components {
             billable_units: number;
             /** @description 请求时分组展示标签快照 */
             billing_group_label_snapshot?: string;
+            /** @description 计费判定原因 */
+            billing_reason?: string;
             /** @description 计费来源：payg=按量 / subscription=订阅内 */
             billing_source: string;
             /** @description 计费状态 */
             billing_status: string;
-            /** @description 上游流式终态 */
-            provider_terminal_state?: string;
-            /** @description 客户端交付状态 */
-            client_delivery_state?: string;
-            /** @description 取消来源 */
-            cancellation_origin?: string;
-            /** @description 计费判定原因 */
-            billing_reason?: string;
-            /** @description 响应摘要状态 */
-            response_summary_state?: string;
             /**
              * Format: int32
              * @description 缓存读 token 数
@@ -11413,6 +11348,10 @@ export interface components {
              * @description 缓存写 token 数
              */
             cache_write_tokens: number;
+            /** @description 取消来源 */
+            cancellation_origin: string;
+            /** @description 客户端交付状态 */
+            client_delivery_state: string;
             /**
              * Format: int32
              * @description 输出 token 数
@@ -11460,6 +11399,8 @@ export interface components {
              * @description 输入 token 数
              */
             prompt_tokens: number;
+            /** @description 上游终态 */
+            provider_terminal_state: string;
             /** @description 客户端请求推理强度（归一化：low/medium/high/xhigh/max） */
             reasoning_effort?: string;
             /**
@@ -11475,6 +11416,8 @@ export interface components {
             request_source: string;
             /** @description 请求状态 */
             request_status: string;
+            /** @description 响应摘要状态 */
+            response_summary_state: string;
             /** @description 服务档位：standard/fast */
             service_tier: string;
             /** @description 是否流式请求 */
@@ -11632,6 +11575,7 @@ export interface components {
             currency: string;
             /** Format: int64 */
             feeAmountMicroUsd: number;
+            feeDeductionMode: string;
             /** Format: int64 */
             paidAt?: number;
             paymentRef?: string;
@@ -20049,68 +19993,6 @@ export interface operations {
         };
     };
     "admin-delete-tenant": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SuccessOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "admin-get-tenant-deletion": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TenantDeletionJob"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "admin-cancel-tenant-deletion": {
         parameters: {
             query?: never;
             header?: never;

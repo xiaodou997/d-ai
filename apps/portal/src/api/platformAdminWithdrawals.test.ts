@@ -62,6 +62,7 @@ describe("platform admin withdrawals generated operation facade", () => {
       amountMicroUsd: 1_000_000,
       feeAmountMicroUsd: 10_000,
       payoutAmountMicroUsd: 990_000,
+      feeDeductionMode: "balance",
       accountName: "Tenant One",
       bankName: "Example Bank",
       accountNo: "1234",

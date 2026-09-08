@@ -618,6 +618,7 @@ function toWithdrawal(value: WithdrawalTransport): WithdrawalItem {
     amountMicroUsd: value.amountMicroUsd,
     feeAmountMicroUsd: value.feeAmountMicroUsd,
     payoutAmountMicroUsd: value.payoutAmountMicroUsd,
+    feeDeductionMode: value.feeDeductionMode === "payout" ? "payout" : "balance",
     accountName: value.accountName,
     bankName: value.bankName,
     accountNo: value.accountNo,

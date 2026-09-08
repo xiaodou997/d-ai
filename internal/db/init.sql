@@ -536,6 +536,7 @@ CREATE TABLE pay_withdrawals (
     amount_micro_usd BIGINT NOT NULL CHECK (amount_micro_usd > 0),
     fee_amount_micro_usd BIGINT NOT NULL DEFAULT 0 CHECK (fee_amount_micro_usd >= 0),
     payout_amount_micro_usd BIGINT NOT NULL DEFAULT 0 CHECK (payout_amount_micro_usd >= 0),
+    fee_deduction_mode TEXT NOT NULL DEFAULT 'balance' CHECK (fee_deduction_mode IN ('balance', 'payout')),
     account_name TEXT NOT NULL,
     bank_name TEXT NOT NULL,
     account_no TEXT NOT NULL,
@@ -2804,6 +2805,6 @@ CREATE TABLE dai_schema_metadata (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 35);
+INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 36);
 
 COMMIT;

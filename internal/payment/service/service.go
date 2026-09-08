@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"math/big"
 	"net/http"
 	"strings"
@@ -601,14 +602,17 @@ func sweepFailureRetryDelay(attempt int) time.Duration {
 // operation is deliberately one stage: it deducts the tenant balance, writes
 // the cash ledger entry, and records the withdrawal as paid in one transaction.
 type CreateWithdrawalParams struct {
-	TenantID       string
-	AmountMicroUSD int64
-	AccountName    string
-	BankName       string
-	AccountNo      string
-	Note           string
-	OperatorID     string
-	PaymentRef     string
+	TenantID string
+	// AmountMicroUSD is the balance deduction for balance mode, and desired
+	// payout amount for payout mode.
+	AmountMicroUSD   int64
+	FeeDeductionMode string
+	AccountName      string
+	BankName         string
+	AccountNo        string
+	Note             string
+	OperatorID       string
+	PaymentRef       string
 }
 
 func (s *PaymentService) CreateWithdrawal(ctx context.Context, p CreateWithdrawalParams) (*payment.Withdrawal, error) {
@@ -619,6 +623,13 @@ func (s *PaymentService) CreateWithdrawal(ctx context.Context, p CreateWithdrawa
 	p.Note = strings.TrimSpace(p.Note)
 	p.OperatorID = strings.TrimSpace(p.OperatorID)
 	p.PaymentRef = strings.TrimSpace(p.PaymentRef)
+	p.FeeDeductionMode = strings.TrimSpace(p.FeeDeductionMode)
+	if p.FeeDeductionMode == "" {
+		p.FeeDeductionMode = payment.WithdrawalFeeFromBalance
+	}
+	if p.FeeDeductionMode != payment.WithdrawalFeeFromBalance && p.FeeDeductionMode != payment.WithdrawalFeeFromPayout {
+		return nil, domain.ErrBadRequest
+	}
 	if p.TenantID == "" || p.AmountMicroUSD <= 0 {
 		return nil, domain.ErrInvalidAmount
 	}
@@ -631,7 +642,15 @@ func (s *PaymentService) CreateWithdrawal(ctx context.Context, p CreateWithdrawa
 	if err != nil {
 		return nil, domain.ErrInvalidAmount
 	}
+	balanceDeduction := p.AmountMicroUSD
 	payoutAmount := p.AmountMicroUSD - feeAmount
+	if p.FeeDeductionMode == payment.WithdrawalFeeFromPayout {
+		if feeAmount > math.MaxInt64-p.AmountMicroUSD {
+			return nil, domain.ErrInvalidAmount
+		}
+		balanceDeduction = p.AmountMicroUSD + feeAmount
+		payoutAmount = p.AmountMicroUSD
+	}
 	if payoutAmount < 0 {
 		payoutAmount = 0
 	}
@@ -649,16 +668,16 @@ func (s *PaymentService) CreateWithdrawal(ctx context.Context, p CreateWithdrawa
 	// A tenant may run AI into a negative balance, but cash must not be paid out
 	// while it is negative. With a signed balance that is the same comparison as
 	// "can they afford the withdrawal", so it needs no separate debt check.
-	if account.BalanceMicroUSD < p.AmountMicroUSD {
+	if account.BalanceMicroUSD < balanceDeduction {
 		return nil, domain.ErrCashInsufficientBalance
 	}
-	if err := paymentpg.DeductTenantBalanceTx(ctx, tx, p.TenantID, p.AmountMicroUSD); err != nil {
+	if err := paymentpg.DeductTenantBalanceTx(ctx, tx, p.TenantID, balanceDeduction); err != nil {
 		return nil, domain.ErrCashInsufficientBalance
 	}
 
 	w := &payment.Withdrawal{
 		WithdrawalID: "WDR_" + uuid.New().String()[:24], TenantID: p.TenantID,
-		AmountMicroUSD: p.AmountMicroUSD, FeeAmountMicroUSD: feeAmount, PayoutAmountMicroUSD: payoutAmount,
+		AmountMicroUSD: balanceDeduction, FeeAmountMicroUSD: feeAmount, PayoutAmountMicroUSD: payoutAmount, FeeDeductionMode: p.FeeDeductionMode,
 		AccountName: p.AccountName, BankName: p.BankName, AccountNo: p.AccountNo,
 		ApplyNote: p.Note, AppliedBy: p.OperatorID, PaidBy: p.OperatorID, PaymentRef: p.PaymentRef,
 		Status: payment.WithdrawalStatusPaid,
@@ -672,7 +691,7 @@ func (s *PaymentService) CreateWithdrawal(ctx context.Context, p CreateWithdrawa
 	}
 	entry := &payment.CashLedgerEntry{
 		TxnID: "CSH_" + uuid.New().String()[:24], TenantID: p.TenantID,
-		TxnType: payment.CashTxnWithdraw, AmountMicroUSD: -p.AmountMicroUSD,
+		TxnType: payment.CashTxnWithdraw, AmountMicroUSD: -balanceDeduction,
 		BalanceAfterMicroUSD: balanceAfter, RefType: "withdrawal", RefID: w.WithdrawalID,
 		OperatorID: p.OperatorID, Note: p.Note,
 	}

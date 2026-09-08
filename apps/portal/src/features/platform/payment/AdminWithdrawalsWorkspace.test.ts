@@ -8,7 +8,8 @@ import AdminWithdrawalsWorkspace from "./AdminWithdrawalsWorkspace.vue";
 const api = vi.hoisted(() => ({
   listWithdrawals: vi.fn(),
   listTenants: vi.fn(),
-  createWithdrawal: vi.fn()
+  createWithdrawal: vi.fn(),
+  getPaymentSettings: vi.fn()
 }));
 
 vi.mock("@/api/platformAdmin", () => ({ platformAdminApi: api }));
@@ -31,6 +32,7 @@ describe("AdminWithdrawalsWorkspace", () => {
     vi.clearAllMocks();
     api.listWithdrawals.mockResolvedValue({ items: [withdrawal], total: 1, page: 1, size: 20 });
     api.listTenants.mockResolvedValue({ items: [{ tenantId: "tenant-1", tenantName: "示例租户" }], total: 1, page: 1, size: 100 });
+    api.getPaymentSettings.mockResolvedValue({ tenantWithdrawFeeBp: 160 });
   });
 
   it("loads withdrawal records through the payment feature boundary", async () => {

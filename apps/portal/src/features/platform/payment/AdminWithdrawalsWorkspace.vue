@@ -53,6 +53,9 @@
         <template #cell-feeAmount="{ row }">
           <span class="withdrawals-num">{{ formatMicroUSD(row.feeAmountMicroUsd) }}</span>
         </template>
+        <template #cell-feeMode="{ row }">
+          <span>{{ feeModeText(row.feeDeductionMode) }}</span>
+        </template>
         <template #cell-payoutAmount="{ row }">
           <span class="withdrawals-num withdrawals-payout">{{ formatMicroUSD(row.payoutAmountMicroUsd) }}</span>
         </template>
@@ -83,9 +86,17 @@
             <el-option v-for="tenant in tenantOptions" :key="tenant.tenantId" :label="`${tenant.tenantName || '未命名租户'} · ${tenant.tenantId}`" :value="tenant.tenantId" />
           </el-select>
         </el-form-item>
-        <el-form-item label="扣减金额" required>
+        <el-form-item label="手续费承担方式" required>
+          <el-radio-group v-model="createForm.feeDeductionMode">
+            <el-radio value="balance">从余额扣除</el-radio>
+            <el-radio value="payout">从到账金额扣除</el-radio>
+          </el-radio-group>
+          <div class="create-form__hint">{{ createForm.feeDeductionMode === 'balance' ? '输入金额为余额实际扣减金额，到账金额会扣除手续费。' : '输入金额为收款方到账金额，余额会额外扣除手续费。' }}</div>
+        </el-form-item>
+        <el-form-item :label="createForm.feeDeductionMode === 'balance' ? '余额扣减金额' : '收款方到账金额'" required>
           <el-input-number v-model="createForm.amountUsd" :min="0" :precision="6" :controls="false" class="create-form__full" />
         </el-form-item>
+        <el-alert v-if="createForm.amountUsd && Number(createForm.amountUsd) > 0" type="info" :closable="false" class="create-form__preview" :title="`预计手续费 ${formatMicroUSD(preview.fee)}，余额扣减 ${formatMicroUSD(preview.deduction)}，到账 ${formatMicroUSD(preview.payout)}`" />
         <div class="create-form__grid">
           <el-form-item label="收款户名"><el-input v-model="createForm.accountName" /></el-form-item>
           <el-form-item label="开户行"><el-input v-model="createForm.bankName" /></el-form-item>
@@ -103,7 +114,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from "vue";
+import { computed, reactive, ref } from "vue";
 import { ElMessage } from "element-plus";
 import { RefreshRight, Search } from "@element-plus/icons-vue";
 import { Banknote } from "lucide-vue-next";
@@ -124,7 +135,8 @@ const columns: DsTableColumn[] = [
   { key: "withdrawalId", title: "记录单号", width: 200, mono: true },
   { key: "amount", title: "扣减金额", width: 150, align: "right" },
   { key: "feeAmount", title: "手续费", width: 130, align: "right" },
-  { key: "payoutAmount", title: "应付金额", width: 140, align: "right" },
+  { key: "payoutAmount", title: "到账金额", width: 140, align: "right" },
+  { key: "feeMode", title: "手续费扣除方式", width: 150 },
   { key: "accountName", title: "收款户名", width: 120 },
   { key: "bankName", title: "开户行", width: 140 },
   { key: "accountNo", title: "账号", width: 180, mono: true },
@@ -164,8 +176,16 @@ const {
 
 const createVisible = ref(false);
 const createSubmitting = ref(false);
+const withdrawFeeBp = ref(0);
 const tenantOptions = ref<Array<{ tenantId: string; tenantName?: string }>>([]);
-const createForm = reactive({ tenantId: "", amountUsd: null as number | null, accountName: "", bankName: "", accountNo: "", note: "", paymentRef: "" });
+const createForm = reactive({ tenantId: "", amountUsd: null as number | null, feeDeductionMode: "balance" as "balance" | "payout", accountName: "", bankName: "", accountNo: "", note: "", paymentRef: "" });
+const preview = computed(() => {
+  const amount = Math.round(Number(createForm.amountUsd ?? 0) * 1_000_000);
+  const fee = Math.ceil(amount * withdrawFeeBp.value / 10_000);
+  return createForm.feeDeductionMode === "payout"
+    ? { fee, deduction: amount + fee, payout: amount }
+    : { fee, deduction: amount, payout: Math.max(0, amount - fee) };
+});
 
 function formatTime(ts?: number | null) {
   if (!ts) return "—";
@@ -194,18 +214,24 @@ function statusText(s: string) {
   };
   return map[s] || s;
 }
+function feeModeText(mode: string) { return mode === "payout" ? "从到账金额扣除" : "从余额扣除"; }
 
 async function openCreate() {
   createForm.tenantId = "";
   createForm.amountUsd = null;
+  createForm.feeDeductionMode = "balance";
   createForm.accountName = "";
   createForm.bankName = "";
   createForm.accountNo = "";
   createForm.note = "";
   createForm.paymentRef = "";
   try {
-    const res = await platformAdminApi.listTenants({ page: 1, size: 100, status: 1 });
+    const [res, settings] = await Promise.all([
+      platformAdminApi.listTenants({ page: 1, size: 100, status: 1 }),
+      platformAdminApi.getPaymentSettings()
+    ]);
     tenantOptions.value = res.items || [];
+    withdrawFeeBp.value = settings.tenantWithdrawFeeBp || 0;
     createVisible.value = true;
   } catch (err) {
     const e = err as { detail?: string; message?: string };
@@ -224,6 +250,7 @@ async function submitCreate() {
     await platformAdminApi.createWithdrawal({
       tenantId: createForm.tenantId,
       amountMicroUsd,
+      feeDeductionMode: createForm.feeDeductionMode,
       accountName: createForm.accountName.trim() || undefined,
       bankName: createForm.bankName.trim() || undefined,
       accountNo: createForm.accountNo.trim() || undefined,

@@ -151,13 +151,14 @@ type adminWithdrawalsOutput struct {
 
 type createWithdrawalInput struct {
 	Body struct {
-		TenantID       string `json:"tenantId"`
-		AmountMicroUSD int64  `json:"amountMicroUsd" minimum:"1"`
-		AccountName    string `json:"accountName" required:"false"`
-		BankName       string `json:"bankName" required:"false"`
-		AccountNo      string `json:"accountNo" required:"false"`
-		Note           string `json:"note" required:"false"`
-		PaymentRef     string `json:"paymentRef" required:"false"`
+		TenantID         string `json:"tenantId"`
+		AmountMicroUSD   int64  `json:"amountMicroUsd" minimum:"1"`
+		FeeDeductionMode string `json:"feeDeductionMode" enum:"balance,payout" required:"false"`
+		AccountName      string `json:"accountName" required:"false"`
+		BankName         string `json:"bankName" required:"false"`
+		AccountNo        string `json:"accountNo" required:"false"`
+		Note             string `json:"note" required:"false"`
+		PaymentRef       string `json:"paymentRef" required:"false"`
 	}
 }
 
@@ -167,6 +168,7 @@ type withdrawalItem struct {
 	AmountMicroUSD       int64  `json:"amountMicroUsd"`
 	FeeAmountMicroUSD    int64  `json:"feeAmountMicroUsd"`
 	PayoutAmountMicroUSD int64  `json:"payoutAmountMicroUsd"`
+	FeeDeductionMode     string `json:"feeDeductionMode"`
 	AccountName          string `json:"accountName"`
 	BankName             string `json:"bankName"`
 	AccountNo            string `json:"accountNo"`
@@ -186,7 +188,8 @@ func withdrawalToItem(w *payment.Withdrawal) withdrawalItem {
 	return withdrawalItem{
 		WithdrawalID: w.WithdrawalID, Currency: "USD", AmountMicroUSD: w.AmountMicroUSD,
 		FeeAmountMicroUSD: w.FeeAmountMicroUSD, PayoutAmountMicroUSD: w.PayoutAmountMicroUSD, AccountName: w.AccountName,
-		BankName: w.BankName, AccountNo: w.AccountNo, Status: w.Status,
+		FeeDeductionMode: w.FeeDeductionMode,
+		BankName:         w.BankName, AccountNo: w.AccountNo, Status: w.Status,
 		ApplyNote: w.ApplyNote, ReviewNote: w.ReviewNote, PaymentRef: w.PaymentRef,
 		PaidAt: millisFromTimePtr(w.PaidAt), CreatedAt: millisFromTime(w.CreatedAt),
 	}
@@ -433,7 +436,8 @@ func (h *adminPaymentHandlers) createWithdrawal(ctx context.Context, in *createW
 	}
 	w, err := h.svc.CreateWithdrawal(ctx, paymentsvc.CreateWithdrawalParams{
 		TenantID: in.Body.TenantID, AmountMicroUSD: in.Body.AmountMicroUSD,
-		AccountName: in.Body.AccountName, BankName: in.Body.BankName, AccountNo: in.Body.AccountNo,
+		FeeDeductionMode: in.Body.FeeDeductionMode,
+		AccountName:      in.Body.AccountName, BankName: in.Body.BankName, AccountNo: in.Body.AccountNo,
 		Note: in.Body.Note, OperatorID: claims.UserID, PaymentRef: in.Body.PaymentRef,
 	})
 	if err != nil {

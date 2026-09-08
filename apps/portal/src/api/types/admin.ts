@@ -682,6 +682,7 @@ export interface WithdrawalItem {
   amountMicroUsd: number;
   feeAmountMicroUsd: number;
   payoutAmountMicroUsd: number;
+  feeDeductionMode: "balance" | "payout";
   accountName: string;
   bankName: string;
   accountNo: string;

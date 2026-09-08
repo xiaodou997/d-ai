@@ -177,6 +177,7 @@ type Withdrawal struct {
 	AmountMicroUSD       int64
 	FeeAmountMicroUSD    int64
 	PayoutAmountMicroUSD int64
+	FeeDeductionMode     string
 	AccountName          string
 	BankName             string
 	AccountNo            string
@@ -192,3 +193,8 @@ type Withdrawal struct {
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
 }
+
+const (
+	WithdrawalFeeFromBalance = "balance"
+	WithdrawalFeeFromPayout  = "payout"
+)

@@ -17,14 +17,18 @@ func InsertWithdrawalTx(ctx context.Context, tx pgx.Tx, w *payment.Withdrawal) e
 	if status == "" {
 		status = payment.WithdrawalStatusPending
 	}
+	feeDeductionMode := w.FeeDeductionMode
+	if feeDeductionMode == "" {
+		feeDeductionMode = payment.WithdrawalFeeFromBalance
+	}
 	_, err := tx.Exec(ctx, `
 		INSERT INTO pay_withdrawals
-		(withdrawal_id, tenant_id, amount_micro_usd, fee_amount_micro_usd, payout_amount_micro_usd,
+		(withdrawal_id, tenant_id, amount_micro_usd, fee_amount_micro_usd, payout_amount_micro_usd, fee_deduction_mode,
 		 account_name, bank_name, account_no, apply_note, status, applied_by, paid_by, paid_at, payment_ref, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
-		        NULLIF($12, ''), CASE WHEN $10 = 'paid' THEN now() ELSE NULL END, NULLIF($13, ''), now(), now())
+		        NULLIF($12, ''), NULLIF($13, ''), CASE WHEN $11 = 'paid' THEN now() ELSE NULL END, NULLIF($14, ''), now(), now())
 	`, w.WithdrawalID, w.TenantID, w.AmountMicroUSD, w.FeeAmountMicroUSD, w.PayoutAmountMicroUSD,
-		w.AccountName, w.BankName, w.AccountNo, w.ApplyNote, status, w.AppliedBy, w.PaidBy, w.PaymentRef)
+		feeDeductionMode, w.AccountName, w.BankName, w.AccountNo, w.ApplyNote, status, w.AppliedBy, w.PaidBy, w.PaymentRef)
 	if err != nil {
 		return fmt.Errorf("创建提现申请失败: %w", err)
 	}
@@ -32,14 +36,14 @@ func InsertWithdrawalTx(ctx context.Context, tx pgx.Tx, w *payment.Withdrawal) e
 }
 
 const withdrawalColumns = `
-	id, withdrawal_id, tenant_id, amount_micro_usd, fee_amount_micro_usd, payout_amount_micro_usd, account_name, bank_name, account_no,
+	id, withdrawal_id, tenant_id, amount_micro_usd, fee_amount_micro_usd, payout_amount_micro_usd, COALESCE(fee_deduction_mode, 'balance'), account_name, bank_name, account_no,
 	COALESCE(apply_note,''), status, applied_by, COALESCE(reviewed_by,''), reviewed_at, COALESCE(review_note,''),
 	COALESCE(paid_by,''), paid_at, COALESCE(payment_ref,''), created_at, updated_at`
 
 func scanWithdrawal(row pgx.Row) (*payment.Withdrawal, error) {
 	var w payment.Withdrawal
 	if err := row.Scan(
-		&w.ID, &w.WithdrawalID, &w.TenantID, &w.AmountMicroUSD, &w.FeeAmountMicroUSD, &w.PayoutAmountMicroUSD, &w.AccountName, &w.BankName, &w.AccountNo,
+		&w.ID, &w.WithdrawalID, &w.TenantID, &w.AmountMicroUSD, &w.FeeAmountMicroUSD, &w.PayoutAmountMicroUSD, &w.FeeDeductionMode, &w.AccountName, &w.BankName, &w.AccountNo,
 		&w.ApplyNote, &w.Status, &w.AppliedBy, &w.ReviewedBy, &w.ReviewedAt, &w.ReviewNote,
 		&w.PaidBy, &w.PaidAt, &w.PaymentRef, &w.CreatedAt, &w.UpdatedAt,
 	); err != nil {

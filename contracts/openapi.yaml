@@ -2257,6 +2257,11 @@ components:
           type: integer
         bankName:
           type: string
+        feeDeductionMode:
+          enum:
+            - balance
+            - payout
+          type: string
         note:
           type: string
         paymentRef:
@@ -4717,8 +4722,6 @@ components:
       properties:
         enabled:
           type: boolean
-        mode:
-          type: string
         entries:
           items:
             $ref: "#/components/schemas/KeywordEntryDTO"
@@ -4730,10 +4733,13 @@ components:
             type: string
           description: 站点自定义同形字映射
           type: object
+        mode:
+          type: string
         pinyin:
           $ref: "#/components/schemas/PinyinConfigDTO"
       required:
         - enabled
+        - mode
         - entries
         - homoglyph_map_extra
         - pinyin
@@ -7220,13 +7226,13 @@ components:
         - mode
         - config_revision
         - keyword
-        - keyword_upstream_account_ids
         - provider
-        - provider_upstream_account_ids
         - thresholds
         - sample_rate
         - verdict_cache_ttl_seconds
         - scope_group_ids
+        - keyword_upstream_account_ids
+        - provider_upstream_account_ids
         - violation_window_hours
         - risk_event_threshold
         - record_non_hits
@@ -7398,11 +7404,11 @@ components:
           type: string
         enabled:
           type: boolean
-        mode:
-          type: string
         has_api_key:
           description: 是否已配置审核 API Key（出于安全考虑不回显明文/密文）
           type: boolean
+        mode:
+          type: string
         model:
           description: 审核模型，如 omni-moderation-latest
           type: string
@@ -7411,6 +7417,8 @@ components:
           format: int64
           type: integer
       required:
+        - enabled
+        - mode
         - base_url
         - model
         - has_api_key
@@ -7434,6 +7442,8 @@ components:
           format: int64
           type: integer
       required:
+        - enabled
+        - mode
         - base_url
         - model
         - timeout_ms
@@ -8697,43 +8707,6 @@ components:
         - tenantName
         - customerSiteName
       type: object
-    TenantDeletionJob:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/TenantDeletionJob.json
-          format: uri
-          readOnly: true
-          type: string
-        completedAt:
-          format: date-time
-          type: string
-        executeAfter:
-          format: date-time
-          type: string
-        jobId:
-          type: string
-        lastError:
-          type: string
-        requestedAt:
-          format: date-time
-          type: string
-        startedAt:
-          format: date-time
-          type: string
-        status:
-          type: string
-        tenantId:
-          type: string
-      required:
-        - jobId
-        - tenantId
-        - status
-        - requestedAt
-        - executeAfter
-      type: object
     TenantDetailOutputBody:
       additionalProperties: false
       properties:
@@ -9240,26 +9213,14 @@ components:
         billing_group_label_snapshot:
           description: 请求时分组展示标签快照
           type: string
+        billing_reason:
+          description: 计费判定原因
+          type: string
         billing_source:
           description: 计费来源：payg=按量 / subscription=订阅内
           type: string
         billing_status:
           description: 计费状态
-          type: string
-        provider_terminal_state:
-          description: 上游流式终态
-          type: string
-        client_delivery_state:
-          description: 客户端交付状态
-          type: string
-        cancellation_origin:
-          description: 取消来源
-          type: string
-        billing_reason:
-          description: 计费判定原因
-          type: string
-        response_summary_state:
-          description: 响应摘要状态
           type: string
         billing_status_label:
           description: 计费状态展示名
@@ -9272,8 +9233,14 @@ components:
           description: 缓存写 token 数
           format: int32
           type: integer
+        cancellation_origin:
+          description: 取消来源
+          type: string
         capability_type:
           description: 能力类型
+          type: string
+        client_delivery_state:
+          description: 客户端交付状态
           type: string
         completion_tokens:
           description: 输出 token 数
@@ -9332,6 +9299,9 @@ components:
           description: 输入 token 数
           format: int32
           type: integer
+        provider_terminal_state:
+          description: 上游终态
+          type: string
         reasoning_effort:
           description: 客户端请求推理强度（归一化：low/medium/high/xhigh/max）
           type: string
@@ -9355,6 +9325,9 @@ components:
           description: 请求总耗时，毫秒
           format: int32
           type: integer
+        response_summary_state:
+          description: 响应摘要状态
+          type: string
         retail_base_usd:
           description: 分组零售价格表原价USD 金额
           format: double
@@ -9414,6 +9387,10 @@ components:
         - refund_status
         - billing_source
         - request_status
+        - provider_terminal_state
+        - client_delivery_state
+        - cancellation_origin
+        - response_summary_state
       type: object
     TenantUsageLogsOutputBody:
       additionalProperties: false
@@ -10822,26 +10799,14 @@ components:
         billing_group_label_snapshot:
           description: 请求时分组展示标签快照
           type: string
+        billing_reason:
+          description: 计费判定原因
+          type: string
         billing_source:
           description: 计费来源：payg=按量 / subscription=订阅内
           type: string
         billing_status:
           description: 计费状态
-          type: string
-        provider_terminal_state:
-          description: 上游流式终态
-          type: string
-        client_delivery_state:
-          description: 客户端交付状态
-          type: string
-        cancellation_origin:
-          description: 取消来源
-          type: string
-        billing_reason:
-          description: 计费判定原因
-          type: string
-        response_summary_state:
-          description: 响应摘要状态
           type: string
         cache_read_tokens:
           description: 缓存读 token 数
@@ -10851,6 +10816,9 @@ components:
           description: 缓存写 token 数
           format: int32
           type: integer
+        cancellation_origin:
+          description: 取消来源
+          type: string
         capability_type:
           description: 能力类型
           type: string
@@ -10858,6 +10826,9 @@ components:
           description: 按命中上游资源价格表计算的参考成本
           format: double
           type: number
+        client_delivery_state:
+          description: 客户端交付状态
+          type: string
         client_user_agent:
           description: 客户端 User-Agent 摘要
           type: string
@@ -10950,6 +10921,9 @@ components:
         provider_code:
           description: 供应商编码
           type: string
+        provider_terminal_state:
+          description: 上游终态：unknown/completed/failed/cancelled/incomplete
+          type: string
         public_response_model:
           description: 对客户端暴露的响应模型名
           type: string
@@ -11002,6 +10976,9 @@ components:
         resolved_provider_family:
           description: 最终实际选中的上游协议家族
           type: string
+        response_summary_state:
+          description: 响应摘要状态
+          type: string
         response_tail_ms:
           description: 首个响应字节之后到请求结束的耗时，毫秒
           format: int32
@@ -11046,9 +11023,6 @@ components:
         upstream_account_name:
           description: 命中的上游账号名称
           type: string
-        upstream_tenant_display_name:
-          description: 上游账号租户侧展示名称
-          type: string
         upstream_model:
           description: 上游模型
           type: string
@@ -11059,6 +11033,9 @@ components:
           description: 上游状态码
           format: int32
           type: integer
+        upstream_tenant_display_name:
+          description: 上游账号租户侧展示名称
+          type: string
         usage_estimated:
           description: 是否估算用量
           type: boolean
@@ -11106,6 +11083,10 @@ components:
         - billing_status
         - refund_status
         - request_status
+        - provider_terminal_state
+        - client_delivery_state
+        - cancellation_origin
+        - response_summary_state
         - protocol_conversion_enabled
         - upstream_model_mapping_applied
         - usage_estimated
@@ -11139,25 +11120,12 @@ components:
         billing_breakdown: {}
         billing_group_label_snapshot:
           type: string
+        billing_reason:
+          type: string
         billing_source:
           description: 计费来源
           type: string
         billing_status:
-          type: string
-        provider_terminal_state:
-          description: 上游流式终态
-          type: string
-        client_delivery_state:
-          description: 客户端交付状态
-          type: string
-        cancellation_origin:
-          description: 取消来源
-          type: string
-        billing_reason:
-          description: 计费判定原因
-          type: string
-        response_summary_state:
-          description: 响应摘要状态
           type: string
         cache_read_tokens:
           format: int32
@@ -11165,12 +11133,16 @@ components:
         cache_write_tokens:
           format: int32
           type: integer
+        cancellation_origin:
+          type: string
         catalog_base_usd:
           description: 上游目录基准价USD 金额
           format: double
           type: number
         client_api_format:
           description: 客户端 API 格式
+          type: string
+        client_delivery_state:
           type: string
         client_ip:
           type: string
@@ -11243,6 +11215,8 @@ components:
         provider_api_format:
           description: 最终上游 API 格式
           type: string
+        provider_terminal_state:
+          type: string
         public_response_model:
           type: string
         reasoning_effort:
@@ -11286,6 +11260,8 @@ components:
         resolved_provider_family:
           type: string
         response_message: {}
+        response_summary_state:
+          type: string
         response_tail_ms:
           format: int32
           type: integer
@@ -11354,6 +11330,10 @@ components:
         - protocol_conversion_enabled
         - upstream_model_mapping_applied
         - request_status
+        - provider_terminal_state
+        - client_delivery_state
+        - cancellation_origin
+        - response_summary_state
         - stream
         - prompt_tokens
         - completion_tokens
@@ -12044,26 +12024,14 @@ components:
         billing_group_label_snapshot:
           description: 请求时分组展示标签快照
           type: string
+        billing_reason:
+          description: 计费判定原因
+          type: string
         billing_source:
           description: 计费来源：payg=按量 / subscription=订阅内
           type: string
         billing_status:
           description: 计费状态
-          type: string
-        provider_terminal_state:
-          description: 上游流式终态
-          type: string
-        client_delivery_state:
-          description: 客户端交付状态
-          type: string
-        cancellation_origin:
-          description: 取消来源
-          type: string
-        billing_reason:
-          description: 计费判定原因
-          type: string
-        response_summary_state:
-          description: 响应摘要状态
           type: string
         cache_read_tokens:
           description: 缓存读 token 数
@@ -12073,6 +12041,12 @@ components:
           description: 缓存写 token 数
           format: int32
           type: integer
+        cancellation_origin:
+          description: 取消来源
+          type: string
+        client_delivery_state:
+          description: 客户端交付状态
+          type: string
         completion_tokens:
           description: 输出 token 数
           format: int32
@@ -12119,6 +12093,9 @@ components:
           description: 输入 token 数
           format: int32
           type: integer
+        provider_terminal_state:
+          description: 上游终态
+          type: string
         reasoning_effort:
           description: 客户端请求推理强度（归一化：low/medium/high/xhigh/max）
           type: string
@@ -12137,6 +12114,9 @@ components:
           type: string
         request_status:
           description: 请求状态
+          type: string
+        response_summary_state:
+          description: 响应摘要状态
           type: string
         service_tier:
           description: 服务档位：standard/fast
@@ -12182,6 +12162,10 @@ components:
         - refund_status
         - billing_source
         - request_status
+        - provider_terminal_state
+        - client_delivery_state
+        - cancellation_origin
+        - response_summary_state
       type: object
     UserUsageLogsOutputBody:
       additionalProperties: false
@@ -12421,6 +12405,8 @@ components:
         feeAmountMicroUsd:
           format: int64
           type: integer
+        feeDeductionMode:
+          type: string
         paidAt:
           format: int64
           type: integer
@@ -12441,6 +12427,7 @@ components:
         - amountMicroUsd
         - feeAmountMicroUsd
         - payoutAmountMicroUsd
+        - feeDeductionMode
         - accountName
         - bankName
         - accountNo
@@ -16538,7 +16525,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/AppError"
           description: Error
-      summary: 探测提示词审计节点
+      summary: 测试提示词审计节点
       tags:
         - prompt-audit
   /api/v1/prompt-audit/events:
@@ -20343,7 +20330,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/AppError"
           description: Error
-      summary: 申请删除租户
+      summary: 删除租户
       tags:
         - admin-tenants
     get:
@@ -20398,56 +20385,6 @@ paths:
                 $ref: "#/components/schemas/AppError"
           description: Error
       summary: 更新租户
-      tags:
-        - admin-tenants
-  /api/v1/tenants/{id}/deletion:
-    get:
-      operationId: admin-get-tenant-deletion
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/TenantDeletionJob"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 查询租户删除状态
-      tags:
-        - admin-tenants
-  /api/v1/tenants/{id}/deletion/cancel:
-    post:
-      operationId: admin-cancel-tenant-deletion
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SuccessOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 取消租户删除
       tags:
         - admin-tenants
   /api/v1/tenants/{id}/operations-token:
