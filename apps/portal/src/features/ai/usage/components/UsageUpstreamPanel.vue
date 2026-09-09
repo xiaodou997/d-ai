@@ -23,6 +23,7 @@ const columns: DsTableColumn[] = [
   { key: "resource", title: "上游资源", width: 240 },
   { key: "request_count", title: "请求数", width: 110, align: "right", mono: true },
   { key: "success_rate", title: "成功率", width: 110, align: "right", mono: true },
+  { key: "cache_rate", title: "缓存率", width: 110, align: "right", mono: true },
   { key: "outcome", title: "成功 / 失败", width: 140, align: "right", mono: true },
   { key: "prompt_tokens", title: "输入 Token", width: 126, align: "right", mono: true },
   { key: "completion_tokens", title: "输出 Token", width: 126, align: "right", mono: true },
@@ -57,6 +58,13 @@ function kindLabel(row: UsageUpstreamSummaryRowDTO) {
 function successRate(row: UsageUpstreamSummaryRowDTO) {
   if (!row.request_count) return "0%";
   return `${((row.success_count / row.request_count) * 100).toFixed(1)}%`;
+}
+
+function cacheRate(row: UsageUpstreamSummaryRowDTO) {
+  const prompt = Number(row.total_prompt_tokens || 0);
+  const read = Number(row.cache_read_tokens || 0);
+  const denominator = prompt + read;
+  return denominator ? `${((read * 100) / denominator).toFixed(1)}%` : "—";
 }
 </script>
 
@@ -98,6 +106,10 @@ function successRate(row: UsageUpstreamSummaryRowDTO) {
 
       <template #cell-success_rate="{ row }">
         {{ successRate(row) }}
+      </template>
+
+      <template #cell-cache_rate="{ row }">
+        {{ cacheRate(row) }}
       </template>
 
       <template #cell-outcome="{ row }">

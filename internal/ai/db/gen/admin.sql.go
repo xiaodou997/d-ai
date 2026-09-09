@@ -793,6 +793,21 @@ SELECT
   COALESCE(SUM(total_tokens), 0)::bigint AS total_tokens,
   COALESCE(SUM(prompt_tokens), 0)::bigint AS total_prompt_tokens,
   COALESCE(SUM(completion_tokens), 0)::bigint AS total_completion_tokens,
+  COALESCE(SUM(cache_read_tokens), 0)::bigint AS cache_read_tokens,
+  COALESCE(SUM(cache_write_tokens), 0)::bigint AS cache_write_tokens,
+  COUNT(DISTINCT tenant_id)::bigint AS active_tenants,
+  COUNT(DISTINCT user_id) FILTER (WHERE NULLIF(user_id, '') IS NOT NULL)::bigint AS active_users,
+  COUNT(DISTINCT COALESCE(upstream_account_id::text, credential_pool_id::text))
+    FILTER (WHERE upstream_account_id IS NOT NULL OR credential_pool_id IS NOT NULL)::bigint AS active_accounts,
+  (SELECT COUNT(*)::bigint FROM iam_tenants t
+    WHERE ($1::text IS NULL OR t.tenant_id = $1)
+      AND ($2::timestamptz IS NULL OR t.created_at >= $2::timestamptz)
+      AND ($3::timestamptz IS NULL OR t.created_at < $3::timestamptz)) AS new_tenants,
+  (SELECT COUNT(*)::bigint FROM iam_accounts a
+    WHERE a.user_type = 4
+      AND ($1::text IS NULL OR a.tenant_id = $1)
+      AND ($2::timestamptz IS NULL OR a.created_at >= $2::timestamptz)
+      AND ($3::timestamptz IS NULL OR a.created_at < $3::timestamptz)) AS new_users,
   COALESCE(SUM(catalog_base), 0)::bigint AS total_catalog_base,
   COALESCE(SUM(tenant_payable), 0)::bigint AS total_tenant_payable,
   COALESCE(SUM(retail_base), 0)::bigint AS total_retail_base,
@@ -800,19 +815,23 @@ SELECT
   COALESCE(SUM(user_charged), 0)::bigint AS total_user_charged,
   COALESCE(AVG(latency_ms) FILTER (WHERE request_status = 'success' AND latency_ms IS NOT NULL), 0)::double precision AS avg_latency_ms,
   COALESCE(AVG(request_total_ms) FILTER (WHERE request_status = 'success' AND request_total_ms IS NOT NULL), 0)::double precision AS avg_request_total_ms,
-  COALESCE(AVG(first_response_byte_ms) FILTER (WHERE request_status = 'success' AND first_response_byte_ms IS NOT NULL), 0)::double precision AS avg_first_response_byte_ms
+  COALESCE(AVG(first_response_byte_ms) FILTER (WHERE request_status = 'success' AND first_response_byte_ms IS NOT NULL), 0)::double precision AS avg_first_response_byte_ms,
+  COALESCE(percentile_cont(0.95) WITHIN GROUP (ORDER BY request_total_ms) FILTER (WHERE request_status = 'success' AND request_total_ms IS NOT NULL), 0)::double precision AS p95_request_total_ms,
+  COALESCE(percentile_cont(0.95) WITHIN GROUP (ORDER BY first_response_byte_ms) FILTER (WHERE request_status = 'success' AND first_response_byte_ms IS NOT NULL), 0)::double precision AS p95_first_response_byte_ms
 FROM ai_usage_logs
 WHERE ($1::text IS NULL OR tenant_id = $1)
-  AND ($2::text IS NULL OR user_id = $2)
-  AND ($3::timestamptz IS NULL OR created_at >= $3::timestamptz)
-  AND ($4::timestamptz IS NULL OR created_at < $4::timestamptz)
+  AND ($4::text IS NULL OR user_id = $4)
+  AND ($5::text IS NULL OR model_code = $5)
+  AND ($2::timestamptz IS NULL OR created_at >= $2::timestamptz)
+  AND ($3::timestamptz IS NULL OR created_at < $3::timestamptz)
 `
 
 type GetDashboardSummaryParams struct {
-	TenantID pgtype.Text        `json:"tenant_id"`
-	UserID   pgtype.Text        `json:"user_id"`
-	DateFrom pgtype.Timestamptz `json:"date_from"`
-	DateTo   pgtype.Timestamptz `json:"date_to"`
+	TenantID  pgtype.Text        `json:"tenant_id"`
+	DateFrom  pgtype.Timestamptz `json:"date_from"`
+	DateTo    pgtype.Timestamptz `json:"date_to"`
+	UserID    pgtype.Text        `json:"user_id"`
+	ModelCode pgtype.Text        `json:"model_code"`
 }
 
 type GetDashboardSummaryRow struct {
@@ -822,6 +841,13 @@ type GetDashboardSummaryRow struct {
 	TotalTokens            int64   `json:"total_tokens"`
 	TotalPromptTokens      int64   `json:"total_prompt_tokens"`
 	TotalCompletionTokens  int64   `json:"total_completion_tokens"`
+	CacheReadTokens        int64   `json:"cache_read_tokens"`
+	CacheWriteTokens       int64   `json:"cache_write_tokens"`
+	ActiveTenants          int64   `json:"active_tenants"`
+	ActiveUsers            int64   `json:"active_users"`
+	ActiveAccounts         int64   `json:"active_accounts"`
+	NewTenants             int64   `json:"new_tenants"`
+	NewUsers               int64   `json:"new_users"`
 	TotalCatalogBase       int64   `json:"total_catalog_base"`
 	TotalTenantPayable     int64   `json:"total_tenant_payable"`
 	TotalRetailBase        int64   `json:"total_retail_base"`
@@ -830,6 +856,8 @@ type GetDashboardSummaryRow struct {
 	AvgLatencyMs           float64 `json:"avg_latency_ms"`
 	AvgRequestTotalMs      float64 `json:"avg_request_total_ms"`
 	AvgFirstResponseByteMs float64 `json:"avg_first_response_byte_ms"`
+	P95RequestTotalMs      float64 `json:"p95_request_total_ms"`
+	P95FirstResponseByteMs float64 `json:"p95_first_response_byte_ms"`
 }
 
 // ============================================================================
@@ -838,9 +866,10 @@ type GetDashboardSummaryRow struct {
 func (q *Queries) GetDashboardSummary(ctx context.Context, arg GetDashboardSummaryParams) (GetDashboardSummaryRow, error) {
 	row := q.db.QueryRow(ctx, getDashboardSummary,
 		arg.TenantID,
-		arg.UserID,
 		arg.DateFrom,
 		arg.DateTo,
+		arg.UserID,
+		arg.ModelCode,
 	)
 	var i GetDashboardSummaryRow
 	err := row.Scan(
@@ -850,6 +879,13 @@ func (q *Queries) GetDashboardSummary(ctx context.Context, arg GetDashboardSumma
 		&i.TotalTokens,
 		&i.TotalPromptTokens,
 		&i.TotalCompletionTokens,
+		&i.CacheReadTokens,
+		&i.CacheWriteTokens,
+		&i.ActiveTenants,
+		&i.ActiveUsers,
+		&i.ActiveAccounts,
+		&i.NewTenants,
+		&i.NewUsers,
 		&i.TotalCatalogBase,
 		&i.TotalTenantPayable,
 		&i.TotalRetailBase,
@@ -858,6 +894,8 @@ func (q *Queries) GetDashboardSummary(ctx context.Context, arg GetDashboardSumma
 		&i.AvgLatencyMs,
 		&i.AvgRequestTotalMs,
 		&i.AvgFirstResponseByteMs,
+		&i.P95RequestTotalMs,
+		&i.P95FirstResponseByteMs,
 	)
 	return i, err
 }
@@ -1487,19 +1525,21 @@ SELECT
 FROM ai_usage_logs
 WHERE ($1::text IS NULL OR tenant_id = $1)
   AND ($2::text IS NULL OR user_id = $2)
-  AND ($3::timestamptz IS NULL OR created_at >= $3::timestamptz)
-  AND ($4::timestamptz IS NULL OR created_at < $4::timestamptz)
+  AND ($3::text IS NULL OR model_code = $3)
+  AND ($4::timestamptz IS NULL OR created_at >= $4::timestamptz)
+  AND ($5::timestamptz IS NULL OR created_at < $5::timestamptz)
   AND request_status = 'failed'
 ORDER BY created_at DESC
-LIMIT $5
+LIMIT $6
 `
 
 type ListDashboardRecentErrorsParams struct {
-	TenantID pgtype.Text        `json:"tenant_id"`
-	UserID   pgtype.Text        `json:"user_id"`
-	DateFrom pgtype.Timestamptz `json:"date_from"`
-	DateTo   pgtype.Timestamptz `json:"date_to"`
-	Limit    int32              `json:"limit"`
+	TenantID  pgtype.Text        `json:"tenant_id"`
+	UserID    pgtype.Text        `json:"user_id"`
+	ModelCode pgtype.Text        `json:"model_code"`
+	DateFrom  pgtype.Timestamptz `json:"date_from"`
+	DateTo    pgtype.Timestamptz `json:"date_to"`
+	Limit     int32              `json:"limit"`
 }
 
 type ListDashboardRecentErrorsRow struct {
@@ -1524,6 +1564,7 @@ func (q *Queries) ListDashboardRecentErrors(ctx context.Context, arg ListDashboa
 	rows, err := q.db.Query(ctx, listDashboardRecentErrors,
 		arg.TenantID,
 		arg.UserID,
+		arg.ModelCode,
 		arg.DateFrom,
 		arg.DateTo,
 		arg.Limit,
@@ -1571,19 +1612,21 @@ SELECT
 FROM ai_usage_logs
 WHERE ($1::text IS NULL OR tenant_id = $1)
   AND ($2::text IS NULL OR user_id = $2)
-  AND ($3::timestamptz IS NULL OR created_at >= $3::timestamptz)
-  AND ($4::timestamptz IS NULL OR created_at < $4::timestamptz)
+  AND ($3::text IS NULL OR model_code = $3)
+  AND ($4::timestamptz IS NULL OR created_at >= $4::timestamptz)
+  AND ($5::timestamptz IS NULL OR created_at < $5::timestamptz)
 GROUP BY model_code
 ORDER BY request_count DESC
-LIMIT $5
+LIMIT $6
 `
 
 type ListDashboardTopModelsParams struct {
-	TenantID pgtype.Text        `json:"tenant_id"`
-	UserID   pgtype.Text        `json:"user_id"`
-	DateFrom pgtype.Timestamptz `json:"date_from"`
-	DateTo   pgtype.Timestamptz `json:"date_to"`
-	Limit    int32              `json:"limit"`
+	TenantID  pgtype.Text        `json:"tenant_id"`
+	UserID    pgtype.Text        `json:"user_id"`
+	ModelCode pgtype.Text        `json:"model_code"`
+	DateFrom  pgtype.Timestamptz `json:"date_from"`
+	DateTo    pgtype.Timestamptz `json:"date_to"`
+	Limit     int32              `json:"limit"`
 }
 
 type ListDashboardTopModelsRow struct {
@@ -1597,6 +1640,7 @@ func (q *Queries) ListDashboardTopModels(ctx context.Context, arg ListDashboardT
 	rows, err := q.db.Query(ctx, listDashboardTopModels,
 		arg.TenantID,
 		arg.UserID,
+		arg.ModelCode,
 		arg.DateFrom,
 		arg.DateTo,
 		arg.Limit,
@@ -1633,19 +1677,21 @@ SELECT
 FROM ai_usage_logs
 WHERE ($1::text IS NULL OR tenant_id = $1)
   AND ($2::text IS NULL OR user_id = $2)
-  AND ($3::timestamptz IS NULL OR created_at >= $3::timestamptz)
-  AND ($4::timestamptz IS NULL OR created_at < $4::timestamptz)
+  AND ($3::text IS NULL OR model_code = $3)
+  AND ($4::timestamptz IS NULL OR created_at >= $4::timestamptz)
+  AND ($5::timestamptz IS NULL OR created_at < $5::timestamptz)
 GROUP BY tenant_id
 ORDER BY request_count DESC
-LIMIT $5
+LIMIT $6
 `
 
 type ListDashboardTopTenantsParams struct {
-	TenantID pgtype.Text        `json:"tenant_id"`
-	UserID   pgtype.Text        `json:"user_id"`
-	DateFrom pgtype.Timestamptz `json:"date_from"`
-	DateTo   pgtype.Timestamptz `json:"date_to"`
-	Limit    int32              `json:"limit"`
+	TenantID  pgtype.Text        `json:"tenant_id"`
+	UserID    pgtype.Text        `json:"user_id"`
+	ModelCode pgtype.Text        `json:"model_code"`
+	DateFrom  pgtype.Timestamptz `json:"date_from"`
+	DateTo    pgtype.Timestamptz `json:"date_to"`
+	Limit     int32              `json:"limit"`
 }
 
 type ListDashboardTopTenantsRow struct {
@@ -1659,6 +1705,7 @@ func (q *Queries) ListDashboardTopTenants(ctx context.Context, arg ListDashboard
 	rows, err := q.db.Query(ctx, listDashboardTopTenants,
 		arg.TenantID,
 		arg.UserID,
+		arg.ModelCode,
 		arg.DateFrom,
 		arg.DateTo,
 		arg.Limit,
@@ -2682,6 +2729,8 @@ SELECT
   COUNT(*)::bigint AS request_count,
   COALESCE(SUM(prompt_tokens), 0)::bigint AS total_prompt_tokens,
   COALESCE(SUM(completion_tokens), 0)::bigint AS total_completion_tokens,
+  COALESCE(SUM(cache_read_tokens), 0)::bigint AS cache_read_tokens,
+  COALESCE(SUM(cache_write_tokens), 0)::bigint AS cache_write_tokens,
   COALESCE(SUM(total_tokens), 0)::bigint AS total_tokens,
   COALESCE(SUM(catalog_base), 0)::bigint AS total_catalog_base,
   COALESCE(SUM(tenant_payable), 0)::bigint AS total_tenant_payable,
@@ -2716,6 +2765,8 @@ type ListUsageSummaryRow struct {
 	RequestCount          int64  `json:"request_count"`
 	TotalPromptTokens     int64  `json:"total_prompt_tokens"`
 	TotalCompletionTokens int64  `json:"total_completion_tokens"`
+	CacheReadTokens       int64  `json:"cache_read_tokens"`
+	CacheWriteTokens      int64  `json:"cache_write_tokens"`
 	TotalTokens           int64  `json:"total_tokens"`
 	TotalCatalogBase      int64  `json:"total_catalog_base"`
 	TotalTenantPayable    int64  `json:"total_tenant_payable"`
@@ -2750,6 +2801,8 @@ func (q *Queries) ListUsageSummary(ctx context.Context, arg ListUsageSummaryPara
 			&i.RequestCount,
 			&i.TotalPromptTokens,
 			&i.TotalCompletionTokens,
+			&i.CacheReadTokens,
+			&i.CacheWriteTokens,
 			&i.TotalTokens,
 			&i.TotalCatalogBase,
 			&i.TotalTenantPayable,

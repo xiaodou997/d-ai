@@ -100,11 +100,10 @@ function handleSelectUser(userId: string) {
       fill
       :icon="BarChart3"
       :breadcrumbs="[
-        { label: '智能服务' },
-        { label: '日志审计' },
+        { label: '概览' },
         { label: '用量分析' }
       ]"
-      :description="`${periodLabel}内查看请求趋势、计费结构与上游资源表现。`"
+      :description="`${periodLabel}内查看请求规模、质量、缓存效率与账号产出。`"
     >
       <template #actions>
         <UsageRangeSelector

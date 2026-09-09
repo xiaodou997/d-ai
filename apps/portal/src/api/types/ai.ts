@@ -80,6 +80,13 @@ export interface DashboardSummaryDTO {
   total_tokens: number;
   total_prompt_tokens: number;
   total_completion_tokens: number;
+  cache_read_tokens?: number;
+  cache_write_tokens?: number;
+  active_tenants?: number;
+  active_users?: number;
+  active_accounts?: number;
+  new_tenants?: number;
+  new_users?: number;
   total_catalog_base_usd: number;
   total_tenant_payable_usd: number;
   total_retail_base_usd: number;
@@ -88,6 +95,8 @@ export interface DashboardSummaryDTO {
   avg_latency_ms: number;
   avg_request_total_ms: number;
   avg_first_response_byte_ms: number;
+  p95_request_total_ms?: number;
+  p95_first_response_byte_ms?: number;
 }
 
 export interface DashboardTopTenantDTO {

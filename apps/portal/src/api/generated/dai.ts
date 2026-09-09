@@ -623,6 +623,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/overview/snapshot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 管理员经营概览快照
+         * @description 返回仪表盘、业务、用量、成本和运维页面共享的经营统计快照。
+         */
+        get: operations["admin-overview-snapshot"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/payment-orders": {
         parameters: {
             query?: never;
@@ -6113,6 +6133,16 @@ export interface components {
              * @description 平均总耗时，毫秒
              */
             avg_request_total_ms: number;
+            /**
+             * Format: int64
+             * @description 缓存读 token 数
+             */
+            cache_read_tokens?: number;
+            /**
+             * Format: int64
+             * @description 缓存写 token 数
+             */
+            cache_write_tokens?: number;
             /** Format: double */
             catalog_base_usd: number;
             /**
@@ -6222,6 +6252,21 @@ export interface components {
              */
             readonly $schema?: string;
             /**
+             * Format: int64
+             * @description 时间窗口内有请求的上游账号或账号池数
+             */
+            active_accounts?: number;
+            /**
+             * Format: int64
+             * @description 时间窗口内活跃租户数
+             */
+            active_tenants?: number;
+            /**
+             * Format: int64
+             * @description 时间窗口内活跃终端用户数
+             */
+            active_users?: number;
+            /**
              * Format: double
              * @description 平均首个响应字节耗时，毫秒
              */
@@ -6238,9 +6283,39 @@ export interface components {
             avg_request_total_ms: number;
             /**
              * Format: int64
+             * @description 缓存读 token 数
+             */
+            cache_read_tokens?: number;
+            /**
+             * Format: int64
+             * @description 缓存写 token 数
+             */
+            cache_write_tokens?: number;
+            /**
+             * Format: int64
              * @description 失败请求数
              */
             failed_requests: number;
+            /**
+             * Format: int64
+             * @description 时间窗口内新增租户数
+             */
+            new_tenants?: number;
+            /**
+             * Format: int64
+             * @description 时间窗口内新增终端用户数
+             */
+            new_users?: number;
+            /**
+             * Format: double
+             * @description P95 首个响应字节耗时，毫秒
+             */
+            p95_first_response_byte_ms?: number;
+            /**
+             * Format: double
+             * @description P95 总耗时，毫秒
+             */
+            p95_request_total_ms?: number;
             /**
              * Format: int64
              * @description 成功请求数
@@ -7524,6 +7599,145 @@ export interface components {
             items: components["schemas"]["OauthPoolHealthDTO"][] | null;
             /** Format: int64 */
             total: number;
+        };
+        OverviewAccountDTO: {
+            /** Format: double */
+            cache_rate?: number;
+            /** Format: int64 */
+            cache_read_tokens: number;
+            /** Format: int64 */
+            cache_write_tokens: number;
+            /** Format: double */
+            catalog_base_usd: number;
+            /** Format: int64 */
+            failed_count: number;
+            health_status: string;
+            /** Format: int64 */
+            last_requested_at?: number;
+            /** Format: int64 */
+            prompt_tokens: number;
+            provider_code: string;
+            /** Format: int64 */
+            request_count: number;
+            /** Format: int64 */
+            success_count: number;
+            /** Format: double */
+            success_rate?: number;
+            target_id: string;
+            target_kind: string;
+            target_name: string;
+            /** Format: double */
+            tenant_payable_usd: number;
+            /** Format: int64 */
+            total_tokens: number;
+        };
+        OverviewSnapshotMeta: {
+            comparison_window?: string;
+            /** Format: int64 */
+            date_from: number;
+            /** Format: int64 */
+            date_to: number;
+            /** Format: int64 */
+            generated_at: number;
+            view: string;
+        };
+        OverviewSnapshotOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/OverviewSnapshotOutputBody.json
+             */
+            readonly $schema?: string;
+            accounts: components["schemas"]["OverviewAccountDTO"][] | null;
+            comparison?: components["schemas"]["OverviewSummaryDTO"];
+            included: components["schemas"]["IdentityIncludedDTO"];
+            meta: components["schemas"]["OverviewSnapshotMeta"];
+            models: components["schemas"]["UsageSummaryRowDTO"][] | null;
+            summary: components["schemas"]["OverviewSummaryDTO"];
+            tenants: components["schemas"]["DashboardTopTenantDTO"][] | null;
+            trends: components["schemas"]["OverviewTrendDTO"][] | null;
+            users: components["schemas"]["UsageUserRankingRowDTO"][] | null;
+        };
+        OverviewSummaryDTO: {
+            /** Format: int64 */
+            active_accounts: number;
+            /** Format: int64 */
+            active_tenants: number;
+            /** Format: int64 */
+            active_users: number;
+            /** Format: double */
+            avg_first_response_byte_ms: number;
+            /** Format: double */
+            avg_request_total_ms: number;
+            /** Format: double */
+            cache_rate?: number;
+            /** Format: int64 */
+            cache_read_tokens: number;
+            /** Format: int64 */
+            cache_write_tokens: number;
+            /** Format: int64 */
+            failed_requests: number;
+            /** Format: double */
+            gross_margin_rate?: number;
+            /** Format: double */
+            gross_margin_usd: number;
+            /** Format: int64 */
+            new_tenants: number;
+            /** Format: int64 */
+            new_users: number;
+            /** Format: double */
+            p95_first_response_byte_ms: number;
+            /** Format: double */
+            p95_request_total_ms: number;
+            /** Format: double */
+            success_rate?: number;
+            /** Format: int64 */
+            successful_requests: number;
+            /** Format: double */
+            total_catalog_base_usd: number;
+            /** Format: int64 */
+            total_completion_tokens: number;
+            /** Format: int64 */
+            total_prompt_tokens: number;
+            /** Format: int64 */
+            total_requests: number;
+            /** Format: double */
+            total_tenant_payable_usd: number;
+            /** Format: int64 */
+            total_tokens: number;
+            /** Format: double */
+            total_user_charged_usd: number;
+        };
+        OverviewTrendDTO: {
+            /** Format: int64 */
+            avg_first_response_byte_ms: number;
+            /** Format: int64 */
+            avg_latency_ms: number;
+            /** Format: int64 */
+            avg_request_total_ms: number;
+            /** Format: int64 */
+            cache_read_tokens: number;
+            /** Format: int64 */
+            cache_write_tokens: number;
+            /** Format: double */
+            catalog_base_usd: number;
+            /** Format: int64 */
+            completion_tokens: number;
+            date: string;
+            /** Format: int64 */
+            failed_count: number;
+            /** Format: int64 */
+            prompt_tokens: number;
+            /** Format: int64 */
+            request_count: number;
+            /** Format: int64 */
+            success_count: number;
+            /** Format: double */
+            tenant_payable_usd: number;
+            /** Format: int64 */
+            total_tokens: number;
+            /** Format: double */
+            user_charged_usd: number;
         };
         PIIConfig: {
             /**
@@ -10947,6 +11161,16 @@ export interface components {
             avg_request_total_ms: number;
             /**
              * Format: int64
+             * @description 缓存读 token 数
+             */
+            cache_read_tokens?: number;
+            /**
+             * Format: int64
+             * @description 缓存写 token 数
+             */
+            cache_write_tokens?: number;
+            /**
+             * Format: int64
              * @description 失败请求数
              */
             failed_count: number;
@@ -10960,6 +11184,16 @@ export interface components {
              * @description 目录基准价USD 金额（倍率1，谁都不付这个数）
              */
             total_catalog_base_usd: number;
+            /**
+             * Format: int64
+             * @description 输出 token 数
+             */
+            total_completion_tokens?: number;
+            /**
+             * Format: int64
+             * @description 输入 token 数
+             */
+            total_prompt_tokens?: number;
             /**
              * Format: int64
              * @description 请求总数
@@ -10993,6 +11227,16 @@ export interface components {
             total: number;
         };
         UsageSummaryRowDTO: {
+            /**
+             * Format: int64
+             * @description 缓存读 token 数
+             */
+            cache_read_tokens?: number;
+            /**
+             * Format: int64
+             * @description 缓存写 token 数
+             */
+            cache_write_tokens?: number;
             /** @description 模型编码 */
             model_code: string;
             /**
@@ -11094,6 +11338,16 @@ export interface components {
         };
         UsageUpstreamSummaryRowDTO: {
             /**
+             * Format: int64
+             * @description 缓存读 token 合计
+             */
+            cache_read_tokens?: number;
+            /**
+             * Format: int64
+             * @description 缓存写 token 合计
+             */
+            cache_write_tokens?: number;
+            /**
              * Format: double
              * @description 按上游资源价格表计算的参考费用
              */
@@ -11108,6 +11362,11 @@ export interface components {
              * @description 生成图片张数合计
              */
             image_units: number;
+            /**
+             * Format: int64
+             * @description 最近请求时间，Unix 毫秒
+             */
+            last_requested_at?: number;
             /** @description 请求时上游资源编码快照 */
             provider_code: string;
             /**
@@ -13168,6 +13427,50 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Delivery"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "admin-overview-snapshot": {
+        parameters: {
+            query: {
+                /** @description 概览视图 */
+                view: "dashboard" | "business" | "usage" | "cost" | "operations";
+                /** @description 租户 ID */
+                tenant_id?: string;
+                /** @description 模型编码 */
+                model_code?: string;
+                /** @description 上游账号或账号池 ID */
+                target_id?: string;
+                /** @description 开始时间，RFC3339 */
+                date_from?: string;
+                /** @description 结束时间，RFC3339，按 [start, end) 解释 */
+                date_to?: string;
+                /** @description 是否返回上一周期比较 */
+                compare?: "previous" | "none";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OverviewSnapshotOutputBody"];
                 };
             };
             /** @description Error */

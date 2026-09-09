@@ -5,13 +5,16 @@ import { useRoute, useRouter } from "vue-router";
 import { Gauge } from "lucide-vue-next";
 
 import { PortalContentCard, PortalMetricGrid, PortalPagePanel } from "@/platform";
-import { DsEmpty, DsMetricCard, DsTable, DsTabs, DsTag, type DsTableColumn } from "@/shared/ui";
+import { DsMetricCard, DsTable, DsTabs, DsTag, type DsTableColumn } from "@/shared/ui";
 import OverviewDataWarning from "@/features/admin/overview/OverviewDataWarning.vue";
 import OperationsHealthPanel from "@/features/admin/overview/OperationsHealthPanel.vue";
+import OverviewAccountTable from "@/features/admin/overview/OverviewAccountTable.vue";
+import OverviewQualityStrip from "@/features/admin/overview/OverviewQualityStrip.vue";
 import OverviewRangeControls from "@/features/admin/overview/OverviewRangeControls.vue";
 import OverviewTrendChart from "@/features/admin/overview/OverviewTrendChart.vue";
 import { useAdminOverviewData } from "@/features/admin/overview/useAdminOverviewData";
-import { formatMs, formatNumber, statusLabel, statusTone, trendLabels } from "@/features/admin/overview/overviewUtils";
+import { formatMs, formatNumber, rateText, statusLabel, statusTone, trendLabels } from "@/features/admin/overview/overviewUtils";
+import { useAdminOverviewSnapshot } from "@/features/admin/overview/useAdminOverviewSnapshot";
 
 type OperationsTab = "overview" | "health";
 
@@ -23,10 +26,11 @@ const tabs = [
 ];
 const activeTab = computed<OperationsTab>(() => route.query.tab === "health" ? "health" : "overview");
 
-const overviewData = useAdminOverviewData(["summary", "trend", "system", "errors", "proxy"], "24h");
-const { failedSections, selectedRangeId, loading, lastUpdatedAt, selectedRange, summary, trend, system, errors, proxyNodes, refresh, changeRange } = overviewData;
+const overviewData = useAdminOverviewData(["summary", "trend", "system", "proxy"], "24h");
+const { failedSections, selectedRangeId, loading, lastUpdatedAt, selectedRange, summary, trend, system, proxyNodes, refresh, changeRange } = overviewData;
 
 const healthData = useAdminOverviewData(["system", "modules", "proxy"], "24h");
+const operatingSnapshot = useAdminOverviewSnapshot("operations", "24h");
 const {
   failedSections: healthFailedSections,
   loading: healthLoading,
@@ -41,6 +45,7 @@ const healthLoaded = ref(false);
 
 const activeLoading = computed(() => activeTab.value === "health" ? healthLoading.value : loading.value);
 const activeUpdatedAt = computed(() => activeTab.value === "health" ? healthUpdatedAt.value : lastUpdatedAt.value);
+const snapshotSummary = computed(() => operatingSnapshot.snapshot.value.summary);
 
 async function loadOverview(force = false) {
   if ((overviewLoaded.value || loading.value) && !force) return;
@@ -71,13 +76,14 @@ watch(activeTab, (tab) => {
   else void loadOverview();
 }, { immediate: true });
 
+void operatingSnapshot.refresh();
+
 const requestsPerHour = computed(() => {
   const hours = Math.max(selectedRange.value.hours, 1);
   return Math.round((Number(summary.value.total_requests) || 0) / hours);
 });
 const errorRate = computed(() => {
-  const total = Number(summary.value.total_requests) || 0;
-  return total ? `${((Number(summary.value.failed_requests) * 100) / total).toFixed(1)}%` : "0%";
+  return rateText(summary.value.failed_requests, summary.value.total_requests);
 });
 const healthyProxyCount = computed(() => proxyNodes.value.filter((node) => node.status === "active" && node.healthStatus !== "unhealthy").length);
 const routeState = computed(() => {
@@ -87,26 +93,12 @@ const routeState = computed(() => {
   return "closed";
 });
 
-const errorColumns: DsTableColumn[] = [
-  { key: "created_at", title: "时间", width: 150 },
-  { key: "model", title: "模型" },
-  { key: "request_status", title: "请求状态", width: 110 },
-  { key: "request_id", title: "请求 ID", width: 150 }
-];
 const proxyColumns: DsTableColumn[] = [
   { key: "name", title: "代理节点" },
   { key: "proxyType", title: "类型", width: 90 },
   { key: "endpoint", title: "出口地址" },
   { key: "healthStatus", title: "健康", width: 100 }
 ];
-
-function formatErrorTime(value?: number) {
-  return value ? new Date(value).toLocaleString("zh-CN", { hour12: false }) : "—";
-}
-
-function errorModel(row: { model_code: string; requested_model?: string }) {
-  return row.requested_model || row.model_code || "—";
-}
 
 function proxyTone(status?: string) {
   return statusTone(status === "healthy" ? "healthy" : status === "unhealthy" ? "unhealthy" : status);
@@ -141,6 +133,7 @@ function proxyTone(status?: string) {
             />
           </PortalContentCard>
 
+          <OverviewQualityStrip :summary="snapshotSummary" />
           <div class="overview-grid">
             <PortalContentCard title="运行时压力" description="只保留影响服务可用性的关键状态。">
               <div class="runtime-status-list">
@@ -163,15 +156,9 @@ function proxyTone(status?: string) {
               </div>
             </PortalContentCard>
 
-            <PortalContentCard title="最近错误" description="优先展示最新的失败请求，详细排查进入使用记录。">
-              <DsTable v-if="errors.length" :columns="errorColumns" :rows="errors.slice(0, 6)" row-key="request_id" :frame="false">
-                <template #cell-created_at="{ row }">{{ formatErrorTime(row.created_at) }}</template>
-                <template #cell-model="{ row }">{{ errorModel(row) }}</template>
-                <template #cell-request_status="{ row }"><DsTag tone="danger">{{ row.request_status || "失败" }}</DsTag></template>
-              </DsTable>
-              <DsEmpty v-else title="暂无错误记录" description="当前时间范围内没有需要关注的失败请求。" />
-            </PortalContentCard>
           </div>
+
+          <OverviewAccountTable :accounts="operatingSnapshot.snapshot.value.accounts" title="账号运行质量" description="技术健康与账号请求成功率、缓存率分开看，避免把业务失败样本当作基础设施告警。" />
 
           <PortalContentCard title="代理出口节点" description="运行概览只展示节点可用性，详细健康状态可切换到健康详情。">
             <DsTable v-if="proxyNodes.length" :columns="proxyColumns" :rows="proxyNodes" row-key="id" :frame="false">

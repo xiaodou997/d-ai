@@ -63,6 +63,14 @@ type AIDashboardHTTPDeps struct {
 	IdentityEnrichmentFailures aitransport.IdentityEnrichmentFailureObserver
 }
 
+// AIOverviewHTTPDeps contains the shared operating overview snapshot.
+type AIOverviewHTTPDeps struct {
+	DashboardQueries           aitransport.DashboardQueryReader
+	UsageQueries               aitransport.UsageQueryReader
+	BanChecker                 aitransport.HumaBanChecker
+	IdentityEnrichmentFailures aitransport.IdentityEnrichmentFailureObserver
+}
+
 // AIUsageHTTPDeps contains the collaborators owned by the independently
 // registered management usage HTTP module.
 type AIUsageHTTPDeps struct {
@@ -257,6 +265,7 @@ type AIHTTPDeps struct {
 	AuditLog            AIAuditLogHTTPDeps
 	System              AISystemHTTPDeps
 	Dashboard           AIDashboardHTTPDeps
+	Overview            AIOverviewHTTPDeps
 	Usage               AIUsageHTTPDeps
 	OAuthManagement     AIOAuthManagementHTTPDeps
 	ModelBindings       AIModelBindingHTTPDeps
@@ -513,6 +522,7 @@ func (m aiModule) Register(api huma.API) {
 	aitransport.RegisterAuditLog(api, buildAuditLogHTTPDeps(m.platform, m.deps.AuditLog))
 	aitransport.RegisterSystem(api, buildSystemHTTPDeps(m.platform, m.deps.System))
 	aitransport.RegisterDashboard(api, buildDashboardHTTPDeps(m.platform, m.deps.Dashboard, identity))
+	aitransport.RegisterOverview(api, buildOverviewHTTPDeps(m.platform, m.deps.Overview, identity))
 	aitransport.RegisterUsage(api, buildUsageHTTPDeps(m.platform, m.deps.Usage, identity))
 	aitransport.RegisterOAuthManagement(api, buildOAuthManagementHTTPDeps(m.platform, m.deps.OAuthManagement))
 	aitransport.RegisterModelBindings(api, buildModelBindingHTTPDeps(m.platform, m.deps.ModelBindings))
@@ -736,6 +746,19 @@ func buildDashboardHTTPDeps(platform aiPlatformDeps, d AIDashboardHTTPDeps, iden
 	deps := aitransport.DashboardHTTPDeps{
 		Auth:                       buildAIHTTPAuthDeps(platform, d.BanChecker),
 		DashboardQueries:           d.DashboardQueries,
+		IdentityEnrichmentFailures: d.IdentityEnrichmentFailures,
+	}
+	if identity != nil {
+		deps.IdentityProvider = identity
+	}
+	return deps
+}
+
+func buildOverviewHTTPDeps(platform aiPlatformDeps, d AIOverviewHTTPDeps, identity aiIdentityProvider) aitransport.OverviewHTTPDeps {
+	deps := aitransport.OverviewHTTPDeps{
+		Auth:                       buildAIHTTPAuthDeps(platform, d.BanChecker),
+		DashboardQueries:           d.DashboardQueries,
+		UsageQueries:               d.UsageQueries,
 		IdentityEnrichmentFailures: d.IdentityEnrichmentFailures,
 	}
 	if identity != nil {

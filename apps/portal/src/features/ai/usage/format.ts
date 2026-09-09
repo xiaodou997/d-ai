@@ -263,7 +263,8 @@ export function buildRequestTrendSeries(rows: DailyTrendRowDTO[]) {
 export function buildTokenTrendSeries(rows: DailyTrendRowDTO[]) {
   return [
     { key: "prompt_tokens", color: resolveTokenColor("--ds-accent"), label: "输入 Token" },
-    { key: "completion_tokens", color: resolveTokenColor("--ds-warning"), label: "输出 Token" }
+    { key: "completion_tokens", color: resolveTokenColor("--ds-warning"), label: "输出 Token" },
+    { key: "cache_read_tokens", color: resolveTokenColor("--ds-info"), label: "缓存读 Token" }
   ].map((series) => ({
     ...series,
     points: rows.map((row) => Number(row[series.key as keyof DailyTrendRowDTO]) || 0)

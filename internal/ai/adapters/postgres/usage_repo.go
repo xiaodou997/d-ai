@@ -45,6 +45,10 @@ const usageStatsSQL = `
 		COUNT(*) AS total_requests,
 		COUNT(*) FILTER (WHERE request_status = 'success') AS success_count,
 		COUNT(*) FILTER (WHERE request_status != 'success') AS failed_count,
+		COALESCE(SUM(prompt_tokens), 0)::bigint AS total_prompt_tokens,
+		COALESCE(SUM(completion_tokens), 0)::bigint AS total_completion_tokens,
+		COALESCE(SUM(cache_read_tokens), 0)::bigint AS cache_read_tokens,
+		COALESCE(SUM(cache_write_tokens), 0)::bigint AS cache_write_tokens,
 		COALESCE(SUM(total_tokens), 0)::bigint AS total_tokens,
 		COALESCE(SUM(catalog_base), 0)::bigint AS total_catalog_base,
 		COALESCE(SUM(tenant_payable), 0)::bigint AS total_tenant_payable,
@@ -81,6 +85,10 @@ func (r *UsageRepo) StatsFor(ctx context.Context, f domain.UsageFilter) (domain.
 		&s.TotalRequests,
 		&s.SuccessCount,
 		&s.FailedCount,
+		&s.TotalPromptTokens,
+		&s.TotalCompletionTokens,
+		&s.CacheReadTokens,
+		&s.CacheWriteTokens,
 		&s.TotalTokens,
 		&s.TotalCatalogBaseMicro,
 		&s.TotalTenantPayableMicro,
@@ -214,6 +222,8 @@ func (r *UsageRepo) Summary(ctx context.Context, f domain.UsageSummaryFilter) ([
 			RequestCount:            row.RequestCount,
 			TotalPromptTokens:       row.TotalPromptTokens,
 			TotalCompletionTokens:   row.TotalCompletionTokens,
+			CacheReadTokens:         row.CacheReadTokens,
+			CacheWriteTokens:        row.CacheWriteTokens,
 			TotalTokens:             row.TotalTokens,
 			TotalCatalogBaseMicro:   row.TotalCatalogBase,
 			TotalTenantPayableMicro: row.TotalTenantPayable,
@@ -274,6 +284,8 @@ const upstreamUsageSummarySQL = `
 		COUNT(*) FILTER (WHERE l.request_status <> 'success')::bigint AS failed_count,
 		COALESCE(SUM(l.prompt_tokens), 0)::bigint AS total_prompt_tokens,
 		COALESCE(SUM(l.completion_tokens), 0)::bigint AS total_completion_tokens,
+		COALESCE(SUM(l.cache_read_tokens), 0)::bigint AS cache_read_tokens,
+		COALESCE(SUM(l.cache_write_tokens), 0)::bigint AS cache_write_tokens,
 		COALESCE(SUM(l.total_tokens), 0)::bigint AS total_tokens,
 		-- billable_units mixes units across capabilities, so split it by type
 		-- instead of summing tokens and images into one meaningless number.
@@ -281,7 +293,8 @@ const upstreamUsageSummarySQL = `
 			WHERE l.billable_unit_type IN ('token', 'input_token', 'output_token')), 0)::bigint AS token_units,
 		COALESCE(SUM(l.billable_units) FILTER (WHERE l.billable_unit_type = 'image'), 0)::bigint AS image_units,
 		COALESCE(SUM(l.catalog_base), 0)::bigint AS catalog_base,
-		COALESCE(SUM(l.tenant_payable), 0)::bigint AS tenant_payable
+		COALESCE(SUM(l.tenant_payable), 0)::bigint AS tenant_payable,
+		MAX(l.created_at) AS last_requested_at
 	FROM ai_usage_logs l
 	LEFT JOIN ai_upstream_accounts a ON a.id = l.upstream_account_id
 	LEFT JOIN ai_credential_pools  p ON p.id = l.credential_pool_id
@@ -314,9 +327,10 @@ func (r *UsageRepo) UpstreamSummary(ctx context.Context, f domain.UsageSummaryFi
 		if err := rows.Scan(
 			&row.TargetKind, &row.TargetID, &row.TargetName, &row.ProviderCode,
 			&row.RequestCount, &row.SuccessCount, &row.FailedCount,
-			&row.TotalPromptTokens, &row.TotalCompletionTokens, &row.TotalTokens,
+			&row.TotalPromptTokens, &row.TotalCompletionTokens,
+			&row.CacheReadTokens, &row.CacheWriteTokens, &row.TotalTokens,
 			&row.TokenUnits, &row.ImageUnits,
-			&row.CatalogBaseMicro, &row.TenantPayableMicro,
+			&row.CatalogBaseMicro, &row.TenantPayableMicro, &row.LastRequestedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -418,6 +432,8 @@ const dailyTrendSQL = `
 	    COALESCE(SUM(total_tokens), 0)::bigint AS total_tokens,
 	    COALESCE(SUM(prompt_tokens), 0)::bigint AS prompt_tokens,
 	    COALESCE(SUM(completion_tokens), 0)::bigint AS completion_tokens,
+	    COALESCE(SUM(cache_read_tokens), 0)::bigint AS cache_read_tokens,
+	    COALESCE(SUM(cache_write_tokens), 0)::bigint AS cache_write_tokens,
 	    COALESCE(SUM(catalog_base), 0)::bigint AS catalog_base,
 	    COALESCE(SUM(tenant_payable), 0)::bigint AS tenant_payable,
 	    COALESCE(SUM(retail_base), 0)::bigint AS retail_base,
@@ -446,6 +462,7 @@ func (r *UsageRepo) DailyTrend(ctx context.Context, dateFrom, dateTo *time.Time)
 		if err := rows.Scan(
 			&row.Date, &row.RequestCount, &row.SuccessCount, &row.FailedCount,
 			&row.TotalTokens, &row.PromptTokens, &row.CompletionTokens,
+			&row.CacheReadTokens, &row.CacheWriteTokens,
 			&row.CatalogBaseMicro, &row.TenantPayableMicro, &row.RetailBaseMicro, &row.UserPayableMicro, &row.UserChargedMicro,
 			&row.AvgLatencyMs, &row.AvgRequestTotalMs, &row.AvgFirstResponseByteMs,
 		); err != nil {

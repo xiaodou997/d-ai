@@ -46,6 +46,10 @@ type usageStatsDTO struct {
 	TotalRequests          int64   `json:"total_requests" doc:"请求总数"`
 	SuccessCount           int64   `json:"success_count" doc:"成功请求数"`
 	FailedCount            int64   `json:"failed_count" doc:"失败请求数"`
+	TotalPromptTokens      *int64  `json:"total_prompt_tokens,omitempty" doc:"输入 token 数"`
+	TotalCompletionTokens  *int64  `json:"total_completion_tokens,omitempty" doc:"输出 token 数"`
+	CacheReadTokens        *int64  `json:"cache_read_tokens,omitempty" doc:"缓存读 token 数"`
+	CacheWriteTokens       *int64  `json:"cache_write_tokens,omitempty" doc:"缓存写 token 数"`
 	TotalTokens            int64   `json:"total_tokens" doc:"总 token 数"`
 	TotalCatalogBaseUSD    float64 `json:"total_catalog_base_usd" doc:"目录基准价USD 金额（倍率1，谁都不付这个数）"`
 	TotalTenantPayableUSD  float64 `json:"total_tenant_payable_usd" doc:"平台向租户应收USD 金额"`
@@ -377,6 +381,8 @@ type usageSummaryRowDTO struct {
 	RequestCount          int64   `json:"request_count" doc:"请求数"`
 	TotalPromptTokens     int64   `json:"total_prompt_tokens" doc:"输入 token 数"`
 	TotalCompletionTokens int64   `json:"total_completion_tokens" doc:"输出 token 数"`
+	CacheReadTokens       *int64  `json:"cache_read_tokens,omitempty" doc:"缓存读 token 数"`
+	CacheWriteTokens      *int64  `json:"cache_write_tokens,omitempty" doc:"缓存写 token 数"`
 	TotalTokens           int64   `json:"total_tokens" doc:"总 token 数"`
 	TotalCatalogBaseUSD   float64 `json:"total_catalog_base_usd" doc:"目录基准价USD 金额（倍率1，谁都不付这个数）"`
 	TotalTenantPayableUSD float64 `json:"total_tenant_payable_usd" doc:"平台向租户应收USD 金额"`
@@ -421,11 +427,14 @@ type usageUpstreamSummaryRowDTO struct {
 	FailedCount           int64   `json:"failed_count" doc:"失败请求数"`
 	TotalPromptTokens     int64   `json:"total_prompt_tokens" doc:"输入 token 合计"`
 	TotalCompletionTokens int64   `json:"total_completion_tokens" doc:"输出 token 合计"`
+	CacheReadTokens       *int64  `json:"cache_read_tokens,omitempty" doc:"缓存读 token 合计"`
+	CacheWriteTokens      *int64  `json:"cache_write_tokens,omitempty" doc:"缓存写 token 合计"`
 	TotalTokens           int64   `json:"total_tokens" doc:"总 token 数"`
 	TokenUnits            int64   `json:"token_units" doc:"按 token 计费的计费单位合计"`
 	ImageUnits            int64   `json:"image_units" doc:"生成图片张数合计"`
 	CatalogBaseUSD        float64 `json:"catalog_base_usd" doc:"按上游资源价格表计算的参考费用"`
 	TenantPayableUSD      float64 `json:"tenant_payable_usd" doc:"平台向租户结算的应收金额"`
+	LastRequestedAt       *int64  `json:"last_requested_at,omitempty" doc:"最近请求时间，Unix 毫秒"`
 }
 
 type usageUpstreamSummaryOutput struct {
@@ -473,6 +482,8 @@ type dailyTrendRowDTO struct {
 	TotalTokens            int64   `json:"total_tokens" doc:"总 token 数"`
 	PromptTokens           int64   `json:"prompt_tokens" doc:"输入 token 数"`
 	CompletionTokens       int64   `json:"completion_tokens" doc:"输出 token 数"`
+	CacheReadTokens        *int64  `json:"cache_read_tokens,omitempty" doc:"缓存读 token 数"`
+	CacheWriteTokens       *int64  `json:"cache_write_tokens,omitempty" doc:"缓存写 token 数"`
 	CatalogBaseUSD         float64 `json:"catalog_base_usd"`
 	TenantPayableUSD       float64 `json:"tenant_payable_usd"`
 	RetailBaseUSD          float64 `json:"retail_base_usd"`
@@ -790,6 +801,10 @@ func usageStatsToDTO(stats domain.UsageStats) usageStatsDTO {
 		TotalRequests:          stats.TotalRequests,
 		SuccessCount:           stats.SuccessCount,
 		FailedCount:            stats.FailedCount,
+		TotalPromptTokens:      int64Ptr(stats.TotalPromptTokens),
+		TotalCompletionTokens:  int64Ptr(stats.TotalCompletionTokens),
+		CacheReadTokens:        int64Ptr(stats.CacheReadTokens),
+		CacheWriteTokens:       int64Ptr(stats.CacheWriteTokens),
 		TotalTokens:            stats.TotalTokens,
 		TotalCatalogBaseUSD:    moneyfmt.MicroToUSD(stats.TotalCatalogBaseMicro),
 		TotalTenantPayableUSD:  moneyfmt.MicroToUSD(stats.TotalTenantPayableMicro),
@@ -1151,6 +1166,8 @@ func dailyTrendRowToDTO(row domain.DailyTrendRow) dailyTrendRowDTO {
 		TotalTokens:            row.TotalTokens,
 		PromptTokens:           row.PromptTokens,
 		CompletionTokens:       row.CompletionTokens,
+		CacheReadTokens:        int64Ptr(row.CacheReadTokens),
+		CacheWriteTokens:       int64Ptr(row.CacheWriteTokens),
 		CatalogBaseUSD:         moneyfmt.MicroToUSD(row.CatalogBaseMicro),
 		TenantPayableUSD:       moneyfmt.MicroToUSD(row.TenantPayableMicro),
 		RetailBaseUSD:          moneyfmt.MicroToUSD(row.RetailBaseMicro),
@@ -1168,6 +1185,8 @@ func usageSummaryRowToDTO(row domain.UsageSummaryRow) usageSummaryRowDTO {
 		RequestCount:          row.RequestCount,
 		TotalPromptTokens:     row.TotalPromptTokens,
 		TotalCompletionTokens: row.TotalCompletionTokens,
+		CacheReadTokens:       int64Ptr(row.CacheReadTokens),
+		CacheWriteTokens:      int64Ptr(row.CacheWriteTokens),
 		TotalTokens:           row.TotalTokens,
 		TotalCatalogBaseUSD:   moneyfmt.MicroToUSD(row.TotalCatalogBaseMicro),
 		TotalTenantPayableUSD: moneyfmt.MicroToUSD(row.TotalTenantPayableMicro),
@@ -1215,10 +1234,13 @@ func usageUpstreamSummaryRowToDTO(row domain.UsageUpstreamSummaryRow) usageUpstr
 		FailedCount:           row.FailedCount,
 		TotalPromptTokens:     row.TotalPromptTokens,
 		TotalCompletionTokens: row.TotalCompletionTokens,
+		CacheReadTokens:       int64Ptr(row.CacheReadTokens),
+		CacheWriteTokens:      int64Ptr(row.CacheWriteTokens),
 		TotalTokens:           row.TotalTokens,
 		TokenUnits:            row.TokenUnits,
 		ImageUnits:            row.ImageUnits,
 		CatalogBaseUSD:        moneyfmt.MicroToUSD(row.CatalogBaseMicro),
 		TenantPayableUSD:      moneyfmt.MicroToUSD(row.TenantPayableMicro),
+		LastRequestedAt:       timeToMillisPtr(row.LastRequestedAt),
 	}
 }

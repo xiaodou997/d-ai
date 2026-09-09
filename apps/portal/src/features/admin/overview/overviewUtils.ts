@@ -1,13 +1,21 @@
 import type { DashboardSummaryDTO, SystemStatusDTO } from "@/api/types/ai";
 import type { DailyTrendRowDTO } from "@/features/ai/usage/model";
-import { formatDisplayUSD } from "@/shared/currency";
+import { formatCompactToken, formatUSD2 } from "@/platform/ai/usage";
 
 export function formatNumber(value: number | string | null | undefined) {
-  return (Number(value) || 0).toLocaleString("zh-CN", { maximumFractionDigits: 2 });
+  return formatCompactToken(Number(value) || 0);
+}
+
+export function formatCompactNumber(value: number | string | null | undefined) {
+  return formatCompactToken(Number(value) || 0);
 }
 
 export function formatUSD(value: number | string | null | undefined) {
-  return formatDisplayUSD(value);
+  return formatUSD2(value);
+}
+
+export function formatUSDStat(value: number | string | null | undefined) {
+  return formatUSD2(value);
 }
 
 export function formatMs(value: number | string | null | undefined) {
@@ -15,11 +23,23 @@ export function formatMs(value: number | string | null | undefined) {
 }
 
 export function successRate(summary: DashboardSummaryDTO) {
-  if (!summary.total_requests) return "0%";
+  if (!summary.total_requests) return "—";
   return `${((summary.successful_requests * 100) / summary.total_requests).toFixed(1)}%`;
 }
 
-export function trendLabels(rows: DailyTrendRowDTO[]) {
+export function cacheRate(summary: Pick<DashboardSummaryDTO, "total_prompt_tokens" | "cache_read_tokens">) {
+  const denominator = Number(summary.total_prompt_tokens || 0) + Number(summary.cache_read_tokens || 0);
+  if (!denominator) return "—";
+  return `${((Number(summary.cache_read_tokens || 0) * 100) / denominator).toFixed(1)}%`;
+}
+
+export function rateText(numerator: number | null | undefined, denominator: number | null | undefined) {
+  const total = Number(denominator) || 0;
+  if (!total) return "—";
+  return `${(((Number(numerator) || 0) * 100) / total).toFixed(1)}%`;
+}
+
+export function trendLabels(rows: Array<Pick<DailyTrendRowDTO, "date"> | { date: string }>) {
   return rows.map((row) => row.date.slice(5));
 }
 

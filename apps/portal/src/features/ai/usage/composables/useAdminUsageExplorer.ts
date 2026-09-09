@@ -141,6 +141,10 @@ export function useAdminUsageExplorer(options: UseAdminUsageExplorerOptions) {
   const totalRequests = computed(() => Number(logStats.value.total_requests) || 0);
   const successRate = computed(() => totalRequests.value ? (Number(logStats.value.success_count) * 100) / totalRequests.value : 0);
   const failureRate = computed(() => totalRequests.value ? (Number(logStats.value.failed_count) * 100) / totalRequests.value : 0);
+  const cacheRate = computed(() => {
+    const denominator = Number(logStats.value.total_prompt_tokens || 0) + Number(logStats.value.cache_read_tokens || 0);
+    return denominator ? (Number(logStats.value.cache_read_tokens || 0) * 100) / denominator : null;
+  });
   const topModel = computed(() => modelDistribution.value[0] || null);
   const topUnit = computed(() => unitDistribution.value[0] || null);
   const topSource = computed(() => {
@@ -216,12 +220,15 @@ export function useAdminUsageExplorer(options: UseAdminUsageExplorerOptions) {
   ]);
 
   const analyticsMetrics = computed<UsageMetric[]>(() => [
-    { label: "请求总量", value: formatNumber(totalRequests.value), hint: `成功 ${formatNumber(logStats.value.success_count)} · 失败 ${formatNumber(logStats.value.failed_count)}` },
+    { label: "请求总量", value: formatCompactNumber(totalRequests.value), hint: `成功 ${formatCompactNumber(logStats.value.success_count)} · 失败 ${formatCompactNumber(logStats.value.failed_count)}` },
+    { label: "请求成功率", value: totalRequests.value ? formatPercent(successRate.value) : "—", hint: "按最终请求状态统计" },
+    { label: "账号缓存率", value: cacheRate.value == null ? "—" : formatPercent(cacheRate.value), hint: "缓存读 Token /（输入 + 缓存读）" },
+    { label: "Token 使用量", value: formatCompactNumber(logStats.value.total_tokens), hint: "输入、输出与缓存合计" },
     { label: "用户实际扣款", value: formatUSD2(summaryTotals.value.userCharged), hint: "租户零售视角" },
     { label: "租户结算应收", value: formatUSD2(summaryTotals.value.tenantPayable), hint: `目录基准价 ${formatUSD2(summaryTotals.value.catalogBase)}` },
     { label: "Key 配额", value: formatUSD2(summaryTotals.value.quotaCost), hint: "可用于识别 key 消耗结构" },
     { label: "平均总耗时", value: `${Math.round(Number(logStats.value.avg_request_total_ms) || 0)} ms`, hint: `平均首响 ${Math.round(Number(logStats.value.avg_first_response_byte_ms) || 0)} ms` },
-    { label: "主来源", value: topSource.value?.key || "—", hint: topSource.value ? `当前页 ${formatNumber(topSource.value.count)} 次` : "当前页暂无来源样本" }
+    { label: "主来源", value: topSource.value?.key || "—", hint: topSource.value ? `当前页 ${formatCompactNumber(topSource.value.count)} 次` : "当前页暂无来源样本" }
   ]);
 
   const activeIndex = computed(() => activeLog.value ? logs.value.findIndex((row) => row.request_id === activeLog.value?.request_id) : -1);

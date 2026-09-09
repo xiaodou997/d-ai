@@ -23,10 +23,11 @@ var _ observabilitycontrol.DashboardRepository = (*DashboardRepo)(nil)
 // the original by-role handler which wrapped the scope in optionalTextValue.
 func (r *DashboardRepo) Summary(ctx context.Context, f domain.DashboardFilter) (domain.DashboardSummary, error) {
 	row, err := r.q.GetDashboardSummary(ctx, dbgen.GetDashboardSummaryParams{
-		TenantID: akText(f.TenantID),
-		UserID:   akText(f.UserID),
-		DateFrom: akTimestamptz(f.DateFrom),
-		DateTo:   akTimestamptz(f.DateTo),
+		TenantID:  akText(f.TenantID),
+		UserID:    akText(f.UserID),
+		ModelCode: akText(f.ModelCode),
+		DateFrom:  akTimestamptz(f.DateFrom),
+		DateTo:    akTimestamptz(f.DateTo),
 	})
 	if err != nil {
 		return domain.DashboardSummary{}, err
@@ -38,6 +39,13 @@ func (r *DashboardRepo) Summary(ctx context.Context, f domain.DashboardFilter) (
 		TotalTokens:             row.TotalTokens,
 		TotalPromptTokens:       row.TotalPromptTokens,
 		TotalCompletionTokens:   row.TotalCompletionTokens,
+		CacheReadTokens:         row.CacheReadTokens,
+		CacheWriteTokens:        row.CacheWriteTokens,
+		ActiveTenants:           row.ActiveTenants,
+		ActiveUsers:             row.ActiveUsers,
+		ActiveAccounts:          row.ActiveAccounts,
+		NewTenants:              row.NewTenants,
+		NewUsers:                row.NewUsers,
 		TotalCatalogBaseMicro:   row.TotalCatalogBase,
 		TotalTenantPayableMicro: row.TotalTenantPayable,
 		TotalRetailBaseMicro:    row.TotalRetailBase,
@@ -46,16 +54,19 @@ func (r *DashboardRepo) Summary(ctx context.Context, f domain.DashboardFilter) (
 		AvgLatencyMs:            row.AvgLatencyMs,
 		AvgRequestTotalMs:       row.AvgRequestTotalMs,
 		AvgFirstResponseByteMs:  row.AvgFirstResponseByteMs,
+		P95RequestTotalMs:       row.P95RequestTotalMs,
+		P95FirstResponseByteMs:  row.P95FirstResponseByteMs,
 	}, nil
 }
 
 func (r *DashboardRepo) TopModels(ctx context.Context, f domain.DashboardFilter, limit int32) ([]domain.DashboardTopModel, error) {
 	rows, err := r.q.ListDashboardTopModels(ctx, dbgen.ListDashboardTopModelsParams{
-		TenantID: akText(f.TenantID),
-		UserID:   akText(f.UserID),
-		DateFrom: akTimestamptz(f.DateFrom),
-		DateTo:   akTimestamptz(f.DateTo),
-		Limit:    limit,
+		TenantID:  akText(f.TenantID),
+		UserID:    akText(f.UserID),
+		ModelCode: akText(f.ModelCode),
+		DateFrom:  akTimestamptz(f.DateFrom),
+		DateTo:    akTimestamptz(f.DateTo),
+		Limit:     limit,
 	})
 	if err != nil {
 		return nil, err
@@ -74,11 +85,12 @@ func (r *DashboardRepo) TopModels(ctx context.Context, f domain.DashboardFilter,
 
 func (r *DashboardRepo) TopTenants(ctx context.Context, f domain.DashboardFilter, limit int32) ([]domain.DashboardTopTenant, error) {
 	rows, err := r.q.ListDashboardTopTenants(ctx, dbgen.ListDashboardTopTenantsParams{
-		TenantID: akText(f.TenantID),
-		UserID:   akText(f.UserID),
-		DateFrom: akTimestamptz(f.DateFrom),
-		DateTo:   akTimestamptz(f.DateTo),
-		Limit:    limit,
+		TenantID:  akText(f.TenantID),
+		UserID:    akText(f.UserID),
+		ModelCode: akText(f.ModelCode),
+		DateFrom:  akTimestamptz(f.DateFrom),
+		DateTo:    akTimestamptz(f.DateTo),
+		Limit:     limit,
 	})
 	if err != nil {
 		return nil, err
@@ -97,11 +109,12 @@ func (r *DashboardRepo) TopTenants(ctx context.Context, f domain.DashboardFilter
 
 func (r *DashboardRepo) RecentErrors(ctx context.Context, f domain.DashboardFilter, limit int32) ([]domain.DashboardRecentError, error) {
 	rows, err := r.q.ListDashboardRecentErrors(ctx, dbgen.ListDashboardRecentErrorsParams{
-		TenantID: akText(f.TenantID),
-		UserID:   akText(f.UserID),
-		DateFrom: akTimestamptz(f.DateFrom),
-		DateTo:   akTimestamptz(f.DateTo),
-		Limit:    limit,
+		TenantID:  akText(f.TenantID),
+		UserID:    akText(f.UserID),
+		ModelCode: akText(f.ModelCode),
+		DateFrom:  akTimestamptz(f.DateFrom),
+		DateTo:    akTimestamptz(f.DateTo),
+		Limit:     limit,
 	})
 	if err != nil {
 		return nil, err

@@ -3,9 +3,9 @@
 
 Source: `contracts/openapi.yaml`
 
-Contract SHA-256: `61638951788fa167357e15eb0c890521f4a7fbc629b891d70dd53a1529180b03`
+Contract SHA-256: `fd73955df19e1e4cd1d112ee107085206414b5f67a0091b8d316d52ddcee896c`
 
-Coverage: **334/334 operations (100%)**
+Coverage: **335/335 operations (100%)**
 
 The matrix is a review artifact and a generation gate. Middleware and application services remain the enforcement points; `ownership` describes the second authorization check required after capability admission.
 
@@ -16,7 +16,7 @@ The matrix is a review artifact and a generation gate. Middleware and applicatio
 | `api_key_or_session` | 4 | `api_key_or_session` | `resource` |
 | `authenticated` | 13 | `authenticated` | `actor.user` |
 | `customer_self` | 28 | `customer_self` | `actor.user` |
-| `platform_admin` | 165 | `platform_admin` | `actor.user` |
+| `platform_admin` | 166 | `platform_admin` | `actor.user` |
 | `platform_or_tenant` | 8 | `platform_or_tenant` | `actor.tenant/resource` |
 | `public` | 9 | `public` | `none` |
 | `super_admin` | 2 | `super_admin` | `global` |
@@ -68,6 +68,7 @@ The matrix is a review artifact and a generation gate. Middleware and applicatio
 | `GET` | `/api/v1/admin/modules/{name}` | `admin-get-module` | `platform_admin` | `global/resource` |
 | `PUT` | `/api/v1/admin/modules/{name}/enabled` | `admin-set-module-enabled` | `platform_admin` | `global/resource` |
 | `POST` | `/api/v1/admin/notifications/send` | `admin-send-notification` | `platform_admin` | `global/resource` |
+| `GET` | `/api/v1/admin/overview/snapshot` | `admin-overview-snapshot` | `platform_admin` | `global/resource` |
 | `GET` | `/api/v1/admin/payment-orders` | `admin-list-payment-orders` | `platform_admin` | `global/resource` |
 | `POST` | `/api/v1/admin/payment-orders/{orderId}/sync` | `admin-sync-payment-order` | `platform_admin` | `global/resource` |
 | `GET` | `/api/v1/admin/payment-settings` | `admin-get-payment-settings` | `platform_admin` | `global/resource` |

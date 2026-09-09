@@ -2468,6 +2468,14 @@ components:
           description: 平均总耗时，毫秒
           format: int64
           type: integer
+        cache_read_tokens:
+          description: 缓存读 token 数
+          format: int64
+          type: integer
+        cache_write_tokens:
+          description: 缓存写 token 数
+          format: int64
+          type: integer
         catalog_base_usd:
           format: double
           type: number
@@ -2635,6 +2643,18 @@ components:
           format: uri
           readOnly: true
           type: string
+        active_accounts:
+          description: 时间窗口内有请求的上游账号或账号池数
+          format: int64
+          type: integer
+        active_tenants:
+          description: 时间窗口内活跃租户数
+          format: int64
+          type: integer
+        active_users:
+          description: 时间窗口内活跃终端用户数
+          format: int64
+          type: integer
         avg_first_response_byte_ms:
           description: 平均首个响应字节耗时，毫秒
           format: double
@@ -2647,10 +2667,34 @@ components:
           description: 平均总耗时，毫秒
           format: double
           type: number
+        cache_read_tokens:
+          description: 缓存读 token 数
+          format: int64
+          type: integer
+        cache_write_tokens:
+          description: 缓存写 token 数
+          format: int64
+          type: integer
         failed_requests:
           description: 失败请求数
           format: int64
           type: integer
+        new_tenants:
+          description: 时间窗口内新增租户数
+          format: int64
+          type: integer
+        new_users:
+          description: 时间窗口内新增终端用户数
+          format: int64
+          type: integer
+        p95_first_response_byte_ms:
+          description: P95 首个响应字节耗时，毫秒
+          format: double
+          type: number
+        p95_request_total_ms:
+          description: P95 总耗时，毫秒
+          format: double
+          type: number
         successful_requests:
           description: 成功请求数
           format: int64
@@ -5210,6 +5254,313 @@ components:
       required:
         - items
         - total
+      type: object
+    OverviewAccountDTO:
+      additionalProperties: false
+      properties:
+        cache_rate:
+          format: double
+          type: number
+        cache_read_tokens:
+          format: int64
+          type: integer
+        cache_write_tokens:
+          format: int64
+          type: integer
+        catalog_base_usd:
+          format: double
+          type: number
+        failed_count:
+          format: int64
+          type: integer
+        health_status:
+          type: string
+        last_requested_at:
+          format: int64
+          type: integer
+        prompt_tokens:
+          format: int64
+          type: integer
+        provider_code:
+          type: string
+        request_count:
+          format: int64
+          type: integer
+        success_count:
+          format: int64
+          type: integer
+        success_rate:
+          format: double
+          type: number
+        target_id:
+          type: string
+        target_kind:
+          type: string
+        target_name:
+          type: string
+        tenant_payable_usd:
+          format: double
+          type: number
+        total_tokens:
+          format: int64
+          type: integer
+      required:
+        - target_kind
+        - target_id
+        - target_name
+        - provider_code
+        - request_count
+        - success_count
+        - failed_count
+        - prompt_tokens
+        - cache_read_tokens
+        - cache_write_tokens
+        - total_tokens
+        - catalog_base_usd
+        - tenant_payable_usd
+        - health_status
+      type: object
+    OverviewSnapshotMeta:
+      additionalProperties: false
+      properties:
+        comparison_window:
+          type: string
+        date_from:
+          format: int64
+          type: integer
+        date_to:
+          format: int64
+          type: integer
+        generated_at:
+          format: int64
+          type: integer
+        view:
+          type: string
+      required:
+        - view
+        - date_from
+        - date_to
+        - generated_at
+      type: object
+    OverviewSnapshotOutputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/OverviewSnapshotOutputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        accounts:
+          items:
+            $ref: "#/components/schemas/OverviewAccountDTO"
+          type:
+            - array
+            - "null"
+        comparison:
+          $ref: "#/components/schemas/OverviewSummaryDTO"
+        included:
+          $ref: "#/components/schemas/IdentityIncludedDTO"
+        meta:
+          $ref: "#/components/schemas/OverviewSnapshotMeta"
+        models:
+          items:
+            $ref: "#/components/schemas/UsageSummaryRowDTO"
+          type:
+            - array
+            - "null"
+        summary:
+          $ref: "#/components/schemas/OverviewSummaryDTO"
+        tenants:
+          items:
+            $ref: "#/components/schemas/DashboardTopTenantDTO"
+          type:
+            - array
+            - "null"
+        trends:
+          items:
+            $ref: "#/components/schemas/OverviewTrendDTO"
+          type:
+            - array
+            - "null"
+        users:
+          items:
+            $ref: "#/components/schemas/UsageUserRankingRowDTO"
+          type:
+            - array
+            - "null"
+      required:
+        - meta
+        - summary
+        - trends
+        - accounts
+        - models
+        - tenants
+        - users
+        - included
+      type: object
+    OverviewSummaryDTO:
+      additionalProperties: false
+      properties:
+        active_accounts:
+          format: int64
+          type: integer
+        active_tenants:
+          format: int64
+          type: integer
+        active_users:
+          format: int64
+          type: integer
+        avg_first_response_byte_ms:
+          format: double
+          type: number
+        avg_request_total_ms:
+          format: double
+          type: number
+        cache_rate:
+          format: double
+          type: number
+        cache_read_tokens:
+          format: int64
+          type: integer
+        cache_write_tokens:
+          format: int64
+          type: integer
+        failed_requests:
+          format: int64
+          type: integer
+        gross_margin_rate:
+          format: double
+          type: number
+        gross_margin_usd:
+          format: double
+          type: number
+        new_tenants:
+          format: int64
+          type: integer
+        new_users:
+          format: int64
+          type: integer
+        p95_first_response_byte_ms:
+          format: double
+          type: number
+        p95_request_total_ms:
+          format: double
+          type: number
+        success_rate:
+          format: double
+          type: number
+        successful_requests:
+          format: int64
+          type: integer
+        total_catalog_base_usd:
+          format: double
+          type: number
+        total_completion_tokens:
+          format: int64
+          type: integer
+        total_prompt_tokens:
+          format: int64
+          type: integer
+        total_requests:
+          format: int64
+          type: integer
+        total_tenant_payable_usd:
+          format: double
+          type: number
+        total_tokens:
+          format: int64
+          type: integer
+        total_user_charged_usd:
+          format: double
+          type: number
+      required:
+        - total_requests
+        - successful_requests
+        - failed_requests
+        - total_tokens
+        - total_prompt_tokens
+        - total_completion_tokens
+        - cache_read_tokens
+        - cache_write_tokens
+        - active_tenants
+        - active_users
+        - active_accounts
+        - new_tenants
+        - new_users
+        - total_catalog_base_usd
+        - total_tenant_payable_usd
+        - total_user_charged_usd
+        - gross_margin_usd
+        - avg_request_total_ms
+        - p95_request_total_ms
+        - avg_first_response_byte_ms
+        - p95_first_response_byte_ms
+      type: object
+    OverviewTrendDTO:
+      additionalProperties: false
+      properties:
+        avg_first_response_byte_ms:
+          format: int64
+          type: integer
+        avg_latency_ms:
+          format: int64
+          type: integer
+        avg_request_total_ms:
+          format: int64
+          type: integer
+        cache_read_tokens:
+          format: int64
+          type: integer
+        cache_write_tokens:
+          format: int64
+          type: integer
+        catalog_base_usd:
+          format: double
+          type: number
+        completion_tokens:
+          format: int64
+          type: integer
+        date:
+          type: string
+        failed_count:
+          format: int64
+          type: integer
+        prompt_tokens:
+          format: int64
+          type: integer
+        request_count:
+          format: int64
+          type: integer
+        success_count:
+          format: int64
+          type: integer
+        tenant_payable_usd:
+          format: double
+          type: number
+        total_tokens:
+          format: int64
+          type: integer
+        user_charged_usd:
+          format: double
+          type: number
+      required:
+        - date
+        - request_count
+        - success_count
+        - failed_count
+        - total_tokens
+        - prompt_tokens
+        - completion_tokens
+        - cache_read_tokens
+        - cache_write_tokens
+        - catalog_base_usd
+        - tenant_payable_usd
+        - user_charged_usd
+        - avg_latency_ms
+        - avg_request_total_ms
+        - avg_first_response_byte_ms
       type: object
     PIIConfig:
       additionalProperties: false
@@ -11441,6 +11792,14 @@ components:
           description: 平均总耗时，毫秒
           format: double
           type: number
+        cache_read_tokens:
+          description: 缓存读 token 数
+          format: int64
+          type: integer
+        cache_write_tokens:
+          description: 缓存写 token 数
+          format: int64
+          type: integer
         failed_count:
           description: 失败请求数
           format: int64
@@ -11453,6 +11812,14 @@ components:
           description: 目录基准价USD 金额（倍率1，谁都不付这个数）
           format: double
           type: number
+        total_completion_tokens:
+          description: 输出 token 数
+          format: int64
+          type: integer
+        total_prompt_tokens:
+          description: 输入 token 数
+          format: int64
+          type: integer
         total_requests:
           description: 请求总数
           format: int64
@@ -11507,6 +11874,14 @@ components:
     UsageSummaryRowDTO:
       additionalProperties: false
       properties:
+        cache_read_tokens:
+          description: 缓存读 token 数
+          format: int64
+          type: integer
+        cache_write_tokens:
+          description: 缓存写 token 数
+          format: int64
+          type: integer
         model_code:
           description: 模型编码
           type: string
@@ -11651,6 +12026,14 @@ components:
     UsageUpstreamSummaryRowDTO:
       additionalProperties: false
       properties:
+        cache_read_tokens:
+          description: 缓存读 token 合计
+          format: int64
+          type: integer
+        cache_write_tokens:
+          description: 缓存写 token 合计
+          format: int64
+          type: integer
         catalog_base_usd:
           description: 按上游资源价格表计算的参考费用
           format: double
@@ -11661,6 +12044,10 @@ components:
           type: integer
         image_units:
           description: 生成图片张数合计
+          format: int64
+          type: integer
+        last_requested_at:
+          description: 最近请求时间，Unix 毫秒
           format: int64
           type: integer
         provider_code:
@@ -14026,6 +14413,87 @@ paths:
       summary: 发送通知
       tags:
         - notifications
+  /api/v1/admin/overview/snapshot:
+    get:
+      description: 返回仪表盘、业务、用量、成本和运维页面共享的经营统计快照。
+      operationId: admin-overview-snapshot
+      parameters:
+        - description: 概览视图
+          explode: false
+          in: query
+          name: view
+          required: true
+          schema:
+            description: 概览视图
+            enum:
+              - dashboard
+              - business
+              - usage
+              - cost
+              - operations
+            type: string
+        - description: 租户 ID
+          explode: false
+          in: query
+          name: tenant_id
+          schema:
+            description: 租户 ID
+            type: string
+        - description: 模型编码
+          explode: false
+          in: query
+          name: model_code
+          schema:
+            description: 模型编码
+            type: string
+        - description: 上游账号或账号池 ID
+          explode: false
+          in: query
+          name: target_id
+          schema:
+            description: 上游账号或账号池 ID
+            type: string
+        - description: 开始时间，RFC3339
+          explode: false
+          in: query
+          name: date_from
+          schema:
+            description: 开始时间，RFC3339
+            type: string
+        - description: 结束时间，RFC3339，按 [start, end) 解释
+          explode: false
+          in: query
+          name: date_to
+          schema:
+            description: 结束时间，RFC3339，按 [start, end) 解释
+            type: string
+        - description: 是否返回上一周期比较
+          explode: false
+          in: query
+          name: compare
+          schema:
+            default: previous
+            description: 是否返回上一周期比较
+            enum:
+              - previous
+              - none
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OverviewSnapshotOutputBody"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 管理员经营概览快照
+      tags:
+        - admin-overview
   /api/v1/admin/payment-orders:
     get:
       operationId: admin-list-payment-orders

@@ -931,6 +931,8 @@ SELECT
   COUNT(*)::bigint AS request_count,
   COALESCE(SUM(prompt_tokens), 0)::bigint AS total_prompt_tokens,
   COALESCE(SUM(completion_tokens), 0)::bigint AS total_completion_tokens,
+  COALESCE(SUM(cache_read_tokens), 0)::bigint AS cache_read_tokens,
+  COALESCE(SUM(cache_write_tokens), 0)::bigint AS cache_write_tokens,
   COALESCE(SUM(total_tokens), 0)::bigint AS total_tokens,
   COALESCE(SUM(catalog_base), 0)::bigint AS total_catalog_base,
   COALESCE(SUM(tenant_payable), 0)::bigint AS total_tenant_payable,
@@ -982,6 +984,21 @@ SELECT
   COALESCE(SUM(total_tokens), 0)::bigint AS total_tokens,
   COALESCE(SUM(prompt_tokens), 0)::bigint AS total_prompt_tokens,
   COALESCE(SUM(completion_tokens), 0)::bigint AS total_completion_tokens,
+  COALESCE(SUM(cache_read_tokens), 0)::bigint AS cache_read_tokens,
+  COALESCE(SUM(cache_write_tokens), 0)::bigint AS cache_write_tokens,
+  COUNT(DISTINCT tenant_id)::bigint AS active_tenants,
+  COUNT(DISTINCT user_id) FILTER (WHERE NULLIF(user_id, '') IS NOT NULL)::bigint AS active_users,
+  COUNT(DISTINCT COALESCE(upstream_account_id::text, credential_pool_id::text))
+    FILTER (WHERE upstream_account_id IS NOT NULL OR credential_pool_id IS NOT NULL)::bigint AS active_accounts,
+  (SELECT COUNT(*)::bigint FROM iam_tenants t
+    WHERE (sqlc.narg('tenant_id')::text IS NULL OR t.tenant_id = sqlc.narg('tenant_id'))
+      AND (sqlc.narg('date_from')::timestamptz IS NULL OR t.created_at >= sqlc.narg('date_from')::timestamptz)
+      AND (sqlc.narg('date_to')::timestamptz IS NULL OR t.created_at < sqlc.narg('date_to')::timestamptz)) AS new_tenants,
+  (SELECT COUNT(*)::bigint FROM iam_accounts a
+    WHERE a.user_type = 4
+      AND (sqlc.narg('tenant_id')::text IS NULL OR a.tenant_id = sqlc.narg('tenant_id'))
+      AND (sqlc.narg('date_from')::timestamptz IS NULL OR a.created_at >= sqlc.narg('date_from')::timestamptz)
+      AND (sqlc.narg('date_to')::timestamptz IS NULL OR a.created_at < sqlc.narg('date_to')::timestamptz)) AS new_users,
   COALESCE(SUM(catalog_base), 0)::bigint AS total_catalog_base,
   COALESCE(SUM(tenant_payable), 0)::bigint AS total_tenant_payable,
   COALESCE(SUM(retail_base), 0)::bigint AS total_retail_base,
@@ -989,10 +1006,13 @@ SELECT
   COALESCE(SUM(user_charged), 0)::bigint AS total_user_charged,
   COALESCE(AVG(latency_ms) FILTER (WHERE request_status = 'success' AND latency_ms IS NOT NULL), 0)::double precision AS avg_latency_ms,
   COALESCE(AVG(request_total_ms) FILTER (WHERE request_status = 'success' AND request_total_ms IS NOT NULL), 0)::double precision AS avg_request_total_ms,
-  COALESCE(AVG(first_response_byte_ms) FILTER (WHERE request_status = 'success' AND first_response_byte_ms IS NOT NULL), 0)::double precision AS avg_first_response_byte_ms
+  COALESCE(AVG(first_response_byte_ms) FILTER (WHERE request_status = 'success' AND first_response_byte_ms IS NOT NULL), 0)::double precision AS avg_first_response_byte_ms,
+  COALESCE(percentile_cont(0.95) WITHIN GROUP (ORDER BY request_total_ms) FILTER (WHERE request_status = 'success' AND request_total_ms IS NOT NULL), 0)::double precision AS p95_request_total_ms,
+  COALESCE(percentile_cont(0.95) WITHIN GROUP (ORDER BY first_response_byte_ms) FILTER (WHERE request_status = 'success' AND first_response_byte_ms IS NOT NULL), 0)::double precision AS p95_first_response_byte_ms
 FROM ai_usage_logs
 WHERE (sqlc.narg('tenant_id')::text IS NULL OR tenant_id = sqlc.narg('tenant_id'))
   AND (sqlc.narg('user_id')::text IS NULL OR user_id = sqlc.narg('user_id'))
+  AND (sqlc.narg('model_code')::text IS NULL OR model_code = sqlc.narg('model_code'))
   AND (sqlc.narg('date_from')::timestamptz IS NULL OR created_at >= sqlc.narg('date_from')::timestamptz)
   AND (sqlc.narg('date_to')::timestamptz IS NULL OR created_at < sqlc.narg('date_to')::timestamptz);
 
@@ -1005,6 +1025,7 @@ SELECT
 FROM ai_usage_logs
 WHERE (sqlc.narg('tenant_id')::text IS NULL OR tenant_id = sqlc.narg('tenant_id'))
   AND (sqlc.narg('user_id')::text IS NULL OR user_id = sqlc.narg('user_id'))
+  AND (sqlc.narg('model_code')::text IS NULL OR model_code = sqlc.narg('model_code'))
   AND (sqlc.narg('date_from')::timestamptz IS NULL OR created_at >= sqlc.narg('date_from')::timestamptz)
   AND (sqlc.narg('date_to')::timestamptz IS NULL OR created_at < sqlc.narg('date_to')::timestamptz)
 GROUP BY model_code
@@ -1020,6 +1041,7 @@ SELECT
 FROM ai_usage_logs
 WHERE (sqlc.narg('tenant_id')::text IS NULL OR tenant_id = sqlc.narg('tenant_id'))
   AND (sqlc.narg('user_id')::text IS NULL OR user_id = sqlc.narg('user_id'))
+  AND (sqlc.narg('model_code')::text IS NULL OR model_code = sqlc.narg('model_code'))
   AND (sqlc.narg('date_from')::timestamptz IS NULL OR created_at >= sqlc.narg('date_from')::timestamptz)
   AND (sqlc.narg('date_to')::timestamptz IS NULL OR created_at < sqlc.narg('date_to')::timestamptz)
 GROUP BY tenant_id
@@ -1046,6 +1068,7 @@ SELECT
 FROM ai_usage_logs
 WHERE (sqlc.narg('tenant_id')::text IS NULL OR tenant_id = sqlc.narg('tenant_id'))
   AND (sqlc.narg('user_id')::text IS NULL OR user_id = sqlc.narg('user_id'))
+  AND (sqlc.narg('model_code')::text IS NULL OR model_code = sqlc.narg('model_code'))
   AND (sqlc.narg('date_from')::timestamptz IS NULL OR created_at >= sqlc.narg('date_from')::timestamptz)
   AND (sqlc.narg('date_to')::timestamptz IS NULL OR created_at < sqlc.narg('date_to')::timestamptz)
   AND request_status = 'failed'

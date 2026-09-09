@@ -136,6 +136,10 @@ type UsageStats struct {
 	SuccessCount            int64
 	FailedCount             int64
 	TotalTokens             int64
+	TotalPromptTokens       int64
+	TotalCompletionTokens   int64
+	CacheReadTokens         int64
+	CacheWriteTokens        int64
 	TotalCatalogBaseMicro   int64
 	TotalTenantPayableMicro int64
 	TotalUserChargedMicro   int64
@@ -150,6 +154,8 @@ type UsageSummaryRow struct {
 	RequestCount            int64
 	TotalPromptTokens       int64
 	TotalCompletionTokens   int64
+	CacheReadTokens         int64
+	CacheWriteTokens        int64
 	TotalTokens             int64
 	TotalCatalogBaseMicro   int64
 	TotalTenantPayableMicro int64
@@ -187,6 +193,8 @@ type UsageUpstreamSummaryRow struct {
 	FailedCount           int64
 	TotalPromptTokens     int64
 	TotalCompletionTokens int64
+	CacheReadTokens       int64
+	CacheWriteTokens      int64
 	TotalTokens           int64
 	// TokenUnits and ImageUnits split billable_units by capability. Summing the
 	// two would add tokens to image counts and mean nothing.
@@ -194,6 +202,7 @@ type UsageUpstreamSummaryRow struct {
 	ImageUnits         int64
 	CatalogBaseMicro   int64
 	TenantPayableMicro int64
+	LastRequestedAt    time.Time
 }
 
 // UsageUserRankingRow aggregates usage per tenant user for the admin ranking view.
@@ -231,6 +240,8 @@ type DailyTrendRow struct {
 	TotalTokens            int64
 	PromptTokens           int64
 	CompletionTokens       int64
+	CacheReadTokens        int64
+	CacheWriteTokens       int64
 	CatalogBaseMicro       int64
 	TenantPayableMicro     int64
 	RetailBaseMicro        int64

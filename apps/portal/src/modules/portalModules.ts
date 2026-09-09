@@ -139,6 +139,16 @@ export const portalModules: PortalModule[] = [
     component: () => import("@/views/admin/overview/BusinessOverviewView.vue")
   },
   {
+    id: "admin-usage-analytics",
+    label: "用量分析",
+    path: "/admin/overview/usage",
+    icon: "bar-chart-3",
+    capability: "admin.overview",
+    navGroup: adminOverview,
+    order: 15,
+    component: () => import("@/views/admin/ai/gateway/UsageAnalyticsView.vue")
+  },
+  {
     id: "admin-cost-analysis",
     label: "成本分析",
     path: "/admin/overview/cost",
@@ -251,16 +261,6 @@ export const portalModules: PortalModule[] = [
     order: 40,
     name: "ai-usage",
     component: () => import("@/views/admin/ai/gateway/UsageView.vue")
-  },
-  {
-    id: "admin-usage-analytics",
-    label: "用量分析",
-    path: "/admin/ai/analytics",
-    icon: "bar-chart-3",
-    capability: "admin.ai.monitor",
-    navGroup: adminAi,
-    order: 45,
-    component: () => import("@/views/admin/ai/gateway/UsageAnalyticsView.vue")
   },
   {
     id: "admin-usage-detail",

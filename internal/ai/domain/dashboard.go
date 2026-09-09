@@ -11,6 +11,15 @@ type DashboardSummary struct {
 	TotalTokens             int64
 	TotalPromptTokens       int64
 	TotalCompletionTokens   int64
+	CacheReadTokens         int64
+	CacheWriteTokens        int64
+	ActiveTenants           int64
+	ActiveUsers             int64
+	ActiveAccounts          int64
+	NewTenants              int64
+	NewUsers                int64
+	P95RequestTotalMs       float64
+	P95FirstResponseByteMs  float64
 	TotalCatalogBaseMicro   int64
 	TotalTenantPayableMicro int64
 	TotalRetailBaseMicro    int64
@@ -59,8 +68,9 @@ type DashboardRecentError struct {
 // DashboardFilter scopes dashboard queries. Empty TenantID/UserID mean "all";
 // DateFrom/DateTo define an exact [start, end) window when provided.
 type DashboardFilter struct {
-	TenantID string
-	UserID   string
-	DateFrom *time.Time
-	DateTo   *time.Time
+	TenantID  string
+	UserID    string
+	ModelCode string
+	DateFrom  *time.Time
+	DateTo    *time.Time
 }

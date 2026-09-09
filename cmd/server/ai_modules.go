@@ -416,6 +416,12 @@ func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisCl
 				BanChecker:                 banChecker,
 				IdentityEnrichmentFailures: identityEnrichmentFailures,
 			},
+			Overview: transport.AIOverviewHTTPDeps{
+				DashboardQueries:           dashboardSvc,
+				UsageQueries:               usageSvc,
+				BanChecker:                 banChecker,
+				IdentityEnrichmentFailures: identityEnrichmentFailures,
+			},
 			Usage: transport.AIUsageHTTPDeps{
 				UsageQueries:               usageSvc,
 				BanChecker:                 banChecker,

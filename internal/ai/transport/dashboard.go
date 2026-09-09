@@ -44,20 +44,29 @@ type dashboardRecentErrorsInput struct {
 }
 
 type dashboardSummaryDTO struct {
-	TotalRequests          int64   `json:"total_requests" doc:"请求总数"`
-	SuccessfulRequests     int64   `json:"successful_requests" doc:"成功请求数"`
-	FailedRequests         int64   `json:"failed_requests" doc:"失败请求数"`
-	TotalTokens            int64   `json:"total_tokens" doc:"总 token 数"`
-	TotalPromptTokens      int64   `json:"total_prompt_tokens" doc:"输入 token 数"`
-	TotalCompletionTokens  int64   `json:"total_completion_tokens" doc:"输出 token 数"`
-	TotalCatalogBaseUSD    float64 `json:"total_catalog_base_usd" doc:"上游参考成本USD 金额"`
-	TotalTenantPayableUSD  float64 `json:"total_tenant_payable_usd" doc:"平台向租户结算的USD 金额"`
-	TotalRetailBaseUSD     float64 `json:"total_retail_base_usd" doc:"零售价格表原价USD 金额"`
-	TotalUserPayableUSD    float64 `json:"total_user_payable_usd" doc:"用户零售应收USD 金额"`
-	TotalUserChargedUSD    float64 `json:"total_user_charged_usd" doc:"用户实际扣款USD 金额"`
-	AvgLatencyMs           float64 `json:"avg_latency_ms" doc:"平均延迟，毫秒"`
-	AvgRequestTotalMs      float64 `json:"avg_request_total_ms" doc:"平均总耗时，毫秒"`
-	AvgFirstResponseByteMs float64 `json:"avg_first_response_byte_ms" doc:"平均首个响应字节耗时，毫秒"`
+	TotalRequests          int64    `json:"total_requests" doc:"请求总数"`
+	SuccessfulRequests     int64    `json:"successful_requests" doc:"成功请求数"`
+	FailedRequests         int64    `json:"failed_requests" doc:"失败请求数"`
+	TotalTokens            int64    `json:"total_tokens" doc:"总 token 数"`
+	TotalPromptTokens      int64    `json:"total_prompt_tokens" doc:"输入 token 数"`
+	TotalCompletionTokens  int64    `json:"total_completion_tokens" doc:"输出 token 数"`
+	CacheReadTokens        *int64   `json:"cache_read_tokens,omitempty" doc:"缓存读 token 数"`
+	CacheWriteTokens       *int64   `json:"cache_write_tokens,omitempty" doc:"缓存写 token 数"`
+	ActiveTenants          *int64   `json:"active_tenants,omitempty" doc:"时间窗口内活跃租户数"`
+	ActiveUsers            *int64   `json:"active_users,omitempty" doc:"时间窗口内活跃终端用户数"`
+	ActiveAccounts         *int64   `json:"active_accounts,omitempty" doc:"时间窗口内有请求的上游账号或账号池数"`
+	NewTenants             *int64   `json:"new_tenants,omitempty" doc:"时间窗口内新增租户数"`
+	NewUsers               *int64   `json:"new_users,omitempty" doc:"时间窗口内新增终端用户数"`
+	TotalCatalogBaseUSD    float64  `json:"total_catalog_base_usd" doc:"上游参考成本USD 金额"`
+	TotalTenantPayableUSD  float64  `json:"total_tenant_payable_usd" doc:"平台向租户结算的USD 金额"`
+	TotalRetailBaseUSD     float64  `json:"total_retail_base_usd" doc:"零售价格表原价USD 金额"`
+	TotalUserPayableUSD    float64  `json:"total_user_payable_usd" doc:"用户零售应收USD 金额"`
+	TotalUserChargedUSD    float64  `json:"total_user_charged_usd" doc:"用户实际扣款USD 金额"`
+	AvgLatencyMs           float64  `json:"avg_latency_ms" doc:"平均延迟，毫秒"`
+	AvgRequestTotalMs      float64  `json:"avg_request_total_ms" doc:"平均总耗时，毫秒"`
+	AvgFirstResponseByteMs float64  `json:"avg_first_response_byte_ms" doc:"平均首个响应字节耗时，毫秒"`
+	P95RequestTotalMs      *float64 `json:"p95_request_total_ms,omitempty" doc:"P95 总耗时，毫秒"`
+	P95FirstResponseByteMs *float64 `json:"p95_first_response_byte_ms,omitempty" doc:"P95 首个响应字节耗时，毫秒"`
 }
 
 type dashboardSummaryOutput struct {
@@ -273,6 +282,13 @@ func dashboardSummaryToDTO(s domain.DashboardSummary) dashboardSummaryDTO {
 		TotalTokens:            s.TotalTokens,
 		TotalPromptTokens:      s.TotalPromptTokens,
 		TotalCompletionTokens:  s.TotalCompletionTokens,
+		CacheReadTokens:        int64Ptr(s.CacheReadTokens),
+		CacheWriteTokens:       int64Ptr(s.CacheWriteTokens),
+		ActiveTenants:          int64Ptr(s.ActiveTenants),
+		ActiveUsers:            int64Ptr(s.ActiveUsers),
+		ActiveAccounts:         int64Ptr(s.ActiveAccounts),
+		NewTenants:             int64Ptr(s.NewTenants),
+		NewUsers:               int64Ptr(s.NewUsers),
 		TotalCatalogBaseUSD:    moneyfmt.MicroToUSD(s.TotalCatalogBaseMicro),
 		TotalTenantPayableUSD:  moneyfmt.MicroToUSD(s.TotalTenantPayableMicro),
 		TotalRetailBaseUSD:     moneyfmt.MicroToUSD(s.TotalRetailBaseMicro),
@@ -281,8 +297,14 @@ func dashboardSummaryToDTO(s domain.DashboardSummary) dashboardSummaryDTO {
 		AvgLatencyMs:           s.AvgLatencyMs,
 		AvgRequestTotalMs:      s.AvgRequestTotalMs,
 		AvgFirstResponseByteMs: s.AvgFirstResponseByteMs,
+		P95RequestTotalMs:      float64Ptr(s.P95RequestTotalMs),
+		P95FirstResponseByteMs: float64Ptr(s.P95FirstResponseByteMs),
 	}
 }
+
+func int64Ptr(value int64) *int64 { return &value }
+
+func float64Ptr(value float64) *float64 { return &value }
 
 func dashboardTopModelToDTO(model domain.DashboardTopModel) dashboardTopModelDTO {
 	return dashboardTopModelDTO{

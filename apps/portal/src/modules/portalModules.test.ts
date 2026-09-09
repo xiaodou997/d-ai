@@ -24,6 +24,7 @@ describe("portal module registry", () => {
     expect(leavesFor(1).map((item) => item.label)).toEqual([
       "仪表盘",
       "业务概览",
+      "用量分析",
       "成本分析",
       "运维监控",
       "租户管理",
@@ -35,7 +36,6 @@ describe("portal module registry", () => {
       "账号池",
       "价格表",
       "使用记录",
-      "用量分析",
       "网关审计",
       "风控中心",
       "公告管理",
@@ -70,6 +70,7 @@ describe("portal module registry", () => {
       children: [
         { label: "仪表盘", to: "/admin/dashboard", active: false },
         { label: "业务概览", to: "/admin/overview/business", active: false },
+        { label: "用量分析", to: "/admin/overview/usage", active: false },
         { label: "成本分析", to: "/admin/overview/cost", active: false },
         { label: "运维监控", to: "/admin/overview/operations", active: true }
       ]
@@ -377,7 +378,6 @@ describe("portal module registry", () => {
         active: false
       },
       { id: "admin-usage", label: "使用记录", active: false },
-      { id: "admin-usage-analytics", label: "用量分析", active: false },
       { id: "admin-gateway-audit", label: "网关审计", active: false },
       { id: "admin-risk-control", label: "风控中心", active: false }
     ]);
@@ -396,7 +396,7 @@ describe("portal module registry", () => {
 
   it("exposes usage records separately from security controls", () => {
     const usageMenu = leavesFor(1, "/admin/ai/usage/request-1").find((item) => item.id === "admin-usage");
-    const analyticsMenu = leavesFor(1, "/admin/ai/analytics").find((item) => item.id === "admin-usage-analytics");
+    const analyticsMenu = leavesFor(1, "/admin/overview/usage").find((item) => item.id === "admin-usage-analytics");
     const gatewayAudit = portalModules.find((module) => module.id === "admin-gateway-audit");
 
     expect(usageMenu).toMatchObject({
@@ -407,7 +407,7 @@ describe("portal module registry", () => {
     });
     expect(analyticsMenu).toMatchObject({
       label: "用量分析",
-      to: "/admin/ai/analytics",
+      to: "/admin/overview/usage",
       icon: "bar-chart-3",
       active: true
     });
