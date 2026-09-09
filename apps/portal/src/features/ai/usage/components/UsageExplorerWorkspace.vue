@@ -26,6 +26,7 @@ const props = defineProps<{
   metrics: UsageMetric[];
   pagination: UsagePagination;
   showOverview?: boolean;
+  showMetrics?: boolean;
   summaryNote: string;
 }>();
 
@@ -73,7 +74,7 @@ function selectRecord(row: AdminUsageRow) {
       </div>
     </PortalContentCard>
 
-    <PortalMetricGrid v-if="showOverview !== false" :metrics="metrics" />
+    <PortalMetricGrid v-if="showMetrics !== false" :metrics="metrics" />
 
     <section class="usage-explorer__layout">
       <div class="usage-explorer__data">

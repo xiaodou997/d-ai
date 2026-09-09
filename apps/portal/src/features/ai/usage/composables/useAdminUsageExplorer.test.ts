@@ -38,6 +38,74 @@ describe("useAdminUsageExplorer", () => {
     wrapper.unmount();
   });
 
+  it("builds record metrics from the filtered list stats rather than the current page", async () => {
+    const api = fakeApi();
+    const response = usageResponse("filtered");
+    response.total = 37;
+    response.stats = {
+      total_requests: 37,
+      success_count: 30,
+      failed_count: 7,
+      total_tokens: 1_234_567,
+      total_catalog_base_usd: 12.345678,
+      total_tenant_payable_usd: 23.456789,
+      total_user_charged_usd: 34.567891,
+      avg_latency_ms: 180,
+      avg_request_total_ms: 321,
+      avg_first_response_byte_ms: 92
+    };
+    api.listLogs.mockResolvedValueOnce(usageResponse("initial")).mockResolvedValue(response);
+    const { state, wrapper } = mountComposable(api);
+
+    await state.refresh();
+    expect(state.explorerMetrics.value[0]?.value).toBe("1");
+
+    state.filters.model_code = "gpt-5";
+    await state.applyFilters();
+    expect(api.listLogs).toHaveBeenLastCalledWith(
+      expect.objectContaining({ model_code: "gpt-5", limit: 20, offset: 0 }),
+      expect.any(AbortSignal)
+    );
+
+    expect(state.explorerMetrics.value).toEqual([
+      {
+        label: "请求次数",
+        value: "37",
+        hint: "成功 30 · 非成功 7"
+      },
+      {
+        label: "成功率",
+        value: "81.1%",
+        hint: "成功 30 / 37"
+      },
+      {
+        label: "消耗 Token",
+        value: "1.23M",
+        hint: "当前筛选范围内合计"
+      },
+      {
+        label: "租户结算金额",
+        value: "$23.456789",
+        hint: "平台向租户应收 · 参考成本 $12.345678"
+      },
+      {
+        label: "用户实际扣款",
+        value: "$34.567891",
+        hint: "终端用户实际扣款；API Key/订阅覆盖可能为 0"
+      },
+      {
+        label: "平均总耗时",
+        value: "321 ms",
+        hint: "当前无慢请求样本"
+      }
+    ]);
+
+    await state.changePage(2);
+    expect(state.explorerMetrics.value[0]?.value).toBe("37");
+    expect(state.explorerMetrics.value[3]?.value).toBe("$23.456789");
+    wrapper.unmount();
+  });
+
   it("keeps the newest list and detail when responses resolve out of order", async () => {
     const firstLogs = deferred<UsageLogsResponse>();
     const secondLogs = deferred<UsageLogsResponse>();

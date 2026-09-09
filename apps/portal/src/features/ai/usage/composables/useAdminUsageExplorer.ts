@@ -183,10 +183,31 @@ export function useAdminUsageExplorer(options: UseAdminUsageExplorerOptions) {
   ]);
 
   const explorerMetrics = computed<UsageMetric[]>(() => [
-    { label: "命中请求", value: formatNumber(totalRequests.value), hint: `分页总数 ${formatNumber(pagination.total)}` },
-    { label: "成功率", value: formatPercent(successRate.value), hint: `失败 ${formatNumber(logStats.value.failed_count)}` },
-    { label: "用户实际扣款", value: formatUSD(summaryTotals.value.userCharged), hint: `Key 配额 ${formatUSD(summaryTotals.value.quotaCost)}` },
-    { label: "Token 总量", value: formatCompactNumber(summaryTotals.value.totalTokens), hint: `输入 ${formatCompactNumber(summaryTotals.value.promptTokens)} · 输出 ${formatCompactNumber(summaryTotals.value.completionTokens)}` },
+    {
+      label: "请求次数",
+      value: formatNumber(totalRequests.value),
+      hint: `成功 ${formatNumber(logStats.value.success_count)} · 非成功 ${formatNumber(logStats.value.failed_count)}`
+    },
+    {
+      label: "成功率",
+      value: totalRequests.value ? formatPercent(successRate.value) : "—",
+      hint: totalRequests.value ? `成功 ${formatNumber(logStats.value.success_count)} / ${formatNumber(totalRequests.value)}` : "当前筛选没有请求"
+    },
+    {
+      label: "消耗 Token",
+      value: formatCompactNumber(logStats.value.total_tokens),
+      hint: "当前筛选范围内合计"
+    },
+    {
+      label: "租户结算金额",
+      value: formatUSD(logStats.value.total_tenant_payable_usd),
+      hint: `平台向租户应收 · 参考成本 ${formatUSD(logStats.value.total_catalog_base_usd)}`
+    },
+    {
+      label: "用户实际扣款",
+      value: formatUSD(logStats.value.total_user_charged_usd),
+      hint: "终端用户实际扣款；API Key/订阅覆盖可能为 0"
+    },
     {
       label: "平均总耗时",
       value: `${Math.round(Number(logStats.value.avg_request_total_ms) || 0)} ms`,

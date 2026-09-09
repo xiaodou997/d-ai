@@ -97,6 +97,7 @@ const filtersModel = computed<UsageFilters>({
           :metrics="explorerMetrics"
           :pagination="pagination"
           :show-overview="false"
+          :show-metrics="true"
           :summary-note="summaryNote"
           @page-change="changePage"
           @page-size-change="changePageSize"
