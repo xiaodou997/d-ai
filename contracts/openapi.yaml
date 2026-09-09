@@ -6868,6 +6868,32 @@ components:
         - refundedAt
         - reason
       type: object
+    RecordingSettings:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/RecordingSettings.json
+          format: uri
+          readOnly: true
+          type: string
+        level:
+          enum:
+            - basic
+            - headers
+            - full
+          type: string
+        sensitive_headers:
+          items:
+            type: string
+          type:
+            - array
+            - "null"
+      required:
+        - level
+        - sensitive_headers
+      type: object
     ReplaceGroupTargetsRequest:
       additionalProperties: false
       properties:
@@ -11234,6 +11260,7 @@ components:
         refunded_at:
           format: int64
           type: integer
+        request_headers: {}
         request_id:
           type: string
         request_messages: {}
@@ -11259,6 +11286,7 @@ components:
           type: string
         resolved_provider_family:
           type: string
+        response_headers: {}
         response_message: {}
         response_summary_state:
           type: string
@@ -13874,6 +13902,49 @@ paths:
       summary: 预览敏感信息替换结果
       tags:
         - modules
+  /api/v1/admin/modules/request-recording/config:
+    get:
+      operationId: admin-get-request-recording
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecordingSettings"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 读取请求记录设置
+      tags:
+        - system-modules
+    put:
+      operationId: admin-update-request-recording
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecordingSettings"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecordingSettings"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 保存请求记录设置
+      tags:
+        - system-modules
   /api/v1/admin/modules/{name}:
     get:
       operationId: admin-get-module

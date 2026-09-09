@@ -238,7 +238,9 @@ type usageLogDetailDTO struct {
 	UserAgent                          *string         `json:"user_agent,omitempty"`
 	RequestParams                      json.RawMessage `json:"request_params,omitempty"`
 	RequestMessages                    json.RawMessage `json:"request_messages,omitempty"`
+	RequestHeaders                     json.RawMessage `json:"request_headers,omitempty"`
 	ResponseMessage                    json.RawMessage `json:"response_message,omitempty"`
+	ResponseHeaders                    json.RawMessage `json:"response_headers,omitempty"`
 	MediaRefs                          json.RawMessage `json:"media_refs,omitempty"`
 	InternalErrorDetail                *string         `json:"internal_error_detail,omitempty" doc:"仅管理员可见：未脱敏/未截断的真实底层错误（Go 错误链或上游原始报文）"`
 	FailedStep                         *string         `json:"failed_step,omitempty" doc:"仅管理员可见：触发失败的调用链路阶段"`
@@ -989,7 +991,9 @@ func usageLogDetailToDTO(detail domain.UsageLogDetail) usageLogDetailDTO {
 		UserAgent:                          stringPtrOrNil(detail.UserAgent),
 		RequestParams:                      jsonObjectOrNull(detail.RequestParams),
 		RequestMessages:                    jsonObjectOrNull(detail.RequestMessages),
+		RequestHeaders:                     jsonObjectOrNull(detail.RequestHeaders),
 		ResponseMessage:                    jsonObjectOrNull(detail.ResponseMessage),
+		ResponseHeaders:                    jsonObjectOrNull(detail.ResponseHeaders),
 		MediaRefs:                          jsonObjectOrNull(detail.MediaRefs),
 		InternalErrorDetail:                stringPtrOrNil(detail.InternalErrorDetail),
 		FailedStep:                         stringPtrOrNil(detail.FailedStep),

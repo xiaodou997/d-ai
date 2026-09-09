@@ -226,10 +226,11 @@ type AIUserSelfReadHTTPDeps struct {
 // AISystemHTTPDeps contains the collaborators owned by the independently
 // registered system status HTTP module.
 type AISystemHTTPDeps struct {
-	DatabaseHealth aitransport.ComponentHealthProbe
-	RedisHealth    aitransport.ComponentHealthProbe
-	Health         routing.HealthTracker
-	BanChecker     aitransport.HumaBanChecker
+	DatabaseHealth    aitransport.ComponentHealthProbe
+	RedisHealth       aitransport.ComponentHealthProbe
+	Health            routing.HealthTracker
+	RecordingSettings aitransport.RecordingSettingsStore
+	BanChecker        aitransport.HumaBanChecker
 }
 
 // AIRiskControlHTTPDeps contains the collaborators owned by the independently
@@ -723,10 +724,11 @@ func buildAuditLogHTTPDeps(platform aiPlatformDeps, d AIAuditLogHTTPDeps) aitran
 
 func buildSystemHTTPDeps(platform aiPlatformDeps, d AISystemHTTPDeps) aitransport.SystemHTTPDeps {
 	return aitransport.SystemHTTPDeps{
-		Auth:           buildAIHTTPAuthDeps(platform, d.BanChecker),
-		DatabaseHealth: d.DatabaseHealth,
-		RedisHealth:    d.RedisHealth,
-		Health:         d.Health,
+		Auth:              buildAIHTTPAuthDeps(platform, d.BanChecker),
+		DatabaseHealth:    d.DatabaseHealth,
+		RedisHealth:       d.RedisHealth,
+		Health:            d.Health,
+		RecordingSettings: d.RecordingSettings,
 	}
 }
 

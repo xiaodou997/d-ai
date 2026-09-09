@@ -107,6 +107,7 @@ describe("portal module registry", () => {
       },
       { id: "admin-system-modules", label: "系统模块", active: false }
     ]);
+    expect(portalModules.some((module) => module.id === "admin-request-recording")).toBe(false);
   });
 
   it("marks a workspace active for any child or detail route", () => {

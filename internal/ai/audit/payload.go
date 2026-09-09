@@ -30,7 +30,9 @@ type Payload struct {
 	PublicResponseModel         string          `json:"public_response_model"`
 	RequestMessages             json.RawMessage `json:"request_messages"`
 	RequestParams               json.RawMessage `json:"request_params"`
+	RequestHeaders              json.RawMessage `json:"request_headers,omitempty"`
 	ResponseMessage             json.RawMessage `json:"response_message"`
+	ResponseHeaders             json.RawMessage `json:"response_headers,omitempty"`
 	MediaRefs                   json.RawMessage `json:"media_refs"`
 	RequestStatus               string          `json:"request_status"`
 	HTTPStatus                  int             `json:"http_status"`

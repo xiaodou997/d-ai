@@ -9,6 +9,8 @@ import SystemModulesWorkspace from "./SystemModulesWorkspace.vue";
 const api = vi.hoisted(() => ({
   list: vi.fn(),
   setEnabled: vi.fn(),
+  getRequestRecordingSettings: vi.fn(),
+  updateRequestRecordingSettings: vi.fn(),
   getCleanupPolicy: vi.fn(),
   previewCleanup: vi.fn(),
   listCleanupRuns: vi.fn(),
@@ -51,6 +53,10 @@ describe("SystemModulesWorkspace", () => {
     vi.clearAllMocks();
     api.list.mockResolvedValue([module]);
     api.setEnabled.mockResolvedValue({ ...module, enabled: false, active: false });
+    api.getRequestRecordingSettings.mockResolvedValue({
+      level: "basic",
+      sensitive_headers: ["authorization", "cookie"]
+    });
     api.getCleanupPolicy.mockResolvedValue(policy);
     api.previewCleanup.mockResolvedValue({
       generatedAt: "2026-08-28T04:00:00Z",
@@ -71,7 +77,9 @@ describe("SystemModulesWorkspace", () => {
     expect(api.list).toHaveBeenCalledOnce();
     expect(api.getCleanupPolicy).toHaveBeenCalledOnce();
     expect(api.previewCleanup).toHaveBeenCalledOnce();
+    expect(api.getRequestRecordingSettings).toHaveBeenCalledOnce();
     expect(wrapper.text()).toContain("公告服务");
+    expect(wrapper.text()).toContain("请求记录");
     expect(wrapper.text()).toContain("数据生命周期");
     expect(wrapper.text()).toContain("立即清空请求体");
     expect(wrapper.text()).toContain("预计处理 2 条");

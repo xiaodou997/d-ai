@@ -376,7 +376,7 @@ func BuildAuditPayload(req *Request) *audit.Payload {
 		return nil
 	}
 
-	var messages, params json.RawMessage
+	var messages, params, requestHeaders, responseHeaders json.RawMessage
 	authHeader := ""
 	requestPath := ""
 	clientIP := ""
@@ -384,7 +384,11 @@ func BuildAuditPayload(req *Request) *audit.Payload {
 	if req.Envelope != nil {
 		contentType := ""
 		if req.Envelope.R != nil {
+			requestHeaders, _ = json.Marshal(req.Envelope.R.Header)
 			contentType = req.Envelope.R.Header.Get("Content-Type")
+		}
+		if req.Envelope.W != nil {
+			responseHeaders, _ = json.Marshal(req.Envelope.W.Header())
 		}
 		messages, params = audit.ExtractRequestPayloadWithContentType(req.Envelope.ClientBody, req.ClientProtocol, contentType)
 		if req.Envelope.R != nil {
@@ -421,6 +425,8 @@ func BuildAuditPayload(req *Request) *audit.Payload {
 		PublicResponseModel:         req.PublicModel(),
 		RequestMessages:             messages,
 		RequestParams:               params,
+		RequestHeaders:              requestHeaders,
+		ResponseHeaders:             responseHeaders,
 		ResponseMessage:             responseMessage,
 		RequestStatus:               string(req.RequestStatus),
 		HTTPStatus:                  req.HTTPStatus,

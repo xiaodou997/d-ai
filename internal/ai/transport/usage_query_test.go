@@ -222,7 +222,7 @@ func TestUsageDetailIncludesIdentityAndBillingContext(t *testing.T) {
 			TenantPayableMicro:                 1_250_000,
 			UserChargedMicro:                   2_500_000,
 			RequestStatus:                      "success",
-		}},
+		}, RequestHeaders: []byte(`{"Content-Type":["application/json"]}`), ResponseHeaders: []byte(`{"X-Request-Id":["request-identity"]}`)},
 	}
 	router, api := server.New(server.Options{Title: "test", Version: "test"})
 	registerUsage(api, UsageHTTPDeps{
@@ -242,6 +242,9 @@ func TestUsageDetailIncludesIdentityAndBillingContext(t *testing.T) {
 	}
 	if detail.TenantPayableUSD != 1.25 || detail.UserChargedUSD != 2.5 {
 		t.Fatalf("billing = tenant %v user %v", detail.TenantPayableUSD, detail.UserChargedUSD)
+	}
+	if string(detail.RequestHeaders) != `{"Content-Type":["application/json"]}` || string(detail.ResponseHeaders) != `{"X-Request-Id":["request-identity"]}` {
+		t.Fatalf("headers = request %s response %s", detail.RequestHeaders, detail.ResponseHeaders)
 	}
 }
 

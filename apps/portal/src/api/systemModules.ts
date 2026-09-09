@@ -62,6 +62,11 @@ export type DataCleanupPolicy = {
   batchSize: number;
 };
 
+export type RequestRecordingSettings = {
+  level: "basic" | "headers" | "full";
+  sensitive_headers: string[];
+};
+
 export type DataCleanupPreviewItem = {
   target: string;
   label: string;
@@ -115,6 +120,7 @@ type CleanupPolicyTransport = OperationResponse<"admin-get-data-cleanup-policy">
 type CleanupPreviewTransport = OperationResponse<"admin-preview-data-cleanup">;
 type CleanupRunTransport = OperationResponse<"admin-start-data-cleanup">;
 type CleanupRequestBodyPurgeTransport = OperationResponse<"admin-purge-request-bodies">;
+type RequestRecordingTransport = OperationResponse<"admin-get-request-recording">;
 
 export type NotificationSendResult = {
   id: string;
@@ -267,6 +273,29 @@ export const systemModulesApi = {
       body: { enabled },
       baseUrl: apiBaseUrl
     }).then(toSystemModule);
+  },
+  getRequestRecordingSettings(): Promise<RequestRecordingSettings> {
+    return typedRequest<"admin-get-request-recording">({
+      method: "GET",
+      path: "/api/v1/admin/modules/request-recording/config",
+      headers: apiHeaders,
+      baseUrl: apiBaseUrl
+    }).then((value: RequestRecordingTransport) => ({
+      level: value.level,
+      sensitive_headers: [...(value.sensitive_headers ?? [])]
+    }));
+  },
+  updateRequestRecordingSettings(body: RequestRecordingSettings): Promise<RequestRecordingSettings> {
+    return typedRequest<"admin-update-request-recording">({
+      method: "PUT",
+      path: "/api/v1/admin/modules/request-recording/config",
+      headers: apiHeaders,
+      body,
+      baseUrl: apiBaseUrl
+    }).then((value) => ({
+      level: value.level,
+      sensitive_headers: [...(value.sensitive_headers ?? [])]
+    }));
   },
   getPIIProtectionConfig() {
     return typedRequest<"admin-get-pii-protection-config">({

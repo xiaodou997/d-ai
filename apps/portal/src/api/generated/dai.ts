@@ -554,6 +554,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/modules/request-recording/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 读取请求记录设置 */
+        get: operations["admin-get-request-recording"];
+        /** 保存请求记录设置 */
+        put: operations["admin-update-request-recording"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/modules/{name}": {
         parameters: {
             query?: never;
@@ -8378,6 +8396,17 @@ export interface components {
             /** Format: int64 */
             refundedAt: number;
         };
+        RecordingSettings: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/RecordingSettings.json
+             */
+            readonly $schema?: string;
+            /** @enum {string} */
+            level: "basic" | "headers" | "full";
+            sensitive_headers: string[] | null;
+        };
         ReplaceGroupTargetsRequest: {
             /**
              * Format: uri
@@ -10811,6 +10840,7 @@ export interface components {
             refund_status: string;
             /** Format: int64 */
             refunded_at?: number;
+            request_headers?: unknown;
             request_id: string;
             request_messages?: unknown;
             request_params?: unknown;
@@ -10826,6 +10856,7 @@ export interface components {
             resolution?: string;
             resolved_logical_model?: string;
             resolved_provider_family?: string;
+            response_headers?: unknown;
             response_message?: unknown;
             response_summary_state: string;
             /** Format: int32 */
@@ -12976,6 +13007,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PreviewPIIConfigOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "admin-get-request-recording": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordingSettings"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "admin-update-request-recording": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecordingSettings"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordingSettings"];
                 };
             };
             /** @description Error */

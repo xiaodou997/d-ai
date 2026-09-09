@@ -13,6 +13,7 @@ import {
   type DataCleanupRun,
   type SystemModuleStatus
 } from "@/api/systemModules";
+import RequestRecordingSection from "./RequestRecordingSection.vue";
 
 const loading = ref(false);
 const router = useRouter();
@@ -204,6 +205,8 @@ onBeforeUnmount(() => { if (cleanupPollTimer) clearTimeout(cleanupPollTimer); })
             </div>
           </article>
         </div>
+
+        <RequestRecordingSection />
 
         <PortalContentCard title="数据生命周期" description="按保留策略清理历史内容和运营日志，不触碰计费、用户、配置与结算数据。">
           <template #actions>

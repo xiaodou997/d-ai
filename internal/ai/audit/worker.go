@@ -411,7 +411,7 @@ func payloadSize(p *Payload) int {
 		return 0
 	}
 	return len(p.RequestMessages) + len(p.RequestParams) +
-		len(p.ResponseMessage) + len(p.MediaRefs) +
+		len(p.RequestHeaders) + len(p.ResponseMessage) + len(p.ResponseHeaders) + len(p.MediaRefs) +
 		len(p.RequestID) + len(p.RequestPath) +
 		len(p.InternalErrorDetail) + len(p.AttemptsDetail) + 256
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -31,13 +32,13 @@ const insertPayloadSQL = `
 		resolved_logical_model, resolved_provider_family,
 		protocol_conversion_enabled, selected_upstream_protocol, selected_upstream_model,
 		upstream_model_mapping_applied, public_response_model,
-		request_messages, request_params, response_message, media_refs,
+		request_messages, request_params, request_headers, response_message, response_headers, media_refs,
 		request_status, http_status, error_code, internal_error_detail, failed_step,
 		attempts_detail
 	) VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, '')::uuid, NULLIF($9, ''),
 		NULLIF($10, ''), NULLIF($11, ''), $12, NULLIF($13, ''), NULLIF($14, ''),
-		$15, NULLIF($16, ''), $17, $18, $19, $20, $21, $22, $23, NULLIF($24, ''), NULLIF($25, ''),
-		$26)
+		$15, NULLIF($16, ''), $17, $18, $19, $20, $21, $22, $23, $24, $25, NULLIF($26, ''), NULLIF($27, ''),
+		$28)
 	ON CONFLICT (request_id) DO NOTHING`
 
 // Enqueue writes the compact audit envelope to the durable inbox.
@@ -65,7 +66,17 @@ func (s *AuditStore) EnqueueTx(ctx context.Context, tx pgx.Tx, payload *audit.Pa
 	if payload == nil || payload.RequestID == "" {
 		return errors.New("audit payload requires a request id")
 	}
-	raw, err := json.Marshal(payload)
+	copyPayload := *payload
+	settings, err := recordingSettingsInTx(ctx, tx)
+	if err != nil {
+		// Audit configuration must not roll back consumption and billing facts.
+		// On lookup failure retain only basic metadata, never full bodies.
+		settings = audit.DefaultRecordingSettings()
+	}
+	if err := applyRecordingSettings(&copyPayload, settings); err != nil {
+		return err
+	}
+	raw, err := json.Marshal(&copyPayload)
 	if err != nil {
 		return fmt.Errorf("marshal audit payload: %w", err)
 	}
@@ -77,6 +88,56 @@ func (s *AuditStore) EnqueueTx(ctx context.Context, tx pgx.Tx, payload *audit.Pa
 		return fmt.Errorf("insert audit inbox: %w", err)
 	}
 	return nil
+}
+
+// recordingSettingsInTx reads the policy on the caller's transaction
+// connection. Usage completion already owns this connection, so using the
+// shared pool here would deadlock a one-connection deployment.
+func recordingSettingsInTx(ctx context.Context, tx pgx.Tx) (audit.RecordingSettings, error) {
+	var raw []byte
+	if err := tx.QueryRow(ctx, `SELECT value FROM ai_settings WHERE key = $1`, audit.RecordingSettingKey).Scan(&raw); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return audit.DefaultRecordingSettings(), nil
+		}
+		return audit.RecordingSettings{}, err
+	}
+	return audit.ParseRecordingSettings(raw)
+}
+
+func applyRecordingSettings(payload *audit.Payload, settings audit.RecordingSettings) error {
+	switch settings.Level {
+	case "basic":
+		payload.RequestMessages, payload.RequestParams, payload.RequestHeaders, payload.ResponseMessage, payload.ResponseHeaders, payload.MediaRefs, payload.InternalErrorDetail, payload.AttemptsDetail = nil, nil, nil, nil, nil, nil, "", nil
+	case "headers":
+		payload.RequestMessages, payload.RequestParams, payload.ResponseMessage, payload.MediaRefs, payload.InternalErrorDetail, payload.AttemptsDetail = nil, nil, nil, nil, "", nil
+	case "full":
+	default:
+		return fmt.Errorf("invalid request recording level %q", settings.Level)
+	}
+	payload.RequestHeaders = redactHeaders(payload.RequestHeaders, settings.SensitiveHeaders)
+	payload.ResponseHeaders = redactHeaders(payload.ResponseHeaders, settings.SensitiveHeaders)
+	return nil
+}
+
+func redactHeaders(raw json.RawMessage, sensitive []string) json.RawMessage {
+	if len(raw) == 0 {
+		return nil
+	}
+	var values map[string][]string
+	if json.Unmarshal(raw, &values) != nil {
+		return nil
+	}
+	secret := map[string]bool{}
+	for _, h := range sensitive {
+		secret[strings.ToLower(h)] = true
+	}
+	for k := range values {
+		if secret[strings.ToLower(k)] {
+			values[k] = []string{"***REDACTED***"}
+		}
+	}
+	out, _ := json.Marshal(values)
+	return out
 }
 
 // Claim leases ready and expired-processing rows. The transaction is committed
@@ -174,7 +235,7 @@ func insertPayload(ctx context.Context, tx pgx.Tx, p *audit.Payload) error {
 		p.ResolvedLogicalModel, p.ResolvedProviderFamily,
 		p.ProtocolConversionEnabled, p.SelectedUpstreamProtocol, p.SelectedUpstreamModel,
 		p.UpstreamModelMappingApplied, p.PublicResponseModel,
-		p.RequestMessages, p.RequestParams, p.ResponseMessage, p.MediaRefs,
+		p.RequestMessages, p.RequestParams, p.RequestHeaders, p.ResponseMessage, p.ResponseHeaders, p.MediaRefs,
 		p.RequestStatus, p.HTTPStatus, p.ErrorCode,
 		p.InternalErrorDetail, p.FailedStep,
 		p.AttemptsDetail,
@@ -234,7 +295,9 @@ type AuditRecord struct {
 	AuthMasked                  string
 	RequestMessages             []byte
 	RequestParams               []byte
+	RequestHeaders              []byte
 	ResponseMessage             []byte
+	ResponseHeaders             []byte
 	MediaRefs                   []byte
 	RequestStatus               string
 	HTTPStatus                  int
@@ -283,7 +346,7 @@ func (s *AuditStore) GetByRequestID(ctx context.Context, requestID string) (*Aud
 			COALESCE(p.selected_upstream_model, '') AS selected_upstream_model,
 			p.upstream_model_mapping_applied,
 			COALESCE(p.public_response_model, '') AS public_response_model,
-			p.request_messages, p.request_params, p.response_message, p.media_refs,
+			p.request_messages, p.request_params, p.request_headers, p.response_message, p.response_headers, p.media_refs,
 			p.request_status, p.http_status, p.error_code,
 			COALESCE(p.internal_error_detail, '') AS internal_error_detail,
 			COALESCE(p.failed_step, '')        AS failed_step,
@@ -306,7 +369,7 @@ func (s *AuditStore) GetByRequestID(ctx context.Context, requestID string) (*Aud
 
 	row := s.pool.QueryRow(ctx, q, requestID)
 	var rec AuditRecord
-	var msgs, params, resp, mediaRefs []byte
+	var msgs, params, reqHeaders, resp, respHeaders, mediaRefs []byte
 	if err := row.Scan(
 		&rec.RequestID, &rec.ClientProtocol, &rec.RequestModel,
 		&rec.RequestPath, &rec.ClientIP, &rec.UserAgent, &rec.AuthMasked,
@@ -314,7 +377,7 @@ func (s *AuditStore) GetByRequestID(ctx context.Context, requestID string) (*Aud
 		&rec.ResolvedLogicalModel, &rec.ResolvedProviderFamily,
 		&rec.ProtocolConversionEnabled, &rec.SelectedUpstreamProtocol, &rec.SelectedUpstreamModel,
 		&rec.UpstreamModelMappingApplied, &rec.PublicResponseModel,
-		&msgs, &params, &resp, &mediaRefs,
+		&msgs, &params, &reqHeaders, &resp, &respHeaders, &mediaRefs,
 		&rec.RequestStatus, &rec.HTTPStatus, &rec.ErrorCode,
 		&rec.InternalErrorDetail, &rec.FailedStep,
 		&rec.AttemptsDetail,
@@ -330,7 +393,9 @@ func (s *AuditStore) GetByRequestID(ctx context.Context, requestID string) (*Aud
 	}
 	rec.RequestMessages = msgs
 	rec.RequestParams = params
+	rec.RequestHeaders = reqHeaders
 	rec.ResponseMessage = resp
+	rec.ResponseHeaders = respHeaders
 	rec.MediaRefs = mediaRefs
 	return &rec, nil
 }

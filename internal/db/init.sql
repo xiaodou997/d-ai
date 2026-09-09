@@ -2043,6 +2043,11 @@ CREATE INDEX idx_ledger_credit_leases_account
     "config_revision": 1
   }'::jsonb) ON CONFLICT (key) DO NOTHING;
 
+  INSERT INTO ai_settings (key, value) VALUES ('request_recording', '{
+    "level": "basic",
+    "sensitive_headers": ["authorization", "proxy-authorization", "x-api-key", "api-key", "cookie", "set-cookie"]
+  }'::jsonb) ON CONFLICT (key) DO NOTHING;
+
   -- ============================================================================
   -- Legacy route score weight storage was replaced by group route policy.
   -- ============================================================================
@@ -2075,7 +2080,9 @@ CREATE INDEX idx_ledger_credit_leases_account
     public_response_model TEXT,
     request_messages JSONB,
     request_params   JSONB,
+    request_headers  JSONB,
     response_message JSONB,
+    response_headers JSONB,
     media_refs       JSONB,
     request_status   TEXT        NOT NULL,
     http_status      INT,
@@ -2805,6 +2812,6 @@ CREATE TABLE dai_schema_metadata (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 36);
+INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 37);
 
 COMMIT;

@@ -105,7 +105,9 @@ type UsageLogDetail struct {
 	SelectedUpstreamModel      string
 	RequestMessages            []byte
 	RequestParams              []byte
+	RequestHeaders             []byte
 	ResponseMessage            []byte
+	ResponseHeaders            []byte
 	MediaRefs                  []byte
 	RequestPath                string
 	ClientIP                   string

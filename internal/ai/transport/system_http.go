@@ -8,12 +8,14 @@ import (
 	"xiaodou/dai/internal/ai/routing"
 )
 
-// SystemHTTPDeps is the dependency boundary for system status.
+// SystemHTTPDeps is the dependency boundary for system status and system
+// module settings.
 type SystemHTTPDeps struct {
-	Auth           HTTPAuthDeps
-	DatabaseHealth ComponentHealthProbe
-	RedisHealth    ComponentHealthProbe
-	Health         routing.HealthTracker
+	Auth              HTTPAuthDeps
+	DatabaseHealth    ComponentHealthProbe
+	RedisHealth       ComponentHealthProbe
+	Health            routing.HealthTracker
+	RecordingSettings RecordingSettingsStore
 }
 
 // ComponentHealthProbe is the minimal infrastructure check needed by the
@@ -27,4 +29,5 @@ func RegisterSystem(api huma.API, d SystemHTTPDeps) {
 	management := huma.NewGroup(api)
 	management.UseMiddleware(platformUserAuth(api, d.Auth))
 	registerSystem(management, d)
+	registerRecordingSettings(management, d.RecordingSettings)
 }

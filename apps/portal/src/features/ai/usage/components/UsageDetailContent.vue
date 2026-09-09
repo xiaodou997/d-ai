@@ -34,7 +34,7 @@ const props = defineProps<{
   loading: boolean;
 }>();
 
-type PayloadKey = "request_params" | "request_messages" | "response_message" | "media_refs" | "billing_breakdown";
+type PayloadKey = "request_params" | "request_messages" | "request_headers" | "response_message" | "response_headers" | "media_refs" | "billing_breakdown";
 
 const payloadOpen = ref(false);
 const activePayload = ref<PayloadKey>("request_params");
@@ -273,7 +273,9 @@ function formatContextTier(line?: BillingPriceLineSnapshot) {
 const payloadSections = computed(() => [
   { key: "request_params" as const, title: "请求参数", value: props.detail?.request_params },
   { key: "request_messages" as const, title: "请求消息", value: props.detail?.request_messages },
+  { key: "request_headers" as const, title: "请求头", value: props.detail?.request_headers },
   { key: "response_message" as const, title: "响应摘要", value: props.detail?.response_message },
+  { key: "response_headers" as const, title: "响应头", value: props.detail?.response_headers },
   { key: "media_refs" as const, title: "媒体引用", value: props.detail?.media_refs },
   { key: "billing_breakdown" as const, title: "计费明细", value: props.detail?.billing_breakdown }
 ].map((section) => ({
@@ -541,7 +543,7 @@ function copyActivePayload() {
         <div class="payload-collapsed__icon"><Braces :size="19" /></div>
         <div>
           <strong>原始载荷已收起</strong>
-          <span>{{ payloadPresentCount }} 个分区已记录 · 请求参数、消息、响应和计费 JSON 按需查看</span>
+          <span>{{ payloadPresentCount }} 个分区已记录 · 请求头、载荷、响应和计费 JSON 按需查看</span>
         </div>
         <ChevronDown :size="17" />
       </button>

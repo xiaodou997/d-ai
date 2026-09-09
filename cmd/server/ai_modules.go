@@ -147,6 +147,7 @@ func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisCl
 	)
 
 	riskControlRepo := aiadapters.NewRiskControlRepo(q)
+	recordingSettingsSvc := audit.NewRecordingSettingsService(riskControlRepo)
 	riskControlConfigSvc := riskcontrol.NewConfigService(riskControlRepo)
 	riskControlLogSvc := riskcontrol.NewLogService(riskControlRepo)
 	riskControlEventSvc := riskcontrol.NewEventService(riskControlRepo)
@@ -404,10 +405,11 @@ func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisCl
 				BanChecker: banChecker,
 			},
 			System: transport.AISystemHTTPDeps{
-				DatabaseHealth: databaseHealth,
-				RedisHealth:    redisHealth,
-				Health:         healthTracker,
-				BanChecker:     banChecker,
+				DatabaseHealth:    databaseHealth,
+				RedisHealth:       redisHealth,
+				Health:            healthTracker,
+				RecordingSettings: recordingSettingsSvc,
+				BanChecker:        banChecker,
 			},
 			Dashboard: transport.AIDashboardHTTPDeps{
 				DashboardQueries:           dashboardSvc,

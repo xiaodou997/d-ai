@@ -159,7 +159,9 @@ func (r *UsageRepo) GetLogDetail(ctx context.Context, requestID string) (domain.
 		detail.AuthMasked = auditRec.AuthMasked
 		detail.RequestMessages = auditRec.RequestMessages
 		detail.RequestParams = auditRec.RequestParams
+		detail.RequestHeaders = auditRec.RequestHeaders
 		detail.ResponseMessage = auditRec.ResponseMessage
+		detail.ResponseHeaders = auditRec.ResponseHeaders
 		detail.MediaRefs = auditRec.MediaRefs
 		if detail.RequestedModel == "" {
 			detail.RequestedModel = auditRec.RequestModel
