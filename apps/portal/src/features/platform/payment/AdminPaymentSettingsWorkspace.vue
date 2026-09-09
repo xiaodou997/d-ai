@@ -2,7 +2,7 @@
   管理端支付设置 — 微信收款 / 租户充值与管理员提现规则两个分区通过 DsTabs 切换。
   重构：迁移至新设计系统一体面板（PortalPagePanel:图标徽章+面包屑标题+描述同行）,
        两大配置块改为同卡 Tab 切换(与租户详情页同模式);颜色全部使用 var(--ds-*) token;
-       表单仍为 element-plus，业务逻辑与请求参数完全不变。
+       表单仍为 element-plus。
 -->
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
@@ -23,8 +23,8 @@ const tabs = [
 interface PackageForm {
   id: string;
   name: string;
-  paymentAmountUsd: number;
-  giftAmountUsd: number;
+  creditedAmountUsd: number;
+  feeEnabled: boolean;
   validityDays: number | null;
   badge: string;
   enabled: boolean;
@@ -76,8 +76,8 @@ function packageToForm(item: TopupPackage): PackageForm {
   return {
     id: item.id,
     name: item.name,
-    paymentAmountUsd: item.paymentAmountMicroUsd / 1_000_000,
-    giftAmountUsd: item.giftAmountMicroUsd / 1_000_000,
+    creditedAmountUsd: item.paymentAmountMicroUsd / 1_000_000,
+    feeEnabled: item.feeEnabled,
     validityDays: item.validityDays ?? null,
     badge: item.badge || "",
     enabled: item.enabled,
@@ -88,9 +88,9 @@ function packageToForm(item: TopupPackage): PackageForm {
 function formToPackage(item: PackageForm): TopupPackage {
   return {
     id: item.id.trim() || `p${Date.now()}`,
-    name: item.name.trim() || `${item.paymentAmountUsd} 额度包`,
-    paymentAmountMicroUsd: Math.round(Number(item.paymentAmountUsd || 0) * 1_000_000),
-    giftAmountMicroUsd: Math.round(Number(item.giftAmountUsd || 0) * 1_000_000),
+    name: item.name.trim() || `${item.creditedAmountUsd} 额度包`,
+    paymentAmountMicroUsd: Math.round(Number(item.creditedAmountUsd || 0) * 1_000_000),
+    feeEnabled: item.feeEnabled,
     validityDays: item.validityDays || null,
     badge: item.badge.trim() || undefined,
     enabled: item.enabled,
@@ -103,13 +103,23 @@ function addPackage() {
   ruleForm.packages.push({
     id: `p${Date.now()}`,
     name: `${next * 10} 额度包`,
-    paymentAmountUsd: next * 10,
-    giftAmountUsd: 0,
+    creditedAmountUsd: next * 10,
+    feeEnabled: false,
     validityDays: null,
     badge: "",
     enabled: true,
     sortOrder: next * 10
   });
+}
+
+function packageFeeUsd(item: PackageForm) {
+  if (!item.feeEnabled) return 0;
+  const creditedMicroUsd = Math.round(Number(item.creditedAmountUsd || 0) * 1_000_000);
+  return Math.ceil((creditedMicroUsd * percentToBp(ruleForm.topupFeePercent)) / 10_000) / 1_000_000;
+}
+
+function packagePaymentUsd(item: PackageForm) {
+  return Number(item.creditedAmountUsd || 0) + packageFeeUsd(item);
 }
 
 function removePackage(index: number) {
@@ -314,13 +324,13 @@ onMounted(() => {
         <!-- 租户充值与管理员提现规则 -->
         <div v-show="activeTab === 'rules'" class="settings-pane">
           <header class="settings-pane__head">
-            <p class="settings-pane__desc">额度包固定到账；自定义充值和管理员提现按手续费折算。租户可单独配置终端用户充值。</p>
+            <p class="settings-pane__desc">额度包按到账金额配置，可单独决定是否加收充值手续费；租户可单独配置终端用户充值。</p>
           </header>
         <el-form v-loading="settingsLoading" :model="ruleForm" label-position="top" class="settings-form">
           <section class="settings-section">
             <div class="section-heading">
               <h4>手续费与有效期</h4>
-              <p>所有金额均按统一货币单位计价；自定义充值按支付金额扣除手续费后入账。</p>
+              <p>自定义充值按支付金额扣除手续费后入账；启用额度包手续费时，手续费在到账金额之外另行收取。</p>
             </div>
             <div class="form-grid form-grid--3">
               <el-form-item label="充值手续费">
@@ -352,7 +362,7 @@ onMounted(() => {
           <section class="settings-section">
             <div class="section-heading">
               <h4>快捷额度包</h4>
-              <p>额度包可配置支付金额、赠送金额和有效期；额度包金额不再扣自定义充值手续费。</p>
+              <p>额度包配置的是到账金额；开启手续费后，用户支付到账金额加对应手续费。</p>
             </div>
 
             <div class="package-grid">
@@ -364,9 +374,9 @@ onMounted(() => {
                 <div class="package-preview">
                   <span v-if="pkg.badge" class="package-preview__badge">{{ pkg.badge }}</span>
                   <span v-if="!pkg.enabled" class="package-preview__hidden">已隐藏</span>
-                  <strong>${{ Number(pkg.paymentAmountUsd || 0).toFixed(2) }}</strong>
+                  <strong>到账 ${{ Number(pkg.creditedAmountUsd || 0).toFixed(2) }}</strong>
                   <em>{{ pkg.name || "未命名额度包" }}</em>
-                  <span class="package-preview__credits">到账 {{ formatDisplayUSD(Number(pkg.paymentAmountUsd || 0) + Number(pkg.giftAmountUsd || 0)) }}</span>
+                  <span class="package-preview__credits">支付 {{ formatDisplayUSD(packagePaymentUsd(pkg)) }}<template v-if="pkg.feeEnabled">（含手续费 {{ formatDisplayUSD(packageFeeUsd(pkg)) }}）</template></span>
                 </div>
                 <div class="package-fields">
                   <label class="package-field">
@@ -374,18 +384,14 @@ onMounted(() => {
                     <el-input v-model="pkg.name" placeholder="10 元体验包" />
                   </label>
                   <label class="package-field">
-                    <span>支付金额</span>
-                    <el-input-number v-model="pkg.paymentAmountUsd" :min="0.000001" :max="10000" :precision="6" :controls="false" class="w-full" />
-                  </label>
-                  <label class="package-field">
-                    <span>赠送金额</span>
-                    <el-input-number v-model="pkg.giftAmountUsd" :min="0" :precision="6" :controls="false" class="w-full" />
+                    <span>到账金额（USD）</span>
+                    <el-input-number v-model="pkg.creditedAmountUsd" :min="10" :max="10000" :precision="2" :controls="false" class="w-full" />
                   </label>
                   <label class="package-field"><span>有效期（天）</span><el-input-number v-model="pkg.validityDays" :min="1" :controls="false" clearable class="w-full" placeholder="长期有效" /></label>
                   <div class="package-field-row">
                     <label class="package-field">
                       <span>角标</span>
-                      <el-input v-model="pkg.badge" placeholder="送 20%" />
+                      <el-input v-model="pkg.badge" placeholder="推荐" />
                     </label>
                     <label class="package-field package-field--narrow">
                       <span>排序</span>
@@ -394,6 +400,7 @@ onMounted(() => {
                   </div>
                 </div>
                 <div class="package-card__ops">
+                  <el-switch v-model="pkg.feeEnabled" active-text="收取手续费" inactive-text="免手续费" />
                   <el-switch v-model="pkg.enabled" active-text="显示" inactive-text="隐藏" />
                   <el-button type="danger" link @click="removePackage(index)">删除</el-button>
                 </div>
@@ -678,12 +685,17 @@ onMounted(() => {
 .package-card__ops {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  flex-wrap: wrap;
+  justify-content: flex-start;
   gap: 12px;
   margin-top: auto;
   padding: 10px 16px;
   border-top: 1px solid var(--ds-line);
   background: var(--ds-panel-muted);
+}
+
+.package-card__ops .el-button {
+  margin-left: auto;
 }
 
 .package-add {

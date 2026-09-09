@@ -181,7 +181,6 @@
           <DetailRow label="实付金额" :value="formatPaid(detail.paidAmountMinor)" />
           <DetailRow label="充值金额" :value="formatMicroUSD(detail.grossAmountMicroUsd)" />
           <DetailRow label="手续费" :value="formatMicroUSD(detail.feeAmountMicroUsd)" />
-          <DetailRow label="赠送金额" :value="formatMicroUSD(detail.giftAmountMicroUsd)" />
           <DetailRow label="实际到账" :value="formatMicroUSD(detail.creditedAmountMicroUsd)" strong />
           <DetailRow v-if="detail.tenantIncomeMicroUsd > 0" label="租户收入额度" :value="formatMicroUSD(detail.tenantIncomeMicroUsd)" />
         </DetailSection>

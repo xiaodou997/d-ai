@@ -10135,9 +10135,8 @@ components:
           type: string
         enabled:
           type: boolean
-        giftAmountMicroUsd:
-          format: int64
-          type: integer
+        feeEnabled:
+          type: boolean
         id:
           type: string
         name:
@@ -10155,7 +10154,7 @@ components:
         - id
         - name
         - paymentAmountMicroUsd
-        - giftAmountMicroUsd
+        - feeEnabled
         - enabled
         - sortOrder
       type: object

@@ -31,3 +31,14 @@ func TestPaymentScopeUsesCapabilities(t *testing.T) {
 		})
 	}
 }
+
+func TestOrderLookupUserIDKeepsTenantTopupsTenantScoped(t *testing.T) {
+	tenantClaims := &auth.Claims{UserID: "tenant-operator", TenantID: "tenant-1", UserType: 3}
+	if got := orderLookupUserID(payment.SceneTenantTopup, tenantClaims); got != "" {
+		t.Fatalf("tenant order lookup user id = %q, want empty", got)
+	}
+	customerClaims := &auth.Claims{UserID: "user-1", TenantID: "tenant-1", UserType: 4}
+	if got := orderLookupUserID(payment.SceneUserTopup, customerClaims); got != "user-1" {
+		t.Fatalf("customer order lookup user id = %q, want user-1", got)
+	}
+}

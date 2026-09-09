@@ -16,7 +16,7 @@ const paymentPackage = {
   id: "pkg-1",
   name: "Starter",
   paymentAmountMicroUsd: 1_000_000,
-  giftAmountMicroUsd: 100_000,
+  feeEnabled: true,
   validityDays: 30,
   badge: "popular",
   enabled: true,

@@ -214,7 +214,7 @@ describe("tenant generated operation facade", () => {
           id: "p10",
           name: "$10",
           paymentAmountMicroUsd: 10_000_000,
-          giftAmountMicroUsd: 0,
+          feeEnabled: false,
           enabled: true,
           sortOrder: 10,
           $schema: "ignored"

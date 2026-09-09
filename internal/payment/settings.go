@@ -5,11 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"xiaodou/dai/internal/money"
 )
 
 const (
@@ -23,12 +26,14 @@ const (
 )
 
 // TopupPackage is an immutable-at-order-time USD offer. PaymentAmountMicroUSD
-// is the charged principal and GiftAmountMicroUSD is an explicit promotion.
+// is retained as the wire/storage field name for compatibility, but now means
+// the amount credited to the balance. When FeeEnabled is true, the applicable
+// top-up fee is added on top of this amount at order creation time.
 type TopupPackage struct {
 	ID                    string `json:"id"`
 	Name                  string `json:"name"`
 	PaymentAmountMicroUSD int64  `json:"paymentAmountMicroUsd"`
-	GiftAmountMicroUSD    int64  `json:"giftAmountMicroUsd"`
+	FeeEnabled            bool   `json:"feeEnabled"`
 	ValidityDays          *int32 `json:"validityDays,omitempty"`
 	Badge                 string `json:"badge,omitempty"`
 	Enabled               bool   `json:"enabled"`
@@ -233,7 +238,7 @@ func validateGlobalSettings(g *GlobalSettings) error {
 	if !validValidityDays(g.TenantCustomValidityDays) {
 		return fmt.Errorf("自定义充值有效期必须为正整数天")
 	}
-	return validatePackages(g.TenantTopupPackages)
+	return validatePackages(g.TenantTopupPackages, g.TenantCustomTopupFeeBp)
 }
 
 func validateTenantSettings(ts *TenantSettings) error {
@@ -243,10 +248,14 @@ func validateTenantSettings(ts *TenantSettings) error {
 	if !validValidityDays(ts.UserCustomValidityDays) {
 		return fmt.Errorf("自定义充值有效期必须为正整数天")
 	}
-	return validatePackages(ts.UserTopupPackages)
+	return validatePackages(ts.UserTopupPackages, ts.UserCustomTopupFeeBp)
 }
 
-func validatePackages(packages []TopupPackage) error {
+func validatePackages(packages []TopupPackage, feeRateBps ...int) error {
+	feeRateBp := 0
+	if len(feeRateBps) > 0 {
+		feeRateBp = feeRateBps[0]
+	}
 	if len(packages) > MaxTopupPackages {
 		return fmt.Errorf("快捷充值套餐最多 %d 个", MaxTopupPackages)
 	}
@@ -263,10 +272,21 @@ func validatePackages(packages []TopupPackage) error {
 			return fmt.Errorf("套餐名称不能为空")
 		}
 		if p.PaymentAmountMicroUSD < TopupMinAmountMicroUSD || p.PaymentAmountMicroUSD > TopupMaxAmountMicroUSD {
-			return fmt.Errorf("套餐支付金额必须在 $10~$10000 之间")
+			return fmt.Errorf("套餐到账金额必须在 $10~$10000 之间")
 		}
-		if p.PaymentAmountMicroUSD > MaxPackageAmountMicroUSD-p.GiftAmountMicroUSD || p.GiftAmountMicroUSD < 0 {
+		if p.PaymentAmountMicroUSD > MaxPackageAmountMicroUSD {
 			return fmt.Errorf("套餐到账金额超出支持范围")
+		}
+		paymentMicroUSD := p.PaymentAmountMicroUSD
+		if p.FeeEnabled {
+			fee, err := money.ApplyBasisPointsCeil(p.PaymentAmountMicroUSD, feeRateBp)
+			if err != nil || fee > math.MaxInt64-p.PaymentAmountMicroUSD {
+				return fmt.Errorf("套餐支付金额超出支持范围")
+			}
+			paymentMicroUSD += fee
+		}
+		if paymentMicroUSD%(money.MicrosPerUSD/100) != 0 {
+			return fmt.Errorf("套餐到账金额加手续费后最多保留两位小数")
 		}
 		if !validValidityDays(p.ValidityDays) {
 			return fmt.Errorf("套餐有效期必须为正整数天")

@@ -138,7 +138,7 @@ func (s *PaymentService) CreateTopupOrder(ctx context.Context, p CreateTopupOrde
 		TopupMode: calc.Mode, PackageID: calc.PackageID, PackageName: calc.PackageName, PackageBadge: calc.PackageBadge,
 		PaymentCurrency: money.CurrencyUSD, PaymentAmountMinor: calc.PaymentAmountMinor, LedgerCurrency: money.CurrencyUSD,
 		GrossAmountMicroUSD: calc.GrossAmountMicroUSD, FeeRateBp: calc.FeeRateBp,
-		FeeAmountMicroUSD: calc.FeeAmountMicroUSD, GiftAmountMicroUSD: calc.GiftAmountMicroUSD,
+		FeeAmountMicroUSD:      calc.FeeAmountMicroUSD,
 		CreditedAmountMicroUSD: calc.CreditedAmountMicroUSD, TenantIncomeMicroUSD: tenantIncomeMicroUSD,
 		BalanceExpiresAt: balanceExpiresAt, Channel: "wechat_native", Status: payment.OrderStatusCreated,
 		FulfillmentStatus: payment.FulfillmentStatusPending, RefundStatus: payment.RefundStatusNone, ExpiresAt: expiresAt,
@@ -182,6 +182,9 @@ func orderOwnedByScope(order *payment.Order, tenantID, userID string) bool {
 	if order == nil || tenantID == "" || order.TenantID != tenantID {
 		return false
 	}
+	// Tenant self-service orders have no user_id; callers must pass an empty
+	// userID for that scene so the tenant scope remains the authorization
+	// boundary. Customer orders always carry their owning user id.
 	return userID == "" || order.UserID == userID
 }
 
@@ -769,7 +772,8 @@ func (s *PaymentService) UpdateWechatConfig(ctx context.Context, in wechat.Updat
 	return s.cfgStore.Update(ctx, in, operatorID)
 }
 
-// TopupConfigView 是给用户/租户端展示的下单前信息（不暴露费率）。
+// TopupConfigView 是给用户/租户端展示的下单前信息，包含用于展示和计算
+// 额度包手续费的当前费率。
 type TopupConfigView struct {
 	Currency     string
 	FeeRateBp    int
@@ -819,7 +823,6 @@ type topupSnapshot struct {
 	GrossAmountMicroUSD    int64
 	FeeRateBp              int
 	FeeAmountMicroUSD      int64
-	GiftAmountMicroUSD     int64
 	CreditedAmountMicroUSD int64
 	ValidityDays           *int32
 }
@@ -830,17 +833,30 @@ func calculateTopupSnapshot(params payment.TopupParams, amountMicroUSD int64, pa
 		for _, p := range params.Packages {
 			if p.ID == packageID && p.Enabled {
 				if amountMicroUSD > 0 && amountMicroUSD != p.PaymentAmountMicroUSD {
-					return topupSnapshot{}, domain.NewErrorWithDetail(domain.ErrBadRequest.Code, domain.ErrBadRequest.Message, "充值套餐金额与实付金额不一致")
+					return topupSnapshot{}, domain.NewErrorWithDetail(domain.ErrBadRequest.Code, domain.ErrBadRequest.Message, "充值套餐金额与到账金额不一致")
 				}
-				paymentMinor, err := paymentMinorFromMicroUSD(p.PaymentAmountMicroUSD)
+				creditedMicroUSD := p.PaymentAmountMicroUSD
+				feeMicroUSD := int64(0)
+				paymentMicroUSD := creditedMicroUSD
+				feeRateBp := 0
+				if p.FeeEnabled {
+					feeRateBp = params.FeeRateBp
+					fee, feeErr := money.ApplyBasisPointsCeil(creditedMicroUSD, params.FeeRateBp)
+					if feeErr != nil || fee > math.MaxInt64-creditedMicroUSD {
+						return topupSnapshot{}, domain.ErrInvalidAmount
+					}
+					feeMicroUSD = fee
+					paymentMicroUSD += feeMicroUSD
+				}
+				paymentMinor, err := paymentMinorFromMicroUSD(paymentMicroUSD)
 				if err != nil {
 					return topupSnapshot{}, err
 				}
 				return topupSnapshot{
 					Mode: payment.TopupModePackage, PackageID: p.ID, PackageName: p.Name, PackageBadge: p.Badge,
-					PaymentAmountMicroUSD: p.PaymentAmountMicroUSD, PaymentAmountMinor: paymentMinor,
-					GrossAmountMicroUSD: p.PaymentAmountMicroUSD, GiftAmountMicroUSD: p.GiftAmountMicroUSD,
-					CreditedAmountMicroUSD: p.PaymentAmountMicroUSD + p.GiftAmountMicroUSD, ValidityDays: p.ValidityDays,
+					PaymentAmountMicroUSD: paymentMicroUSD, PaymentAmountMinor: paymentMinor,
+					GrossAmountMicroUSD: creditedMicroUSD, FeeRateBp: feeRateBp, FeeAmountMicroUSD: feeMicroUSD,
+					CreditedAmountMicroUSD: creditedMicroUSD, ValidityDays: p.ValidityDays,
 				}, nil
 			}
 		}
@@ -872,17 +888,21 @@ func validateGlobalSettings(g *payment.GlobalSettings) error {
 	if g.TenantCustomTopupFeeBp < 0 || g.TenantCustomTopupFeeBp > 10000 || g.TenantWithdrawFeeBp < 0 || g.TenantWithdrawFeeBp > 10000 {
 		return domain.NewErrorWithDetail(domain.ErrInvalidAmount.Code, domain.ErrInvalidAmount.Message, "手续费必须在 0%~100% 之间")
 	}
-	return validatePackages(g.TenantTopupPackages)
+	return validatePackages(g.TenantTopupPackages, g.TenantCustomTopupFeeBp)
 }
 
 func validateTenantSettings(ts *payment.TenantSettings) error {
 	if ts.UserCustomTopupFeeBp < 0 || ts.UserCustomTopupFeeBp > 10000 {
 		return domain.NewErrorWithDetail(domain.ErrInvalidAmount.Code, domain.ErrInvalidAmount.Message, "手续费必须在 0%~100% 之间")
 	}
-	return validatePackages(ts.UserTopupPackages)
+	return validatePackages(ts.UserTopupPackages, ts.UserCustomTopupFeeBp)
 }
 
-func validatePackages(packages []payment.TopupPackage) error {
+func validatePackages(packages []payment.TopupPackage, feeRateBps ...int) error {
+	feeRateBp := 0
+	if len(feeRateBps) > 0 {
+		feeRateBp = feeRateBps[0]
+	}
 	if len(packages) > payment.MaxTopupPackages {
 		return domain.NewErrorWithDetail(domain.ErrBadRequest.Code, domain.ErrBadRequest.Message, "快捷充值套餐最多 12 个")
 	}
@@ -900,10 +920,21 @@ func validatePackages(packages []payment.TopupPackage) error {
 			return domain.NewErrorWithDetail(domain.ErrBadRequest.Code, domain.ErrBadRequest.Message, "套餐名称不能为空")
 		}
 		if p.PaymentAmountMicroUSD < payment.TopupMinAmountMicroUSD || p.PaymentAmountMicroUSD > payment.TopupMaxAmountMicroUSD {
-			return domain.NewErrorWithDetail(domain.ErrPaymentAmountOutOfRange.Code, domain.ErrPaymentAmountOutOfRange.Message, "套餐金额必须在 $10~$10000 之间")
+			return domain.NewErrorWithDetail(domain.ErrPaymentAmountOutOfRange.Code, domain.ErrPaymentAmountOutOfRange.Message, "套餐到账金额必须在 $10~$10000 之间")
 		}
-		if p.GiftAmountMicroUSD < 0 || p.PaymentAmountMicroUSD > payment.MaxPackageAmountMicroUSD-p.GiftAmountMicroUSD {
+		if p.PaymentAmountMicroUSD > payment.MaxPackageAmountMicroUSD {
 			return domain.NewErrorWithDetail(domain.ErrInvalidAmount.Code, domain.ErrInvalidAmount.Message, "套餐到账金额超出支持范围")
+		}
+		paymentMicroUSD := p.PaymentAmountMicroUSD
+		if p.FeeEnabled {
+			fee, err := money.ApplyBasisPointsCeil(p.PaymentAmountMicroUSD, feeRateBp)
+			if err != nil || fee > math.MaxInt64-p.PaymentAmountMicroUSD {
+				return domain.NewErrorWithDetail(domain.ErrInvalidAmount.Code, domain.ErrInvalidAmount.Message, "套餐支付金额超出支持范围")
+			}
+			paymentMicroUSD += fee
+		}
+		if paymentMicroUSD%(money.MicrosPerUSD/100) != 0 {
+			return domain.NewErrorWithDetail(domain.ErrInvalidAmount.Code, domain.ErrInvalidAmount.Message, "套餐到账金额加手续费后最多保留两位小数")
 		}
 	}
 	return nil

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from "vue";
-import { BadgeDollarSign, Gift } from "lucide-vue-next";
+import { BadgeDollarSign } from "lucide-vue-next";
 import { PortalQrPayDialog, type QrPayPollResult } from "@/platform";
 
 import type { TenantTopupConfig, TenantTopupOrderCreated, TopupPackage } from "@/api/types/tenant";
@@ -48,6 +48,15 @@ function selectCustom() {
   selectedPackage.value = null;
 }
 
+function packageFeeMicroUsd(pkg: TopupPackage) {
+  if (!pkg.feeEnabled || !props.config) return 0;
+  return Math.ceil((pkg.paymentAmountMicroUsd * props.config.feeRateBp) / 10_000);
+}
+
+function packagePaymentMicroUsd(pkg: TopupPackage) {
+  return pkg.paymentAmountMicroUsd + packageFeeMicroUsd(pkg);
+}
+
 function submit() {
   if (selectedPackage.value) emit("topup", { packageId: selectedPackage.value.id });
   else if (canSubmitCustom.value) emit("topup", { amountMicroUsd: customPreview.value.gross });
@@ -71,7 +80,7 @@ watch(
       <template v-else-if="config">
         <div class="topup-summary">
           <BadgeDollarSign :size="20" />
-          <div><strong>USD 额度充值</strong><span>订单将分别记录支付、手续费、赠送和到账金额</span></div>
+          <div><strong>USD 额度充值</strong><span>订单将分别记录支付、手续费和到账金额</span></div>
           <em v-if="config.feeRateBp">自定义充值手续费 {{ (config.feeRateBp / 100).toFixed(2) }}%</em>
         </div>
 
@@ -84,10 +93,9 @@ watch(
             @click="choosePackage(pkg)"
           >
             <span v-if="pkg.badge" class="package-option__badge">{{ pkg.badge }}</span>
-            <strong>{{ formatMicroUSD(pkg.paymentAmountMicroUsd) }}</strong>
+            <strong>到账 {{ formatMicroUSD(pkg.paymentAmountMicroUsd) }}</strong>
             <span>{{ pkg.name }}</span>
-            <em v-if="pkg.giftAmountMicroUsd > 0"><Gift :size="13" />赠送 {{ formatMicroUSD(pkg.giftAmountMicroUsd) }}</em>
-            <small>到账 {{ formatMicroUSD(pkg.paymentAmountMicroUsd + pkg.giftAmountMicroUsd) }}</small>
+            <small>支付 {{ formatMicroUSD(packagePaymentMicroUsd(pkg)) }}<template v-if="pkg.feeEnabled">（含手续费 {{ formatMicroUSD(packageFeeMicroUsd(pkg)) }}）</template></small>
           </button>
         </div>
 
@@ -106,9 +114,9 @@ watch(
         </label>
 
         <div v-if="selectedPackage" class="topup-preview">
-          <span>支付 <b>{{ formatMicroUSD(selectedPackage.paymentAmountMicroUsd) }}</b></span>
-          <span>赠送 <b>{{ formatMicroUSD(selectedPackage.giftAmountMicroUsd) }}</b></span>
-          <strong>到账 {{ formatMicroUSD(selectedPackage.paymentAmountMicroUsd + selectedPackage.giftAmountMicroUsd) }}</strong>
+          <span>到账 <b>{{ formatMicroUSD(selectedPackage.paymentAmountMicroUsd) }}</b></span>
+          <span>手续费 <b>{{ formatMicroUSD(packageFeeMicroUsd(selectedPackage)) }}</b></span>
+          <strong>支付 {{ formatMicroUSD(packagePaymentMicroUsd(selectedPackage)) }}</strong>
         </div>
         <div v-else class="topup-preview">
           <span>充值金额 <b>{{ formatMicroUSD(customPreview.gross) }}</b></span>

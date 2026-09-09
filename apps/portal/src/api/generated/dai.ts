@@ -10130,8 +10130,7 @@ export interface components {
         TopupPackage: {
             badge?: string;
             enabled: boolean;
-            /** Format: int64 */
-            giftAmountMicroUsd: number;
+            feeEnabled: boolean;
             id: string;
             name: string;
             /** Format: int64 */

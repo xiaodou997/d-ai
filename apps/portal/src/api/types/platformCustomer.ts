@@ -27,8 +27,10 @@ export interface TopupConfig {
 export interface TopupPackage {
   id: string;
   name: string;
+  /** 兼容既有字段名；额度包配置值现在表示实际到账金额。 */
   paymentAmountMicroUsd: number;
-  giftAmountMicroUsd: number;
+  /** 是否在到账金额之外加收当前充值手续费。 */
+  feeEnabled: boolean;
   validityDays?: number | null;
   badge?: string;
   enabled: boolean;

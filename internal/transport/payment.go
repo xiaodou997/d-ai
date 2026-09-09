@@ -46,6 +46,13 @@ func sceneAndScopeFromClaims(ctx context.Context) (scene, tenantID, userID strin
 	return "", "", "", false
 }
 
+func orderLookupUserID(scene string, claims *auth.Claims) string {
+	if claims == nil || scene == payment.SceneTenantTopup {
+		return ""
+	}
+	return claims.UserID
+}
+
 // ---- DTO ----
 
 type topupConfigOutput struct {
@@ -223,7 +230,7 @@ func (h *paymentHandlers) createOrder(ctx context.Context, in *createTopupOrderI
 }
 
 func (h *paymentHandlers) getOrder(ctx context.Context, in *getTopupOrderInput) (*topupOrderStatusOutput, error) {
-	_, _, _, ok := sceneAndScopeFromClaims(ctx)
+	scene, _, _, ok := sceneAndScopeFromClaims(ctx)
 	if !ok {
 		return nil, httpx.ErrForbidden
 	}
@@ -231,7 +238,10 @@ func (h *paymentHandlers) getOrder(ctx context.Context, in *getTopupOrderInput) 
 	if claims == nil {
 		return nil, httpx.ErrUnauthorized
 	}
-	order, err := h.svc.GetOrderForScope(ctx, in.OrderID, claims.TenantID, claims.UserID)
+	// Tenant top-up orders deliberately have no user_id.  Do not pass the
+	// tenant operator's JWT user id into the user-scoped lookup, otherwise a
+	// perfectly valid tenant order is returned as 404 during QR polling.
+	order, err := h.svc.GetOrderForScope(ctx, in.OrderID, claims.TenantID, orderLookupUserID(scene, claims))
 	if err != nil {
 		return nil, toProblem(err)
 	}

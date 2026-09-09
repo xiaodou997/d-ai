@@ -2775,10 +2775,10 @@ VALUES (
         "tenantCustomTopupFeeBp": 160,
         "tenantWithdrawFeeBp": 160,
         "tenantTopupPackages": [
-            {"id": "p10", "name": "$10 体验包", "paymentAmountMicroUsd": 10000000, "giftAmountMicroUsd": 0, "enabled": true, "sortOrder": 10},
-            {"id": "p20", "name": "$20 基础包", "paymentAmountMicroUsd": 20000000, "giftAmountMicroUsd": 0, "enabled": true, "sortOrder": 20},
-            {"id": "p50", "name": "$50 常用包", "paymentAmountMicroUsd": 50000000, "giftAmountMicroUsd": 0, "enabled": true, "sortOrder": 30},
-            {"id": "p100", "name": "$100 进阶包", "paymentAmountMicroUsd": 100000000, "giftAmountMicroUsd": 0, "enabled": true, "sortOrder": 40}
+            {"id": "p10", "name": "$10 体验包", "paymentAmountMicroUsd": 10000000, "feeEnabled": false, "enabled": true, "sortOrder": 10},
+            {"id": "p20", "name": "$20 基础包", "paymentAmountMicroUsd": 20000000, "feeEnabled": false, "enabled": true, "sortOrder": 20},
+            {"id": "p50", "name": "$50 常用包", "paymentAmountMicroUsd": 50000000, "feeEnabled": false, "enabled": true, "sortOrder": 30},
+            {"id": "p100", "name": "$100 进阶包", "paymentAmountMicroUsd": 100000000, "feeEnabled": false, "enabled": true, "sortOrder": 40}
         ]
     }'::jsonb
 )

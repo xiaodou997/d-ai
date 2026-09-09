@@ -27,11 +27,16 @@ const emit = defineEmits<{
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 const remainingSeconds = shallowRef(0);
 const phase = shallowRef<"pending" | "paying" | "success" | "timeout">("pending");
+const pollError = shallowRef(false);
 
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let countdownTimer: ReturnType<typeof setInterval> | null = null;
+let pollInFlight = false;
+let consecutivePollFailures = 0;
+let pollGeneration = 0;
 
 function stopTimers() {
+  pollGeneration += 1;
   if (pollTimer) {
     clearInterval(pollTimer);
     pollTimer = null;
@@ -62,9 +67,15 @@ async function drawQrCode() {
   }
 }
 
-async function tickPoll() {
+async function tickPoll(generation = pollGeneration) {
+  if (generation !== pollGeneration) return;
+  if (pollInFlight) return;
+  pollInFlight = true;
   try {
     const result = await props.poll();
+    if (!props.visible || generation !== pollGeneration) return;
+    consecutivePollFailures = 0;
+    pollError.value = false;
     if (result.status === "paid") {
       phase.value = "success";
       stopTimers();
@@ -76,15 +87,25 @@ async function tickPoll() {
       phase.value = "paying";
     }
   } catch {
-    // 瞬时错误忽略，继续下一轮轮询
+    if (!props.visible || generation !== pollGeneration) return;
+    consecutivePollFailures += 1;
+    // 瞬时错误继续轮询；连续失败时给出可见反馈，避免 404/鉴权问题被
+    // 静默成“二维码一直不变”的假象。
+    if (consecutivePollFailures >= 2) pollError.value = true;
+  } finally {
+    pollInFlight = false;
   }
 }
 
 function startPolling() {
   stopTimers();
+  const generation = pollGeneration;
   phase.value = "pending";
+  pollError.value = false;
+  consecutivePollFailures = 0;
   remainingSeconds.value = Math.max(0, Math.round((props.expiresAt - Date.now()) / 1000));
-  pollTimer = setInterval(() => void tickPoll(), 3000);
+  void tickPoll(generation);
+  pollTimer = setInterval(() => void tickPoll(generation), 3000);
   countdownTimer = setInterval(() => {
     remainingSeconds.value = Math.max(0, remainingSeconds.value - 1);
     if (remainingSeconds.value === 0 && phase.value !== "success") {
@@ -102,6 +123,7 @@ watch(
       void drawQrCode();
     } else {
       stopTimers();
+      pollError.value = false;
     }
   },
   { immediate: true }
@@ -140,6 +162,7 @@ function handleClose() {
 
       <div v-if="phase === 'pending' || phase === 'paying'" class="qr-pay-hint">
         <p>请使用微信扫一扫完成支付</p>
+        <p v-if="pollError" class="qr-pay-error">支付状态查询暂时失败，正在重试…</p>
         <p class="qr-pay-countdown">剩余 {{ countdownLabel }}{{ phase === "paying" ? "，支付确认中…" : "" }}</p>
       </div>
     </div>
@@ -250,5 +273,9 @@ function handleClose() {
 .qr-pay-countdown {
   color: var(--ds-warning);
   font-weight: 600;
+}
+
+.qr-pay-error {
+  color: var(--ds-danger);
 }
 </style>

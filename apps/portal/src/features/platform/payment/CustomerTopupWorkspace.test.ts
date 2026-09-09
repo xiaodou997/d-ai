@@ -23,7 +23,7 @@ const config = {
     id: "pkg-10",
     name: "基础额度包",
     paymentAmountMicroUsd: 10_000_000,
-    giftAmountMicroUsd: 1_000_000,
+    feeEnabled: true,
     enabled: true,
     sortOrder: 1
   }]
@@ -41,7 +41,7 @@ describe("CustomerTopupWorkspace", () => {
       paymentAmountMinor: 7200,
       grossAmountMicroUsd: 10_000_000,
       feeAmountMicroUsd: 160_000,
-      giftAmountMicroUsd: 1_000_000,
+      giftAmountMicroUsd: 0,
       creditedAmountMicroUsd: 10_840_000,
       topupMode: "package",
       status: "created",

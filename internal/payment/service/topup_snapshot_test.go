@@ -15,15 +15,29 @@ func topupTestParams(packages []payment.TopupPackage) payment.TopupParams {
 
 func TestCalculateTopupSnapshotPackageUsesServerSnapshot(t *testing.T) {
 	params := topupTestParams([]payment.TopupPackage{
-		{ID: "p20", Name: "$20 基础包", PaymentAmountMicroUSD: 20_000_000, GiftAmountMicroUSD: 2_000_000, Enabled: true},
+		{ID: "p20", Name: "$20 基础包", PaymentAmountMicroUSD: 20_000_000, Enabled: true},
 	})
 
 	got, err := calculateTopupSnapshot(params, 0, "p20")
 	if err != nil {
 		t.Fatalf("calculateTopupSnapshot returned error: %v", err)
 	}
-	if got.PaymentAmountMinor != 2_000 || got.GrossAmountMicroUSD != 20_000_000 || got.GiftAmountMicroUSD != 2_000_000 || got.CreditedAmountMicroUSD != 22_000_000 || got.FeeAmountMicroUSD != 0 {
+	if got.PaymentAmountMinor != 2_000 || got.GrossAmountMicroUSD != 20_000_000 || got.CreditedAmountMicroUSD != 20_000_000 || got.FeeAmountMicroUSD != 0 {
 		t.Fatalf("package snapshot mismatch: %+v", got)
+	}
+}
+
+func TestCalculateTopupSnapshotPackageAddsFeeOnTopOfCreditedAmount(t *testing.T) {
+	params := topupTestParams([]payment.TopupPackage{
+		{ID: "p20", Name: "$20 基础包", PaymentAmountMicroUSD: 20_000_000, FeeEnabled: true, Enabled: true},
+	})
+
+	got, err := calculateTopupSnapshot(params, 0, "p20")
+	if err != nil {
+		t.Fatalf("calculateTopupSnapshot returned error: %v", err)
+	}
+	if got.PaymentAmountMinor != 2_032 || got.GrossAmountMicroUSD != 20_000_000 || got.FeeAmountMicroUSD != 320_000 || got.CreditedAmountMicroUSD != 20_000_000 || got.FeeRateBp != 160 {
+		t.Fatalf("fee-enabled package snapshot mismatch: %+v", got)
 	}
 }
 
@@ -64,11 +78,10 @@ func TestValidatePackagesRejectsInvalidDefinitions(t *testing.T) {
 		{"duplicate id", []payment.TopupPackage{{ID: "p10", Name: "$10", PaymentAmountMicroUSD: 10_000_000}, {ID: "p10", Name: "$10 gift", PaymentAmountMicroUSD: 10_000_000}}},
 		{"empty name", []payment.TopupPackage{{ID: "p10", PaymentAmountMicroUSD: 10_000_000}}},
 		{"invalid amount", []payment.TopupPackage{{ID: "p10", Name: "$10", PaymentAmountMicroUSD: 9_999_999}}},
-		{"negative gift", []payment.TopupPackage{{ID: "p10", Name: "$10", PaymentAmountMicroUSD: 10_000_000, GiftAmountMicroUSD: -1}}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if err := validatePackages(tc.packages); err == nil {
+			if err := validatePackages(tc.packages, 160); err == nil {
 				t.Fatal("expected package definition to be rejected")
 			}
 		})
