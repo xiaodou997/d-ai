@@ -791,7 +791,7 @@ function toRiskConfig(value: RiskControlConfigTransport): RiskControlConfigDTO {
 
 function toRiskKeywordConfigBody(value: KeywordConfigDTO): RiskControlConfigWriteBody["keyword"] {
   return {
-    mode: value.mode,
+		mode: value.mode ?? "off",
     enabled: value.enabled,
     entries: value.entries.map((entry) => ({
       word: entry.word,
@@ -819,8 +819,8 @@ function toRiskControlConfigBody(value: RiskControlConfigWriteRequest): RiskCont
     mode: toRiskControlMode(value.mode),
     keyword: toRiskKeywordConfigBody(value.keyword),
     provider: {
-      enabled: value.provider.enabled,
-      mode: value.provider.mode,
+		enabled: value.provider.enabled ?? false,
+		mode: value.provider.mode ?? "openai",
       base_url: value.provider.base_url,
       model: value.provider.model,
       api_key: value.provider.api_key,
