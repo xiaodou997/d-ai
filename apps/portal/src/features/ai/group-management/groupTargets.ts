@@ -16,6 +16,7 @@ export interface GroupTargetRow extends GroupTargetDraft {
   targetId: string;
   kind: GroupTargetKind;
   name: string;
+  description?: string;
   protocols: string[];
   tenantMultiplier: number | null;
   availableModels: number;

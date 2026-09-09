@@ -6,7 +6,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, shallowRef } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { CheckSquare, RefreshCw, RotateCcw, Save, Search } from "lucide-vue-next";
+import { CheckSquare, RefreshCw, Search } from "lucide-vue-next";
 import { formatMultiplier } from "@/platform/ai/utils";
 import { DsTable, DsTag, type DsTableColumn } from "@/shared/ui";
 
@@ -35,11 +35,10 @@ const failures = shallowRef<GroupTargetSaveFailure[]>([]);
 const hasConflict = computed(() => failures.value.some((failure) => failure.code === "group_route_policy_conflict"));
 
 const columns: DsTableColumn[] = [
-  { key: "link", title: "关联", width: 58, align: "center" },
   { key: "resource", title: "上游资源" },
+  { key: "description", title: "描述", width: 220 },
   { key: "priceModel", title: "价格模型", width: 104 },
-  { key: "status", title: "状态", width: 104 },
-  { key: "change", title: "变更", width: 82 }
+  { key: "status", title: "状态", width: 104 }
 ];
 
 const visibleRows = computed(() => {
@@ -78,31 +77,31 @@ async function refresh() {
   }
 }
 
-function selectVisible() {
-  for (const row of visibleRows.value) if (row.selectable) state.setSelected(row.key, true);
-}
-
-function updateDraft(key: string, patch: Partial<GroupTargetDraft>) {
-  failures.value = [];
-  state.updateDraft(key, patch);
-}
-
 async function save() {
-  if (state.removals.value.length) {
-    try {
-      await ElMessageBox.confirm(`将解除 ${state.removals.value.length} 个上游关联，是否继续？`, "确认关联变更", { type: "warning" });
-    } catch {
-      return;
-    }
-  }
   const result = await state.save();
   failures.value = result.failures;
-  if (result.failures.length) {
-    ElMessage.warning(`已新增 ${result.added}、更新 ${result.updated}、解除 ${result.removed}，${result.failures.length} 项失败`);
-  } else {
-    ElMessage.success(`关联已更新：新增 ${result.added}、更新 ${result.updated}、解除 ${result.removed}`);
-    emit("changed");
+  if (result.failures.length) ElMessage.warning(`保存失败 ${result.failures.length} 项`);
+  else if (result.added || result.updated || result.removed) { ElMessage.success("关联已自动保存"); emit("changed"); }
+}
+
+async function toggleAll() {
+  const selectable = visibleRows.value.filter((row) => row.selectable);
+  if (!selectable.length) return;
+  const allOn = selectable.every((row) => row.selected);
+  try {
+    await ElMessageBox.confirm(allOn ? "将关闭当前全部上游目标，是否继续？" : "将开启当前全部上游目标，是否继续？", "确认操作", { type: "warning" });
+  } catch { return; }
+  for (const row of selectable) {
+    state.setSelected(row.key, !allOn);
+    state.updateDraft(row.key, { status: "active" });
   }
+  await save();
+}
+
+async function toggleRow(row: GroupTargetDraft & { key: string; selected: boolean; selectable: boolean; status: string }, enabled: boolean) {
+  state.setSelected(row.key, enabled);
+  state.updateDraft(row.key, { status: enabled ? "active" : "disabled" });
+  await save();
 }
 
 async function reloadAfterConflict() {
@@ -134,7 +133,7 @@ defineExpose({ confirmDiscardChanges });
     <div class="filters">
       <el-input v-model="keyword" clearable :prefix-icon="Search" placeholder="搜索名称或资源 ID" />
       <el-select v-model="linkFilter" aria-label="关联状态"><el-option label="全部关联状态" value="all" /><el-option label="已关联" value="linked" /><el-option label="未关联" value="unlinked" /></el-select>
-      <el-button :icon="CheckSquare" :disabled="state.saving.value || !visibleRows.length" @click="selectVisible">全选当前结果</el-button>
+      <el-button :icon="CheckSquare" :disabled="state.saving.value || !visibleRows.length" @click="toggleAll">全选</el-button>
     </div>
 
     <div class="defaults-row">
@@ -169,14 +168,14 @@ defineExpose({ confirmDiscardChanges });
           >{{ unavailableLabel(row.bindingUnavailableReason) }}</DsTag>
         </div>
       </template>
+      <template #cell-description="{ row }"><span class="muted">{{ row.description || "-" }}</span></template>
       <template #cell-priceModel="{ row }">
         <DsTag :tone="row.resourceState === 'available' ? 'positive' : 'danger'">
           {{ row.resourceState === "available" ? `${row.availableModels} 个` : row.resourceState === "missing" ? "资源失效" : "无可用价格" }}
         </DsTag>
       </template>
       <template #cell-status="{ row }">
-        <el-switch v-if="row.selected" :model-value="row.status === 'active'" inline-prompt active-text="启用" inactive-text="停用" size="small" :disabled="state.saving.value" @update:model-value="updateDraft(row.key, { status: $event ? 'active' : 'disabled' })" />
-        <span v-else class="muted">未关联</span>
+        <el-switch :model-value="row.selected && row.status === 'active'" inline-prompt active-text="启用" inactive-text="停用" size="small" :disabled="state.saving.value || !row.selectable" @update:model-value="toggleRow(row, Boolean($event))" />
       </template>
       <template #cell-change="{ row }">
         <DsTag v-if="row.change" :tone="row.change === 'add' ? 'positive' : row.change === 'update' ? 'warning' : 'danger'">
@@ -194,13 +193,6 @@ defineExpose({ confirmDiscardChanges });
       </template>
     </el-alert>
 
-    <footer class="save-bar">
-      <span>已选 {{ state.rows.value.filter((row) => row.selected).length }}，新增 {{ state.additions.value.length }}，更新 {{ state.updates.value.length }}，解除 {{ state.removals.value.length }}</span>
-      <div>
-        <el-button :icon="RotateCcw" :disabled="!state.hasChanges.value || state.saving.value" @click="state.discard">放弃</el-button>
-        <el-button type="primary" :icon="Save" :loading="state.saving.value" :disabled="!state.hasChanges.value" @click="save">统一保存</el-button>
-      </div>
-    </footer>
   </section>
 </template>
 

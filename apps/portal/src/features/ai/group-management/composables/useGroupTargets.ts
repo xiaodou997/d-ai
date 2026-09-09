@@ -76,6 +76,7 @@ export function useGroupTargets(options: UseGroupTargetsOptions) {
         targetId: resource.id,
         kind: resource.resource_kind,
         name: resource.name,
+        description: (resource as TenantAiUpstreamResource & { description?: string }).description,
         protocols: [...new Set((resource.api_formats || []).map(protocolLabel))],
         tenantMultiplier: resource.tenant_multiplier,
         availableModels,
