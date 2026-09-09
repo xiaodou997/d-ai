@@ -60,6 +60,39 @@ describe("useTenantUsage", () => {
     wrapper.unmount();
   });
 
+  it("uses the workbench range window and refreshes filtered aggregate stats", async () => {
+    const api = fakeApi();
+    api.listRecords.mockResolvedValueOnce(tenantResponse([], {
+      total_requests: 4,
+      success_count: 3,
+      failed_count: 1,
+      total_tokens: 1234,
+      total_user_charged_usd: 1.234567
+    }));
+    const { state, wrapper } = mountComposable(api);
+
+    await state.changeRange("7d");
+
+    expect(state.selectedRangeId.value).toBe("7d");
+    expect(state.stats.value).toMatchObject({
+      total_requests: 4,
+      success_count: 3,
+      failed_count: 1,
+      total_tokens: 1234,
+      total_user_charged_usd: 1.234567
+    });
+    expect(api.listRecords).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        limit: 20,
+        offset: 0,
+        date_from: expect.any(String),
+        date_to: expect.any(String)
+      }),
+      expect.any(AbortSignal)
+    );
+    wrapper.unmount();
+  });
+
   it("enriches users from the directory and preserves external and id fallbacks", async () => {
     const api = fakeApi();
     api.listRecords.mockResolvedValue(tenantResponse([
@@ -160,7 +193,7 @@ function mountComposable(api: TenantUsageApi) {
   return { state, wrapper };
 }
 
-function tenantResponse(records: TenantUsageLog[]): RecordsResponse {
+function tenantResponse(records: TenantUsageLog[], statsOverrides: Partial<RecordsResponse["stats"]> = {}): RecordsResponse {
   return {
     records,
     total: records.length,
@@ -174,7 +207,8 @@ function tenantResponse(records: TenantUsageLog[]): RecordsResponse {
       total_user_charged_usd: 0,
       avg_latency_ms: 0,
       avg_request_total_ms: 0,
-      avg_first_response_byte_ms: 0
+      avg_first_response_byte_ms: 0,
+      ...statsOverrides
     }
   };
 }

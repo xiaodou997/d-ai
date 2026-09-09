@@ -1,22 +1,38 @@
 <!--
-  使用记录筛选带:DsFilterBar + DsFilterField(标签在上),
-  el-select 固定 160px 宽;查询条件与原有字段完全一致。
+  租户使用分析筛选带:DsFilterBar + DsFilterField(标签在上),
+  时间范围复用管理端记录页的 UsageRangeSelector,其余查询条件保持一致。
 -->
 <script setup lang="ts">
 import { Search } from "@element-plus/icons-vue";
 import { DsFilterBar, DsFilterField } from "@/shared/ui";
 import { requestSourceOptions } from "@/platform/ai/usage";
+import UsageRangeSelector from "./UsageRangeSelector.vue";
 
+import {
+  DEFAULT_WORKBENCH_RANGE_ID,
+  WORKBENCH_RANGE_OPTIONS,
+  type WorkbenchRangeId,
+  type WorkbenchRangeOption
+} from "@/components/workbench/workbenchRanges";
 import type { TenantUsageFilters, TenantUsageUser } from "../model";
 
-defineProps<{
+withDefaults(defineProps<{
   loading: boolean;
   users: TenantUsageUser[];
   showUser?: boolean;
-}>();
+  rangeId?: WorkbenchRangeId;
+  rangeOptions?: WorkbenchRangeOption[];
+}>(), {
+  rangeId: DEFAULT_WORKBENCH_RANGE_ID,
+  rangeOptions: () => [...WORKBENCH_RANGE_OPTIONS]
+});
 
 const filters = defineModel<TenantUsageFilters>({ required: true });
-defineEmits<{ search: [] }>();
+const customRange = defineModel<[number, number] | null>("customRange", { default: null });
+const emit = defineEmits<{
+  search: [];
+  rangeChange: [value: WorkbenchRangeId];
+}>();
 
 const statusOptions = [
   { label: "成功", value: "success" },
@@ -25,58 +41,26 @@ const statusOptions = [
   { label: "待处理", value: "pending" }
 ];
 
-const dateShortcuts = [
-  {
-    text: "今天",
-    value: () => {
-      const date = new Date();
-      date.setHours(0, 0, 0, 0);
-      return [date, new Date()];
-    }
-  },
-  {
-    text: "昨天",
-    value: () => {
-      const from = new Date();
-      from.setDate(from.getDate() - 1);
-      from.setHours(0, 0, 0, 0);
-      const to = new Date(from);
-      to.setHours(23, 59, 59, 999);
-      return [from, to];
-    }
-  },
-  {
-    text: "近 7 天",
-    value: () => rangeFromDays(6)
-  },
-  {
-    text: "近 30 天",
-    value: () => rangeFromDays(29)
+function handleCustomRange(value: unknown) {
+  if (!Array.isArray(value) || value.length !== 2 || !value.every((part) => typeof part === "number")) {
+    customRange.value = null;
+    return;
   }
-];
-
-function rangeFromDays(days: number) {
-  const to = new Date();
-  const from = new Date();
-  from.setDate(from.getDate() - days);
-  from.setHours(0, 0, 0, 0);
-  return [from, to];
+  const range: [number, number] = [value[0], value[1]];
+  customRange.value = range;
+  emit("rangeChange", "custom");
 }
 </script>
 
 <template>
   <DsFilterBar>
     <DsFilterField label="时间范围">
-      <el-date-picker
-        v-model="filters.dateRange"
-        type="datetimerange"
-        range-separator="至"
-        start-placeholder="开始时间"
-        end-placeholder="结束时间"
-        format="MM-DD HH:mm"
-        value-format="x"
-        :shortcuts="dateShortcuts"
-        class="usage-filter-date"
+      <UsageRangeSelector
+        :model-value="rangeId"
+        :options="rangeOptions"
+        :custom-range="customRange"
+        @update:model-value="emit('rangeChange', $event)"
+        @update:custom-range="handleCustomRange"
       />
     </DsFilterField>
     <DsFilterField v-if="showUser !== false" label="用户">
@@ -109,10 +93,6 @@ function rangeFromDays(days: number) {
 </template>
 
 <style scoped>
-.usage-filter-date {
-  width: 340px;
-}
-
 /* DsFilterField 是纵向 flex(shrink-to-fit),flex-basis 会作用到高度而非宽度,
    故只用固定 width,不用 flex;与订阅面板 filter-select 写法一致 */
 .usage-filter {

@@ -1,5 +1,12 @@
 import { computed, onMounted, onUnmounted, reactive, shallowRef } from "vue";
 
+import {
+  buildWorkbenchRangeWindow,
+  DEFAULT_WORKBENCH_RANGE_ID,
+  getWorkbenchRangeOption,
+  WORKBENCH_RANGE_OPTIONS,
+  type WorkbenchRangeId
+} from "@/components/workbench/workbenchRanges";
 import type { TenantUsageApi } from "../api";
 import {
   defaultTenantUsageFilters,
@@ -31,12 +38,23 @@ export function useTenantUsage(options: UseTenantUsageOptions) {
   const stats = shallowRef<TenantUsageStats>({ ...EMPTY_TENANT_USAGE_STATS });
   const selectedRecord = shallowRef<TenantUsageRow | null>(null);
   const detailOpen = shallowRef(false);
+  const selectedRangeId = shallowRef<WorkbenchRangeId>(DEFAULT_WORKBENCH_RANGE_ID);
+  const customRange = shallowRef<[number, number] | null>(null);
 
   let recordsGeneration = 0;
   let usersGeneration = 0;
   let recordsController: AbortController | undefined;
   let usersController: AbortController | undefined;
   let disposed = false;
+
+  function syncDateRange() {
+    if (selectedRangeId.value === "custom" && customRange.value) {
+      filters.dateRange = [...customRange.value] as [number, number];
+      return;
+    }
+    const window = buildWorkbenchRangeWindow(getWorkbenchRangeOption(selectedRangeId.value));
+    filters.dateRange = [window.startTime, window.endTime];
+  }
 
   const successRate = computed(() => stats.value.total_requests
     ? `${((stats.value.success_count / stats.value.total_requests) * 100).toFixed(1)}%`
@@ -103,6 +121,19 @@ export function useTenantUsage(options: UseTenantUsageOptions) {
 
   async function reset() {
     Object.assign(filters, defaultTenantUsageFilters());
+    selectedRangeId.value = DEFAULT_WORKBENCH_RANGE_ID;
+    customRange.value = null;
+    syncDateRange();
+    page.value = 1;
+    await loadRecords();
+  }
+
+  async function changeRange(rangeId: WorkbenchRangeId) {
+    selectedRangeId.value = rangeId;
+    if (rangeId !== "custom") customRange.value = null;
+    // Clicking “自定义” only opens the picker; wait for a complete range before querying.
+    if (rangeId === "custom" && !customRange.value) return;
+    syncDateRange();
     page.value = 1;
     await loadRecords();
   }
@@ -124,6 +155,7 @@ export function useTenantUsage(options: UseTenantUsageOptions) {
   }
 
   onMounted(() => {
+    syncDateRange();
     if (options.immediate !== false) void Promise.allSettled([loadUsers(), loadRecords()]);
   });
 
@@ -150,11 +182,15 @@ export function useTenantUsage(options: UseTenantUsageOptions) {
     rows,
     search,
     selectedRecord,
+    selectedRangeId,
     stats,
     successRate,
     total,
     users,
-    usersLoading
+    usersLoading,
+    customRange,
+    changeRange,
+    WORKBENCH_RANGE_OPTIONS
   };
 }
 

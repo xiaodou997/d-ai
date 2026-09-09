@@ -2,7 +2,7 @@
   租户端 AI 使用记录工作台:查看本租户每一次 AI API 调用的消耗明细。
   重构:迁移至新设计系统一体面板(PortalPagePanel:图标徽章+面包屑标题+描述同行,
        指标卡 PortalMetricGrid/DsMetricCard 与表格置于同卡 body 的 24px 容器内,
-       筛选带置于面板 filters 区,表格统一 DsTable、分页统一 DsPagination 始终渲染);
+       筛选带置于指标卡与表格之间,表格统一 DsTable、分页统一 DsPagination 始终渲染);
        业务逻辑与请求参数不变。租户端没有按 requestId 的详情接口,
        单条调用详情保留抽屉(TenantUsageDetailDrawer),不跳独立详情页。
 -->
@@ -33,9 +33,13 @@ const {
   rows,
   search,
   selectedRecord,
+  selectedRangeId,
   stats,
   total,
-  users
+  users,
+  customRange,
+  changeRange,
+  WORKBENCH_RANGE_OPTIONS
 } = useTenantUsage({ api: tenantUsageApi, onError: (message) => ElMessage.error(message) });
 
 // 顶部指标卡:口径与原 PortalMetricGrid 自定义卡片一致
@@ -63,7 +67,7 @@ const metrics = computed(() => [
       :breadcrumbs="[
         { label: '智能服务' },
         { label: '用量与分析' },
-        { label: '使用记录' }
+        { label: '使用分析' }
       ]"
       description="每行对应一次 AI API 调用,支持按时间、用户、模型、状态过滤。"
     >
@@ -71,13 +75,19 @@ const metrics = computed(() => [
         <el-button :icon="Refresh" :loading="loading" @click="reset">重置刷新</el-button>
       </template>
 
-      <template #filters>
-        <TenantUsageFilters v-model="filters" :loading="loading" :users="users" @search="search" />
-      </template>
-
       <!-- 面板 body 无内边距,用 24px 容器承载指标卡与整宽表格 -->
       <div class="usage-body">
         <PortalMetricGrid :metrics="metrics" min-col-width="180px" />
+        <TenantUsageFilters
+          v-model="filters"
+          v-model:custom-range="customRange"
+          :loading="loading"
+          :range-id="selectedRangeId"
+          :range-options="WORKBENCH_RANGE_OPTIONS"
+          :users="users"
+          @range-change="changeRange"
+          @search="search"
+        />
         <TenantUsageTable
           :loading="loading"
           :page="page"

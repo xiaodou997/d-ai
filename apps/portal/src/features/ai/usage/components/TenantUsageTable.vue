@@ -7,12 +7,11 @@
 import { computed } from "vue";
 import { PortalIdentityCell } from "@/platform/ai/identity";
 import {
-  UsageCostCell,
-  UsageLatencyCell,
   UsageTag,
   UsageTokenCell,
   formatMaskedApiKey,
-  formatUSD2,
+  formatMs,
+  formatUSD,
   formatUsageTimestamp
 } from "@/platform/ai/usage";
 import { DsPagination, DsTable, type DsTableColumn } from "@/shared/ui";
@@ -49,7 +48,7 @@ const columns = computed<DsTableColumn[]>(() => [
   { key: "source", title: "来源", width: 100 },
   { key: "token", title: "Token", width: 150, align: "right" },
   { key: "cost", title: "费用（USD）", width: 130, align: "right" },
-  { key: "latency", title: "延迟", width: 110, align: "right" },
+  { key: "latency", title: "耗时", width: 110, align: "right" },
   { key: "actions", title: "操作", width: 70 }
 ]);
 
@@ -67,6 +66,14 @@ function terminalUserLabel(row: TenantUsageRow) {
 
 function apiKeyFallback(row: TenantUsageRow) {
   return row.api_key_id ? `ID ${row.api_key_id.slice(0, 8)}…` : "-";
+}
+
+function totalDurationMs(row: TenantUsageRow) {
+  return row.request_total_ms ?? row.latency_ms;
+}
+
+function firstTokenLatencyMs(row: TenantUsageRow) {
+  return row.first_token_latency_ms;
 }
 </script>
 
@@ -129,20 +136,25 @@ function apiKeyFallback(row: TenantUsageRow) {
           :completion="row.completion_tokens"
           :cache-read="row.cache_read_tokens"
           :cache-write="row.cache_write_tokens"
-          :reasoning="row.reasoning_tokens"
         />
       </template>
 
       <template #cell-cost="{ row }">
-        <UsageCostCell
-          :amount-u-s-d="row.user_charged_usd"
-          primary-label="用户扣费"
-          :secondary="[{ label: '成本', value: formatUSD2(row.tenant_payable_usd) }]"
-        />
+        <div class="stack-cell stack-cell--right stack-cell--compact">
+          <span class="cost-line cost-line--user">
+            <span class="mono">用户 {{ formatUSD(row.user_charged_usd) }}</span>
+          </span>
+          <span class="cost-line cost-line--tenant">
+            <span class="mono">成本 {{ formatUSD(row.tenant_payable_usd) }}</span>
+          </span>
+        </div>
       </template>
 
       <template #cell-latency="{ row }">
-        <UsageLatencyCell :latency-ms="row.request_total_ms ?? row.latency_ms" :first-token-ms="row.first_token_latency_ms" />
+        <div class="usage-metric usage-metric--timing">
+          <span class="usage-metric__top mono">首 Token {{ formatMs(firstTokenLatencyMs(row)) }}</span>
+          <span class="usage-metric__bottom mono">总耗时 {{ formatMs(totalDurationMs(row)) }}</span>
+        </div>
       </template>
 
       <template #cell-actions="{ row }">
@@ -239,6 +251,64 @@ function apiKeyFallback(row: TenantUsageRow) {
   font-family: var(--ds-font-mono);
   font-size: 11px;
   white-space: nowrap;
+}
+
+.stack-cell {
+  display: inline-flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.stack-cell--right {
+  align-items: flex-end;
+}
+
+.stack-cell--compact {
+  gap: 2px;
+}
+
+.cost-line {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  max-width: 100%;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.cost-line--tenant {
+  color: var(--ds-info);
+}
+
+.cost-line--user {
+  color: var(--ds-accent);
+}
+
+.usage-metric {
+  display: inline-grid;
+  justify-items: end;
+  gap: 3px;
+}
+
+.usage-metric__top,
+.usage-metric__bottom {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.usage-metric__top {
+  color: var(--ds-info);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.usage-metric__bottom {
+  color: var(--ds-ink);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .model-chip {
