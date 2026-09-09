@@ -1,19 +1,20 @@
 <!--
   用户端使用记录明细表:DsTable 高密度摘要 + DsPagination。
   重构:el-table/el-table-column 迁移为 DsTable(columns + #cell-{key} 插槽,frame=false 嵌入面板),
-       请求 ID 列 mono,Token/费用/延迟列右对齐,空态走 DsTable empty;
+       Token/费用/耗时列右对齐,空态走 DsTable empty;
        接口无分页(本地切片),DsPagination 始终渲染展示「共 N 条」。
        组件 props/emits 与"详情打开抽屉"交互不变。
 -->
 <script setup lang="ts">
 import {
-  UsageCostCell,
-  UsageLatencyCell,
   UsageTag,
   UsageTokenCell,
+  formatMs,
+  formatUSD,
   formatUsageTimestamp
 } from "@/platform/ai/usage";
-import { DsPagination, DsTable, type DsTableColumn } from "@/shared/ui";
+import { formatMultiplier } from "@/platform/ai/utils";
+import { DsPagination, DsTable, DsTag, type DsTableColumn } from "@/shared/ui";
 
 import type { CustomerUsageLog } from "../model";
 
@@ -31,16 +32,15 @@ defineEmits<{
 }>();
 
 const columns: DsTableColumn[] = [
-  { key: "created_at", title: "时间", width: 150 },
+  { key: "created_at", title: "时间", width: 140 },
   { key: "target", title: "模型", width: 190 },
-  { key: "group", title: "分组", width: 160 },
+  { key: "group", title: "分组/倍率", width: 180 },
   { key: "status", title: "状态", width: 90 },
   { key: "source", title: "来源", width: 100 },
   { key: "billing", title: "计费来源", width: 100 },
-  { key: "token", title: "Token", width: 170, align: "right" },
-  { key: "credits", title: "费用（USD）", width: 110, align: "right" },
-  { key: "latency", title: "延迟", width: 120, align: "right" },
-  { key: "request_id", title: "请求 ID", width: 190, mono: true },
+  { key: "token", title: "Token", width: 150, align: "right" },
+  { key: "credits", title: "费用（USD）", width: 130, align: "right" },
+  { key: "latency", title: "耗时", width: 120, align: "right" },
   { key: "actions", title: "操作", width: 70 }
 ];
 
@@ -54,6 +54,12 @@ function groupLabel(row: CustomerUsageLog) {
 
 function billingSourceLabel(row: CustomerUsageLog) {
   return row.billing_source === "subscription" ? "订阅内" : "按量";
+}
+
+function groupMultiplier(row: CustomerUsageLog) {
+  return row.effective_user_multiplier_snapshot == null
+    ? ""
+    : `×${formatMultiplier(row.effective_user_multiplier_snapshot)}`;
 }
 </script>
 
@@ -69,19 +75,24 @@ function billingSourceLabel(row: CustomerUsageLog) {
       empty-description="调整筛选条件或记录范围后重试"
     >
       <template #cell-created_at="{ row }">
-        <span class="mono text-xs">{{ formatUsageTimestamp(row.created_at) }}</span>
+        <span class="time-cell">{{ formatUsageTimestamp(row.created_at) }}</span>
       </template>
 
       <template #cell-target="{ row }">
         <span class="target-cell">
-          <span class="target-chip">{{ targetLabel(row) }}</span>
+          <span class="model-chip">{{ targetLabel(row) }}</span>
           <UsageTag v-if="row.stream" kind="stream" :value="row.stream" />
           <UsageTag v-if="row.reasoning_effort" kind="effort" :value="row.reasoning_effort" />
         </span>
       </template>
 
       <template #cell-group="{ row }">
-        <span class="ellipsis">{{ groupLabel(row) }}</span>
+        <div class="group-cell">
+          <DsTag class="group-tag" :tone="groupLabel(row) === '-' ? 'neutral' : 'accent'" :title="groupLabel(row)">
+            <span class="group-name">{{ groupLabel(row) }}</span>
+          </DsTag>
+          <span v-if="groupMultiplier(row)" class="group-multiplier mono">{{ groupMultiplier(row) }}</span>
+        </div>
       </template>
 
       <template #cell-status="{ row }">
@@ -93,23 +104,27 @@ function billingSourceLabel(row: CustomerUsageLog) {
       </template>
 
       <template #cell-billing="{ row }">
-        <span class="billing-source" :class="{ 'is-subscription': row.billing_source === 'subscription' }">{{ billingSourceLabel(row) }}</span>
+        <DsTag :tone="row.billing_source === 'subscription' ? 'accent' : 'neutral'">{{ billingSourceLabel(row) }}</DsTag>
       </template>
 
       <template #cell-token="{ row }">
-        <UsageTokenCell :prompt="row.prompt_tokens" :completion="row.completion_tokens" :cache-read="row.cache_read_tokens" :cache-write="row.cache_write_tokens" :reasoning="row.reasoning_tokens" />
+        <UsageTokenCell
+          :prompt="row.prompt_tokens"
+          :completion="row.completion_tokens"
+          :cache-read="row.cache_read_tokens"
+          :cache-write="row.cache_write_tokens"
+        />
       </template>
 
       <template #cell-credits="{ row }">
-        <UsageCostCell :amount-u-s-d="row.user_charged_usd" />
+        <span class="cost-value mono">{{ formatUSD(row.user_charged_usd) }}</span>
       </template>
 
       <template #cell-latency="{ row }">
-        <UsageLatencyCell :latency-ms="row.latency_ms" :first-token-ms="row.first_token_latency_ms" />
-      </template>
-
-      <template #cell-request_id="{ row }">
-        <span class="ellipsis">{{ row.request_id }}</span>
+        <div class="usage-metric usage-metric--timing">
+          <span class="usage-metric__top mono">首 Token {{ formatMs(row.first_token_latency_ms) }}</span>
+          <span class="usage-metric__bottom mono">请求耗时 {{ formatMs(row.latency_ms) }}</span>
+        </div>
       </template>
 
       <template #cell-actions="{ row }">
@@ -138,6 +153,7 @@ function billingSourceLabel(row: CustomerUsageLog) {
   min-width: 0;
   flex: 1;
   flex-direction: column;
+  gap: 16px;
 }
 
 .customer-usage-table :deep(.ds-table) {
@@ -149,15 +165,21 @@ function billingSourceLabel(row: CustomerUsageLog) {
 .customer-usage-table__pager {
   display: flex;
   justify-content: flex-end;
-  padding: 12px 24px;
-  border-top: 1px solid var(--ds-line);
+  min-width: 0;
+  flex-shrink: 0;
 }
 
 .target-cell { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.target-chip { color: var(--ds-ink); font-weight: 650; }
-.billing-source { display: inline-flex; padding: 1px 8px; border: 1px solid var(--ds-line); border-radius: var(--ds-radius-pill); color: var(--ds-muted); font-size: 12px; font-weight: 600; }
-.billing-source.is-subscription { border-color: color-mix(in srgb, var(--ds-accent) 45%, transparent); background: color-mix(in srgb, var(--ds-accent) 12%, transparent); color: var(--ds-accent-hover); }
-.ellipsis { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.model-chip { display: inline-block; border-radius: var(--ds-radius-control); background: var(--ds-panel-muted); padding: 2px 8px; color: var(--ds-ink-soft); font-family: var(--ds-font-mono); font-size: 12px; font-weight: 600; }
+.time-cell { color: var(--ds-ink); font-family: var(--ds-font-mono); font-size: 12px; white-space: nowrap; }
+.group-cell { display: inline-flex; min-width: 0; align-items: center; gap: 6px; }
+.group-tag { min-width: 0; max-width: 138px; }
+.group-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.group-multiplier { color: var(--ds-muted); font-size: 11px; font-weight: 700; white-space: nowrap; }
+.cost-value { color: var(--ds-accent); font-size: 12px; font-weight: 700; white-space: nowrap; }
+.usage-metric { display: inline-grid; justify-items: end; gap: 3px; }
+.usage-metric__top, .usage-metric__bottom { display: inline-flex; align-items: center; white-space: nowrap; }
+.usage-metric__top { color: var(--ds-info); font-size: 11px; font-weight: 700; }
+.usage-metric__bottom { color: var(--ds-ink); font-size: 12px; font-weight: 700; }
 .mono { font-family: var(--ds-font-mono); }
-.text-xs { font-size: 12px; }
 </style>

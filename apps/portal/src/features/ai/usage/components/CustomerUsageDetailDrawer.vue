@@ -73,7 +73,6 @@ function billingStatusLabel(status?: string) {
           <dt>输出 Token</dt><dd class="mono">{{ formatTokenCount(row.completion_tokens) }}</dd>
           <dt>缓存读</dt><dd class="mono">{{ formatTokenCount(row.cache_read_tokens) }}</dd>
           <dt>缓存写</dt><dd class="mono">{{ formatTokenCount(row.cache_write_tokens) }}</dd>
-          <dt>推理 Token</dt><dd class="mono">{{ formatTokenCount(row.reasoning_tokens) }}</dd>
           <dt>总 Token</dt><dd class="mono">{{ formatTokenCount(row.total_tokens) }}</dd>
         </dl>
       </section>
