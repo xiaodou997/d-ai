@@ -44,6 +44,7 @@ func (r *AccountRepo) CreateAccount(ctx context.Context, e upstreamcontrol.Accou
 	qtx := queriesWithTx(tx)
 	row, err := qtx.CreateUpstreamAccount(ctx, dbgen.CreateUpstreamAccountParams{
 		Name:              e.Name,
+		Description:       e.Description,
 		TenantDisplayName: e.TenantDisplayName,
 		TenantAccessMode:  e.TenantAccessMode,
 		ApiKeyCiphertext:  e.Ciphertext,
@@ -85,6 +86,7 @@ func (r *AccountRepo) ListAccounts(ctx context.Context) ([]domain.UpstreamAccoun
 		account := domain.UpstreamAccount{
 			ID:                uuidToString(row.ID),
 			Name:              row.Name,
+			Description:       row.Description,
 			TenantDisplayName: row.TenantDisplayName,
 			TenantAccessMode:  row.TenantAccessMode,
 			ConcurrencyLimit:  int32PtrToIntPtr(akInt4StrPtr(row.ConcurrencyLimit)),
@@ -167,6 +169,7 @@ func (r *AccountRepo) UpdateAccount(ctx context.Context, e upstreamcontrol.Accou
 	row, err := qtx.UpdateUpstreamAccount(ctx, dbgen.UpdateUpstreamAccountParams{
 		ID:                aid,
 		Name:              e.Name,
+		Description:       e.Description,
 		TenantDisplayName: e.TenantDisplayName,
 		TenantAccessMode:  e.TenantAccessMode,
 		ApiKeyCiphertext:  e.Ciphertext,

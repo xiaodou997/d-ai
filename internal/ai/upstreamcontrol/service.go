@@ -26,6 +26,7 @@ func New(repo Repository, encrypt Encryptor) *Service {
 
 type CreateAccountInput struct {
 	Name              string
+	Description       string
 	TenantDisplayName string
 	TenantAccessMode  string
 	APIKey            string
@@ -76,6 +77,7 @@ func (s *Service) CreateAccount(ctx context.Context, in CreateAccountInput) (dom
 	}
 	return s.repo.CreateAccount(ctx, AccountCreate{
 		Name:              strings.TrimSpace(in.Name),
+		Description:       strings.TrimSpace(in.Description),
 		TenantDisplayName: upstreamaccess.NormalizeDisplayName(in.Name, in.TenantDisplayName),
 		TenantAccessMode:  accessMode,
 		Ciphertext:        ciphertext,
@@ -98,6 +100,7 @@ func (s *Service) GetAccountSecret(ctx context.Context, id string) (AccountSecre
 type UpdateAccountInput struct {
 	ID                string
 	Name              string
+	Description       string
 	TenantDisplayName string
 	TenantAccessMode  string
 	APIKey            string
@@ -158,6 +161,7 @@ func (s *Service) UpdateAccount(ctx context.Context, in UpdateAccountInput) (dom
 	return s.repo.UpdateAccount(ctx, AccountUpdate{
 		ID:                in.ID,
 		Name:              strings.TrimSpace(in.Name),
+		Description:       strings.TrimSpace(in.Description),
 		TenantDisplayName: displayName,
 		TenantAccessMode:  accessMode,
 		Ciphertext:        ciphertext,

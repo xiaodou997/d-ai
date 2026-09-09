@@ -89,6 +89,7 @@ type EndpointDraft = Omit<UpstreamAccountEndpointWriteRequest, 'extra_headers'> 
 
 interface AccountForm {
   name: string
+  description: string
   tenant_display_name: string
   tenant_access_mode: 'public' | 'restricted'
   api_key: string
@@ -111,7 +112,7 @@ function blankEndpoint(): EndpointDraft {
 }
 
 const accountForm = reactive<AccountForm>({
-  name: '', tenant_display_name: '', tenant_access_mode: 'public', api_key: '',
+  name: '', description: '', tenant_display_name: '', tenant_access_mode: 'public', api_key: '',
   endpoints: [], concurrency_limit: null, price_book_id: '', tenant_multiplier: 1
 })
 
@@ -177,7 +178,7 @@ function draftFormatDisabled(format: string, index: string | number) {
 
 function blankAccount(): AccountForm {
   return {
-    name: '', tenant_display_name: '', tenant_access_mode: 'public', api_key: '',
+    name: '', description: '', tenant_display_name: '', tenant_access_mode: 'public', api_key: '',
     endpoints: [blankEndpoint()], concurrency_limit: null, price_book_id: '', tenant_multiplier: 1
   }
 }
@@ -195,6 +196,7 @@ function openAccountEdit(row: AccountDTO) {
   Object.assign(accountForm, {
     ...blankAccount(),
     name: row.name,
+    description: row.description || '',
     tenant_display_name: row.tenant_display_name || row.name,
     tenant_access_mode: row.tenant_access_mode || 'public',
     api_key: '',
@@ -209,6 +211,7 @@ function openAccountEdit(row: AccountDTO) {
 function buildAccountPayload(): AccountWriteRequest {
   const p: AccountWriteRequest = {
     name: accountForm.name.trim(),
+    description: accountForm.description.trim() || undefined,
     tenant_display_name: accountForm.tenant_display_name.trim() || accountForm.name.trim(),
     tenant_access_mode: accountForm.tenant_access_mode,
     concurrency_limit: accountForm.concurrency_limit ?? null,
@@ -805,6 +808,7 @@ onBeforeUnmount(() => {
                 />
               </div>
               <div class="account-item-subtitle truncate">{{ accountSubtitle(a) }}</div>
+              <div v-if="a.description" class="account-item-description truncate" :title="a.description">{{ a.description }}</div>
               <div class="account-item-host truncate">{{ accountEndpointHosts(a) }}</div>
             </div>
             <div ref="listSentinelEl" class="account-list-sentinel" aria-hidden="true">
@@ -1040,6 +1044,9 @@ onBeforeUnmount(() => {
       <el-form label-width="130px">
         <el-form-item label="名称" required>
           <el-input v-model="accountForm.name" placeholder="如 OpenAI 官方 / 某中转" />
+        </el-form-item>
+        <el-form-item label="描述">
+          <el-input v-model="accountForm.description" type="textarea" :rows="2" maxlength="200" show-word-limit placeholder="给租户展示的一句话说明（可选）" />
         </el-form-item>
         <el-form-item label="展示名称" required>
           <el-input v-model="accountForm.tenant_display_name" placeholder="租户目录中显示的名称" />

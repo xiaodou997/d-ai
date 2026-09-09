@@ -225,6 +225,8 @@ export interface AccountDTO {
   id: string;
   name: string;
   tenant_display_name: string;
+  /** 面向租户的账号说明，可选 */
+  description?: string;
   tenant_access_mode: "public" | "restricted";
   endpoints: UpstreamAccountEndpointDTO[];
   concurrency_limit?: number;
@@ -244,6 +246,7 @@ export interface AccountsOutputBody {
 
 export interface AccountWriteRequest {
   name: string;
+  description?: string;
   tenant_display_name?: string;
   tenant_access_mode?: "public" | "restricted";
   api_key?: string;

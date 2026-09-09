@@ -26,6 +26,7 @@ type Repository interface {
 
 type AccountCreate struct {
 	Name              string
+	Description       string
 	TenantDisplayName string
 	TenantAccessMode  string
 	Ciphertext        string
@@ -39,6 +40,7 @@ type AccountCreate struct {
 type AccountUpdate struct {
 	ID                string
 	Name              string
+	Description       string
 	TenantDisplayName string
 	TenantAccessMode  string
 	Ciphertext        string

@@ -997,6 +997,7 @@ CREATE INDEX idx_ledger_credit_leases_account
   CREATE TABLE IF NOT EXISTS ai_upstream_accounts (
     id                 UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
     name               TEXT        NOT NULL UNIQUE,
+    description        TEXT        NOT NULL DEFAULT '',
     tenant_display_name TEXT       NOT NULL,
     tenant_access_mode  TEXT       NOT NULL DEFAULT 'public',
     api_key_ciphertext TEXT        NOT NULL,

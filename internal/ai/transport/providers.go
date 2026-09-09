@@ -20,6 +20,7 @@ type accountDTO struct {
 	ID                string               `json:"id" doc:"上游账号 ID"`
 	Name              string               `json:"name" doc:"账号名称"`
 	TenantDisplayName string               `json:"tenant_display_name" doc:"租户侧展示名称"`
+	Description       string               `json:"description,omitempty"`
 	TenantAccessMode  string               `json:"tenant_access_mode" enum:"public,restricted" doc:"租户访问范围"`
 	Endpoints         []accountEndpointDTO `json:"endpoints" doc:"账号支持的请求端点；同一 API 格式至多一个"`
 	ConcurrencyLimit  *int32               `json:"concurrency_limit,omitempty" doc:"最大并发请求数；为空表示不限制"`
@@ -72,6 +73,7 @@ type accountOutput struct {
 }
 
 type createAccountRequest struct {
+	Description       string                        `json:"description,omitempty"`
 	Name              string                        `json:"name" doc:"账号名称"`
 	TenantDisplayName string                        `json:"tenant_display_name,omitempty" doc:"租户侧展示名称；为空时使用账号名称"`
 	TenantAccessMode  string                        `json:"tenant_access_mode,omitempty" enum:"public,restricted" doc:"租户访问范围；为空保留原值"`
@@ -83,6 +85,7 @@ type createAccountRequest struct {
 }
 
 type updateAccountRequest struct {
+	Description       string   `json:"description,omitempty"`
 	Name              string   `json:"name" doc:"账号名称"`
 	TenantDisplayName string   `json:"tenant_display_name,omitempty" doc:"租户侧展示名称；为空时使用账号名称"`
 	TenantAccessMode  string   `json:"tenant_access_mode,omitempty" enum:"public,restricted" doc:"租户访问范围；为空默认 public"`
@@ -179,6 +182,7 @@ func registerUpstreamAccounts(api huma.API, d UpstreamAccountManagementHTTPDeps)
 		a, err := d.AccountManager.CreateAccount(ctx, upstreamcontrol.CreateAccountInput{
 			Name:              in.Body.Name,
 			TenantDisplayName: in.Body.TenantDisplayName,
+			Description:       in.Body.Description,
 			TenantAccessMode:  in.Body.TenantAccessMode,
 			APIKey:            in.Body.APIKey,
 			Endpoints:         endpointWritesFromRequests(in.Body.Endpoints),
@@ -207,6 +211,7 @@ func registerUpstreamAccounts(api huma.API, d UpstreamAccountManagementHTTPDeps)
 			ID:                in.AccountID,
 			Name:              in.Body.Name,
 			TenantDisplayName: in.Body.TenantDisplayName,
+			Description:       in.Body.Description,
 			TenantAccessMode:  in.Body.TenantAccessMode,
 			APIKey:            in.Body.APIKey,
 			ConcurrencyLimit:  int32PtrToIntPtr(in.Body.ConcurrencyLimit),
@@ -276,6 +281,7 @@ func accountToDTO(a domain.UpstreamAccount) accountDTO {
 		ID:                a.ID,
 		Name:              a.Name,
 		TenantDisplayName: a.TenantDisplayName,
+		Description:       a.Description,
 		TenantAccessMode:  a.TenantAccessMode,
 		Endpoints:         endpointDTOs(a.Endpoints),
 		ConcurrencyLimit:  intPtrToInt32Ptr(a.ConcurrencyLimit),

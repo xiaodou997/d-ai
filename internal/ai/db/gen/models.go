@@ -422,7 +422,9 @@ type AiRequestPayload struct {
 	PublicResponseModel         pgtype.Text        `json:"public_response_model"`
 	RequestMessages             []byte             `json:"request_messages"`
 	RequestParams               []byte             `json:"request_params"`
+	RequestHeaders              []byte             `json:"request_headers"`
 	ResponseMessage             []byte             `json:"response_message"`
+	ResponseHeaders             []byte             `json:"response_headers"`
 	MediaRefs                   []byte             `json:"media_refs"`
 	RequestStatus               string             `json:"request_status"`
 	HttpStatus                  pgtype.Int4        `json:"http_status"`
@@ -587,6 +589,7 @@ type AiSubSubscription struct {
 type AiUpstreamAccount struct {
 	ID                pgtype.UUID        `json:"id"`
 	Name              string             `json:"name"`
+	Description       string             `json:"description"`
 	TenantDisplayName string             `json:"tenant_display_name"`
 	TenantAccessMode  string             `json:"tenant_access_mode"`
 	ApiKeyCiphertext  string             `json:"api_key_ciphertext"`
@@ -1259,6 +1262,7 @@ type PayWithdrawal struct {
 	AmountMicroUsd       int64              `json:"amount_micro_usd"`
 	FeeAmountMicroUsd    int64              `json:"fee_amount_micro_usd"`
 	PayoutAmountMicroUsd int64              `json:"payout_amount_micro_usd"`
+	FeeDeductionMode     string             `json:"fee_deduction_mode"`
 	AccountName          string             `json:"account_name"`
 	BankName             string             `json:"bank_name"`
 	AccountNo            string             `json:"account_no"`

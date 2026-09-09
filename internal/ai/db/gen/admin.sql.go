@@ -497,6 +497,7 @@ const createUpstreamAccount = `-- name: CreateUpstreamAccount :one
 
 INSERT INTO ai_upstream_accounts (
   name,
+  description,
   tenant_display_name,
   tenant_access_mode,
   api_key_ciphertext,
@@ -505,11 +506,12 @@ INSERT INTO ai_upstream_accounts (
   tenant_multiplier,
   status
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8
+  $1, $2, $3, $4, $5, $6, $7, $8, $9
 )
 RETURNING
   id,
   name,
+  description,
   tenant_display_name,
   tenant_access_mode,
   concurrency_limit,
@@ -524,6 +526,7 @@ RETURNING
 
 type CreateUpstreamAccountParams struct {
 	Name              string         `json:"name"`
+	Description       string         `json:"description"`
 	TenantDisplayName string         `json:"tenant_display_name"`
 	TenantAccessMode  string         `json:"tenant_access_mode"`
 	ApiKeyCiphertext  string         `json:"api_key_ciphertext"`
@@ -536,6 +539,7 @@ type CreateUpstreamAccountParams struct {
 type CreateUpstreamAccountRow struct {
 	ID                pgtype.UUID        `json:"id"`
 	Name              string             `json:"name"`
+	Description       string             `json:"description"`
 	TenantDisplayName string             `json:"tenant_display_name"`
 	TenantAccessMode  string             `json:"tenant_access_mode"`
 	ConcurrencyLimit  pgtype.Int4        `json:"concurrency_limit"`
@@ -554,6 +558,7 @@ type CreateUpstreamAccountRow struct {
 func (q *Queries) CreateUpstreamAccount(ctx context.Context, arg CreateUpstreamAccountParams) (CreateUpstreamAccountRow, error) {
 	row := q.db.QueryRow(ctx, createUpstreamAccount,
 		arg.Name,
+		arg.Description,
 		arg.TenantDisplayName,
 		arg.TenantAccessMode,
 		arg.ApiKeyCiphertext,
@@ -566,6 +571,7 @@ func (q *Queries) CreateUpstreamAccount(ctx context.Context, arg CreateUpstreamA
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
+		&i.Description,
 		&i.TenantDisplayName,
 		&i.TenantAccessMode,
 		&i.ConcurrencyLimit,
@@ -940,6 +946,7 @@ const getUpstreamAccount = `-- name: GetUpstreamAccount :one
 SELECT
   id,
   name,
+  description,
   tenant_display_name,
   tenant_access_mode,
   api_key_ciphertext,
@@ -961,6 +968,7 @@ func (q *Queries) GetUpstreamAccount(ctx context.Context, id pgtype.UUID) (AiUps
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
+		&i.Description,
 		&i.TenantDisplayName,
 		&i.TenantAccessMode,
 		&i.ApiKeyCiphertext,
@@ -2159,6 +2167,7 @@ const listUpstreamAccounts = `-- name: ListUpstreamAccounts :many
 SELECT
   id,
   name,
+  description,
   tenant_display_name,
   tenant_access_mode,
   concurrency_limit,
@@ -2176,6 +2185,7 @@ ORDER BY name ASC
 type ListUpstreamAccountsRow struct {
 	ID                pgtype.UUID        `json:"id"`
 	Name              string             `json:"name"`
+	Description       string             `json:"description"`
 	TenantDisplayName string             `json:"tenant_display_name"`
 	TenantAccessMode  string             `json:"tenant_access_mode"`
 	ConcurrencyLimit  pgtype.Int4        `json:"concurrency_limit"`
@@ -2200,6 +2210,7 @@ func (q *Queries) ListUpstreamAccounts(ctx context.Context) ([]ListUpstreamAccou
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
+			&i.Description,
 			&i.TenantDisplayName,
 			&i.TenantAccessMode,
 			&i.ConcurrencyLimit,
@@ -3185,6 +3196,7 @@ WHERE id = $1
 RETURNING
   id,
   name,
+  description,
   tenant_display_name,
   tenant_access_mode,
   concurrency_limit,
@@ -3205,6 +3217,7 @@ type MarkUpstreamAccountInvalidParams struct {
 type MarkUpstreamAccountInvalidRow struct {
 	ID                pgtype.UUID        `json:"id"`
 	Name              string             `json:"name"`
+	Description       string             `json:"description"`
 	TenantDisplayName string             `json:"tenant_display_name"`
 	TenantAccessMode  string             `json:"tenant_access_mode"`
 	ConcurrencyLimit  pgtype.Int4        `json:"concurrency_limit"`
@@ -3223,6 +3236,7 @@ func (q *Queries) MarkUpstreamAccountInvalid(ctx context.Context, arg MarkUpstre
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
+		&i.Description,
 		&i.TenantDisplayName,
 		&i.TenantAccessMode,
 		&i.ConcurrencyLimit,
@@ -3589,20 +3603,22 @@ func (q *Queries) UpdateLimitPolicyStatus(ctx context.Context, arg UpdateLimitPo
 const updateUpstreamAccount = `-- name: UpdateUpstreamAccount :one
 UPDATE ai_upstream_accounts
 SET name = $2,
-    tenant_display_name = $3,
-    tenant_access_mode = $4,
-    api_key_ciphertext = $5,
-    concurrency_limit = $6,
-    price_book_id = $7,
-    tenant_multiplier = $8,
-    status = $9,
-    invalid_reason = CASE WHEN $9 = 'invalid' THEN invalid_reason ELSE '' END,
-    invalid_at = CASE WHEN $9 = 'invalid' THEN invalid_at ELSE NULL END,
+    description = $3,
+    tenant_display_name = $4,
+    tenant_access_mode = $5,
+    api_key_ciphertext = $6,
+    concurrency_limit = $7,
+    price_book_id = $8,
+    tenant_multiplier = $9,
+    status = $10,
+    invalid_reason = CASE WHEN $10 = 'invalid' THEN invalid_reason ELSE '' END,
+    invalid_at = CASE WHEN $10 = 'invalid' THEN invalid_at ELSE NULL END,
     updated_at = now()
 WHERE id = $1
 RETURNING
   id,
   name,
+  description,
   tenant_display_name,
   tenant_access_mode,
   concurrency_limit,
@@ -3618,6 +3634,7 @@ RETURNING
 type UpdateUpstreamAccountParams struct {
 	ID                pgtype.UUID    `json:"id"`
 	Name              string         `json:"name"`
+	Description       string         `json:"description"`
 	TenantDisplayName string         `json:"tenant_display_name"`
 	TenantAccessMode  string         `json:"tenant_access_mode"`
 	ApiKeyCiphertext  string         `json:"api_key_ciphertext"`
@@ -3630,6 +3647,7 @@ type UpdateUpstreamAccountParams struct {
 type UpdateUpstreamAccountRow struct {
 	ID                pgtype.UUID        `json:"id"`
 	Name              string             `json:"name"`
+	Description       string             `json:"description"`
 	TenantDisplayName string             `json:"tenant_display_name"`
 	TenantAccessMode  string             `json:"tenant_access_mode"`
 	ConcurrencyLimit  pgtype.Int4        `json:"concurrency_limit"`
@@ -3646,6 +3664,7 @@ func (q *Queries) UpdateUpstreamAccount(ctx context.Context, arg UpdateUpstreamA
 	row := q.db.QueryRow(ctx, updateUpstreamAccount,
 		arg.ID,
 		arg.Name,
+		arg.Description,
 		arg.TenantDisplayName,
 		arg.TenantAccessMode,
 		arg.ApiKeyCiphertext,
@@ -3658,6 +3677,7 @@ func (q *Queries) UpdateUpstreamAccount(ctx context.Context, arg UpdateUpstreamA
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
+		&i.Description,
 		&i.TenantDisplayName,
 		&i.TenantAccessMode,
 		&i.ConcurrencyLimit,
@@ -3791,6 +3811,7 @@ WHERE id = $1
 RETURNING
   id,
   name,
+  description,
   tenant_display_name,
   tenant_access_mode,
   concurrency_limit,
@@ -3811,6 +3832,7 @@ type UpdateUpstreamAccountStatusParams struct {
 type UpdateUpstreamAccountStatusRow struct {
 	ID                pgtype.UUID        `json:"id"`
 	Name              string             `json:"name"`
+	Description       string             `json:"description"`
 	TenantDisplayName string             `json:"tenant_display_name"`
 	TenantAccessMode  string             `json:"tenant_access_mode"`
 	ConcurrencyLimit  pgtype.Int4        `json:"concurrency_limit"`
@@ -3829,6 +3851,7 @@ func (q *Queries) UpdateUpstreamAccountStatus(ctx context.Context, arg UpdateUps
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
+		&i.Description,
 		&i.TenantDisplayName,
 		&i.TenantAccessMode,
 		&i.ConcurrencyLimit,

@@ -5,6 +5,7 @@
 -- name: CreateUpstreamAccount :one
 INSERT INTO ai_upstream_accounts (
   name,
+  description,
   tenant_display_name,
   tenant_access_mode,
   api_key_ciphertext,
@@ -13,11 +14,12 @@ INSERT INTO ai_upstream_accounts (
   tenant_multiplier,
   status
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8
+  $1, $2, $3, $4, $5, $6, $7, $8, $9
 )
 RETURNING
   id,
   name,
+  description,
   tenant_display_name,
   tenant_access_mode,
   concurrency_limit,
@@ -33,6 +35,7 @@ RETURNING
 SELECT
   id,
   name,
+  description,
   tenant_display_name,
   tenant_access_mode,
   concurrency_limit,
@@ -50,6 +53,7 @@ ORDER BY name ASC;
 SELECT
   id,
   name,
+  description,
   tenant_display_name,
   tenant_access_mode,
   api_key_ciphertext,
@@ -67,20 +71,22 @@ WHERE id = $1;
 -- name: UpdateUpstreamAccount :one
 UPDATE ai_upstream_accounts
 SET name = $2,
-    tenant_display_name = $3,
-    tenant_access_mode = $4,
-    api_key_ciphertext = $5,
-    concurrency_limit = $6,
-    price_book_id = $7,
-    tenant_multiplier = $8,
-    status = $9,
-    invalid_reason = CASE WHEN $9 = 'invalid' THEN invalid_reason ELSE '' END,
-    invalid_at = CASE WHEN $9 = 'invalid' THEN invalid_at ELSE NULL END,
+    description = $3,
+    tenant_display_name = $4,
+    tenant_access_mode = $5,
+    api_key_ciphertext = $6,
+    concurrency_limit = $7,
+    price_book_id = $8,
+    tenant_multiplier = $9,
+    status = $10,
+    invalid_reason = CASE WHEN $10 = 'invalid' THEN invalid_reason ELSE '' END,
+    invalid_at = CASE WHEN $10 = 'invalid' THEN invalid_at ELSE NULL END,
     updated_at = now()
 WHERE id = $1
 RETURNING
   id,
   name,
+  description,
   tenant_display_name,
   tenant_access_mode,
   concurrency_limit,
@@ -102,6 +108,7 @@ WHERE id = $1
 RETURNING
   id,
   name,
+  description,
   tenant_display_name,
   tenant_access_mode,
   concurrency_limit,
@@ -123,6 +130,7 @@ WHERE id = $1
 RETURNING
   id,
   name,
+  description,
   tenant_display_name,
   tenant_access_mode,
   concurrency_limit,

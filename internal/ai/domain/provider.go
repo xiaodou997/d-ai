@@ -16,6 +16,7 @@ const (
 type UpstreamAccount struct {
 	ID                string
 	Name              string
+	Description       string
 	TenantDisplayName string
 	TenantAccessMode  string
 	Endpoints         []UpstreamAccountEndpoint
