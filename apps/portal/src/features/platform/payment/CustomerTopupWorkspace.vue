@@ -13,7 +13,7 @@ const columns: DsTableColumn[] = [
   { key: "type", title: "类型", width: 140 }, { key: "paid", title: "支付金额", width: 130, align: "right" },
   { key: "gross", title: "充值金额", width: 130, align: "right" }, { key: "fee", title: "手续费", width: 120, align: "right" },
   { key: "gift", title: "赠送", width: 120, align: "right" }, { key: "credited", title: "到账", width: 130, align: "right" },
-  { key: "status", title: "状态", width: 110 }, { key: "createdAt", title: "创建时间", width: 180 }
+  { key: "status", title: "状态", width: 110 }, { key: "action", title: "操作", width: 110 }, { key: "createdAt", title: "创建时间", width: 180 }
 ];
 const config = ref<TopupConfig | null>(null);
 const configLoading = ref(true);
@@ -42,6 +42,8 @@ function statusTone(status: string): "positive" | "warning" | "danger" | "neutra
   if (status === "paid") return "positive"; if (status === "created" || status === "paying") return "warning"; if (status === "expired") return "danger"; return "neutral";
 }
 function statusText(status: string) { return ({ paid: "已到账", created: "待支付", paying: "确认中", closed: "已关闭", expired: "已过期" } as Record<string, string>)[status] || status; }
+function canResume(row: TopupOrderItem) { return (row.status === "created" || row.status === "paying") && row.expiresAt > Date.now() && Boolean(row.codeUrl); }
+function resume(row: TopupOrderItem) { if (!canResume(row)) return; activeOrder.value = { ...row, codeUrl: row.codeUrl!, expiresAt: row.expiresAt }; dialogVisible.value = true; }
 function choosePackage(pkg: TopupPackage) { selectedPackage.value = pkg; amountUsd.value = null; }
 function chooseCustom() { selectedPackage.value = null; }
 async function fetchConfig() {
@@ -105,6 +107,7 @@ onMounted(() => { void fetchConfig(); void fetchList(); });
               <template #cell-type="{ row }">{{ row.topupMode === "package" ? row.packageName || "额度包" : "自定义充值" }}</template>
               <template #cell-paid="{ row }">${{ (row.paymentAmountMinor / 100).toFixed(2) }}</template><template #cell-gross="{ row }">{{ formatMicroUSD(row.grossAmountMicroUsd) }}</template><template #cell-fee="{ row }">{{ formatMicroUSD(row.feeAmountMicroUsd) }}</template><template #cell-gift="{ row }">{{ formatMicroUSD(row.giftAmountMicroUsd) }}</template><template #cell-credited="{ row }"><span class="amount-positive">+{{ formatMicroUSD(row.creditedAmountMicroUsd) }}</span></template>
               <template #cell-status="{ row }"><DsTag :tone="statusTone(row.status)">{{ statusText(row.status) }}</DsTag></template><template #cell-createdAt="{ row }">{{ formatTime(row.createdAt) }}</template>
+              <template #cell-action="{ row }"><el-button v-if="canResume(row)" link type="primary" size="small" @click="resume(row)">继续支付</el-button></template>
             </DsTable>
           </section>
         </template>

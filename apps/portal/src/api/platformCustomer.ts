@@ -126,7 +126,9 @@ function toTopupOrderItem(value: TopupOrderItemTransport): TopupOrderItem {
     transactionId: value.transactionId,
     paidAt: value.paidAt,
     scene: toTopupScene(value.scene),
-    createdAt: value.createdAt
+    createdAt: value.createdAt,
+    codeUrl: value.codeUrl,
+    expiresAt: value.expiresAt
   };
 }
 

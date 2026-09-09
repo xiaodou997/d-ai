@@ -10042,10 +10042,13 @@ export interface components {
             validityDays?: number;
         };
         TopupOrderItem: {
+            codeUrl?: string;
             /** Format: int64 */
             balanceExpiresAt?: number;
             /** Format: int64 */
             createdAt: number;
+            /** Format: int64 */
+            expiresAt: number;
             /** Format: int64 */
             creditedAmountMicroUsd: number;
             /** Format: int64 */

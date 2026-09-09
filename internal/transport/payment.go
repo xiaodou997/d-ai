@@ -131,6 +131,8 @@ type topupOrderItem struct {
 	CreatedAt              int64  `json:"createdAt"`
 	PaidAt                 *int64 `json:"paidAt,omitempty"`
 	BalanceExpiresAt       *int64 `json:"balanceExpiresAt,omitempty"`
+	CodeURL                string `json:"codeUrl,omitempty"`
+	ExpiresAt              int64  `json:"expiresAt"`
 }
 
 type listTopupOrdersOutput struct {
@@ -138,6 +140,13 @@ type listTopupOrdersOutput struct {
 }
 
 func orderToItem(o *payment.Order) topupOrderItem {
+	codeURL := ""
+	// 仅向订单所属用户返回仍在支付窗口内的二维码，避免复用已终态/过期二维码。
+	if o.Status == payment.OrderStatusCreated || o.Status == payment.OrderStatusPaying {
+		if o.CodeURL != "" && o.ExpiresAt.After(time.Now()) {
+			codeURL = o.CodeURL
+		}
+	}
 	return topupOrderItem{
 		OrderID: o.OrderID, Scene: o.Scene, TenantName: o.TenantName, Username: o.Username, Status: o.Status,
 		PaymentCurrency: o.PaymentCurrency, PaymentAmountMinor: o.PaymentAmountMinor,
@@ -146,6 +155,7 @@ func orderToItem(o *payment.Order) topupOrderItem {
 		TopupMode: o.TopupMode, PackageName: o.PackageName, TransactionID: o.TransactionID,
 		CreatedAt: millisFromTime(o.CreatedAt), PaidAt: millisFromTimePtr(o.PaidAt),
 		BalanceExpiresAt: millisFromTimePtr(o.BalanceExpiresAt),
+		CodeURL:          codeURL, ExpiresAt: millisFromTime(o.ExpiresAt),
 	}
 }
 

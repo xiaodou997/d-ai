@@ -9957,10 +9957,15 @@ components:
     TopupOrderItem:
       additionalProperties: false
       properties:
+        codeUrl:
+          type: string
         balanceExpiresAt:
           format: int64
           type: integer
         createdAt:
+          format: int64
+          type: integer
+        expiresAt:
           format: int64
           type: integer
         creditedAmountMicroUsd:
@@ -10011,6 +10016,7 @@ components:
         - creditedAmountMicroUsd
         - topupMode
         - createdAt
+        - expiresAt
       type: object
     TopupOrderOutputBody:
       additionalProperties: false

@@ -61,4 +61,6 @@ export interface TopupOrderItem extends Omit<TopupOrderStatus, "orderId"> {
   orderId: string;
   scene?: "user_topup" | "tenant_topup";
   createdAt: number;
+  codeUrl?: string;
+  expiresAt: number;
 }
