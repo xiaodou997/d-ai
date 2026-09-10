@@ -89,12 +89,18 @@ const (
 	TargetKindOAuthPool      TargetKind = "oauth_pool"
 )
 
-// GroupTarget connects a group to one upstream resource.
+// DefaultGroupTargetPriority 是分组目标人工优先级的默认值：100 = 全部平级，
+// 平级时回落到协议转换偏好 + 分组路由策略择优。
+const DefaultGroupTargetPriority = 100
+
+// GroupTarget connects a group to one upstream resource. Priority 是同组内的
+// 人工路由优先级，越小越优先；默认 100 = 平级。
 type GroupTarget struct {
 	ID         string
 	GroupID    string
 	TargetKind TargetKind
 	TargetID   string
+	Priority   int32
 	Status     Status
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
@@ -106,6 +112,9 @@ type GroupTargetDetail struct {
 	APIFormats        []string
 	PoolName          string
 	FixedProviderType string
+	// EndpointIDs 是 direct_upstream 目标当前 active 请求端点 ID 集合，用于聚合
+	// 运行时熔断器状态做健康展示；仅列表投影填充。
+	EndpointIDs []string
 	// Available/UnavailableReason 表达该绑定当前对本租户是否仍可服务，用于把
 	// 授权吊销后「仍显示已绑定、请求却被拒」的哑故障显式化。见 domain.GroupTargetDetail。
 	Available         bool

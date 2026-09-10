@@ -85,12 +85,13 @@ INSERT INTO ai_group_targets (
   group_id,
   target_kind,
   target_id,
+  priority,
   status
 ) SELECT
   $1, $2, $3,
-  $4
+  $4, $5
 FROM ai_groups g
-WHERE g.id = $1 AND g.tenant_id = $5
+WHERE g.id = $1 AND g.tenant_id = $6
   AND EXISTS (
     SELECT 1
     FROM ai_upstream_resources r
@@ -112,6 +113,7 @@ RETURNING
   group_id,
   target_kind,
   target_id,
+  priority,
   status,
   created_at,
   updated_at
@@ -121,6 +123,7 @@ type AddGroupTargetParams struct {
 	GroupID    pgtype.UUID `json:"group_id"`
 	TargetKind string      `json:"target_kind"`
 	TargetID   pgtype.UUID `json:"target_id"`
+	Priority   int32       `json:"priority"`
 	Status     string      `json:"status"`
 	TenantID   string      `json:"tenant_id"`
 }
@@ -134,6 +137,7 @@ func (q *Queries) AddGroupTarget(ctx context.Context, arg AddGroupTargetParams) 
 		arg.GroupID,
 		arg.TargetKind,
 		arg.TargetID,
+		arg.Priority,
 		arg.Status,
 		arg.TenantID,
 	)
@@ -143,6 +147,7 @@ func (q *Queries) AddGroupTarget(ctx context.Context, arg AddGroupTargetParams) 
 		&i.GroupID,
 		&i.TargetKind,
 		&i.TargetID,
+		&i.Priority,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -1930,6 +1935,7 @@ SELECT
   gt.group_id,
   gt.target_kind,
   gt.target_id,
+  gt.priority,
   gt.status,
   gt.created_at,
   gt.updated_at,
@@ -1954,7 +1960,7 @@ LEFT JOIN ai_credential_pools cp
   ON gt.target_kind = 'oauth_pool' AND cp.id = gt.target_id
 WHERE gt.group_id = $2
   AND EXISTS (SELECT 1 FROM ai_groups g WHERE g.id = gt.group_id AND g.tenant_id = $1)
-ORDER BY account_name ASC, pool_name ASC, gt.id ASC
+ORDER BY gt.priority ASC, account_name ASC, pool_name ASC, gt.id ASC
 `
 
 type ListGroupTargetsParams struct {
@@ -1967,6 +1973,7 @@ type ListGroupTargetsRow struct {
 	GroupID           pgtype.UUID        `json:"group_id"`
 	TargetKind        string             `json:"target_kind"`
 	TargetID          pgtype.UUID        `json:"target_id"`
+	Priority          int32              `json:"priority"`
 	Status            string             `json:"status"`
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
@@ -1976,7 +1983,7 @@ type ListGroupTargetsRow struct {
 	FixedProviderType string             `json:"fixed_provider_type"`
 }
 
-// 某分组关联的全部上游目标（账号或池），附目标展示信息。
+// 某分组关联的全部上游目标（账号或池），附目标展示信息；同组内按人工优先级排序。
 func (q *Queries) ListGroupTargets(ctx context.Context, arg ListGroupTargetsParams) ([]ListGroupTargetsRow, error) {
 	rows, err := q.db.Query(ctx, listGroupTargets, arg.TenantID, arg.GroupID)
 	if err != nil {
@@ -1991,6 +1998,7 @@ func (q *Queries) ListGroupTargets(ctx context.Context, arg ListGroupTargetsPara
 			&i.GroupID,
 			&i.TargetKind,
 			&i.TargetID,
+			&i.Priority,
 			&i.Status,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -3477,17 +3485,19 @@ func (q *Queries) UpdateGroupStatus(ctx context.Context, arg UpdateGroupStatusPa
 const updateGroupTarget = `-- name: UpdateGroupTarget :one
 UPDATE ai_group_targets AS gt
 SET status = $1,
+    priority = COALESCE($2, gt.priority),
     updated_at = now()
-WHERE gt.id = $2
+WHERE gt.id = $3
   AND EXISTS (
     SELECT 1 FROM ai_groups g
-    WHERE g.id = gt.group_id AND g.tenant_id = $3
+    WHERE g.id = gt.group_id AND g.tenant_id = $4
   )
 RETURNING
   id,
   group_id,
   target_kind,
   target_id,
+  priority,
   status,
   created_at,
   updated_at
@@ -3495,18 +3505,26 @@ RETURNING
 
 type UpdateGroupTargetParams struct {
 	Status   string      `json:"status"`
+	Priority pgtype.Int4 `json:"priority"`
 	ID       pgtype.UUID `json:"id"`
 	TenantID string      `json:"tenant_id"`
 }
 
+// priority 传 NULL 时保留原值（partial update 语义）。
 func (q *Queries) UpdateGroupTarget(ctx context.Context, arg UpdateGroupTargetParams) (AiGroupTarget, error) {
-	row := q.db.QueryRow(ctx, updateGroupTarget, arg.Status, arg.ID, arg.TenantID)
+	row := q.db.QueryRow(ctx, updateGroupTarget,
+		arg.Status,
+		arg.Priority,
+		arg.ID,
+		arg.TenantID,
+	)
 	var i AiGroupTarget
 	err := row.Scan(
 		&i.ID,
 		&i.GroupID,
 		&i.TargetKind,
 		&i.TargetID,
+		&i.Priority,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,

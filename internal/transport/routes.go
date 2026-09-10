@@ -173,6 +173,7 @@ type AITenantGroupManagementHTTPDeps struct {
 	TenantPriceBooks aitransport.TenantPriceBookManager
 	GroupTransfer    aitransport.GroupTransferManager
 	AdminAudit       aitransport.AdminAuditRecorder
+	RuntimeHealth    routing.HealthTracker
 	BanChecker       aitransport.HumaBanChecker
 }
 
@@ -633,6 +634,7 @@ func buildTenantGroupManagementHTTPDeps(platform aiPlatformDeps, d AITenantGroup
 		TenantPriceBooks: d.TenantPriceBooks,
 		GroupTransfer:    d.GroupTransfer,
 		AdminAudit:       d.AdminAudit,
+		RuntimeHealth:    d.RuntimeHealth,
 	}
 }
 

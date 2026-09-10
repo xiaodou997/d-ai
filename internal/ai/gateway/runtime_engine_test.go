@@ -53,12 +53,25 @@ func TestBuildRuntimeServingRequestHasNoPreResolvedCandidates(t *testing.T) {
 }
 
 func TestRuntimeRouteSelectorPreservesCanonicalGroupPlan(t *testing.T) {
-	planner := &routePlannerStub{plan: coreruntime.RoutePlan{Candidates: []coreruntime.PlannedTarget{
-		plannedDirectTarget("route-1", "group-1", 0, "upstream-1"),
-		plannedDirectTarget("route-2", "group-1", 0, "upstream-2"),
-		plannedDirectTarget("route-3", "group-2", 1, "upstream-3"),
-	}}}
+	rejectedTarget := commercial.GroupTarget{ID: "t-bad", GroupID: "group-1", TargetKind: commercial.TargetKindDirectUpstream, TargetID: "upstream-bad", Priority: 50}
+	planner := &routePlannerStub{plan: coreruntime.RoutePlan{
+		Candidates: []coreruntime.PlannedTarget{
+			plannedDirectTarget("route-1", "group-1", 0, "upstream-1"),
+			plannedDirectTarget("route-2", "group-1", 0, "upstream-2"),
+			plannedDirectTarget("route-3", "group-2", 1, "upstream-3"),
+		},
+		Rejections: []coreruntime.RejectedTarget{{
+			RouteID:   "route-rej",
+			GroupRank: 0,
+			Group:     commercial.AccessibleGroup{Group: commercial.Group{ID: "group-1", RoutePolicy: commercial.RoutePolicyCost}},
+			Target:    rejectedTarget,
+			ModelID:   "rej-model",
+			Code:      coreruntime.RejectionCredentialUnavailable,
+			Detail:    "no live credential",
+		}},
+	}}
 	planner.plan.Candidates[0].Binding.ConversionBucket = 2
+	planner.plan.Candidates[0].TargetPriority = 10
 	selector := NewRuntimeRouteSelector(planner, zap.NewNop())
 	req := &serving.Request{
 		Subject:           &coreidentity.Subject{TenantID: "tenant-a"},
@@ -89,8 +102,33 @@ func TestRuntimeRouteSelectorPreservesCanonicalGroupPlan(t *testing.T) {
 	if candidates[0].ConversionBucket != 2 {
 		t.Fatalf("conversion bucket = %d, want 2", candidates[0].ConversionBucket)
 	}
+	if candidates[0].TargetPriority != 10 {
+		t.Fatalf("target priority = %d, want 10", candidates[0].TargetPriority)
+	}
 	if candidates[0].AccountID != "upstream-1" || candidates[0].EndpointID != "upstream-1-endpoint" {
 		t.Fatalf("direct identities = account %q endpoint %q", candidates[0].AccountID, candidates[0].EndpointID)
+	}
+	// Planner rejections must be carried to req.PlanningSkipped so
+	// attempts_detail can show WHY a target was ruled out — without
+	// polluting req.Attempts / retry budget / X-Route-Trace.
+	if len(req.PlanningSkipped) != 1 {
+		t.Fatalf("PlanningSkipped = %d, want 1", len(req.PlanningSkipped))
+	}
+	skipped := req.PlanningSkipped[0]
+	if skipped.RouteID != "route-rej" || skipped.Outcome != serving.ResultRejected {
+		t.Fatalf("skipped = %+v, want route-rej/rejected", skipped)
+	}
+	if skipped.GroupID != "group-1" || skipped.RoutePolicy != string(commercial.RoutePolicyCost) {
+		t.Fatalf("skipped group/policy = %q/%q, want group-1/cost", skipped.GroupID, skipped.RoutePolicy)
+	}
+	if skipped.TargetPriority != 50 {
+		t.Fatalf("skipped priority = %d, want 50", skipped.TargetPriority)
+	}
+	if skipped.SelectionReason != "rejected:credential_unavailable" || skipped.ErrorMsg != "credential_unavailable: no live credential" {
+		t.Fatalf("skipped selection/error = %q/%q", skipped.SelectionReason, skipped.ErrorMsg)
+	}
+	if len(req.Attempts) != 0 {
+		t.Fatalf("Attempts = %d, want 0 (planner rejections must not enter Attempts)", len(req.Attempts))
 	}
 }
 
@@ -232,7 +270,7 @@ func TestRuntimeRouteSelectorLogsRejectionReasons(t *testing.T) {
 	}}}
 	selector := NewRuntimeRouteSelector(planner, zap.New(core))
 
-	_, err := selector.SelectCandidates(context.Background(), &serving.Request{
+	req := &serving.Request{
 		Subject:           &coreidentity.Subject{TenantID: "tenant-a"},
 		RequestID:         "req-no-route",
 		RequestedModel:    "gpt-5.6-luna",
@@ -240,7 +278,17 @@ func TestRuntimeRouteSelectorLogsRejectionReasons(t *testing.T) {
 		RuntimeCapability: catalog.CapabilityChat,
 		CapabilityType:    domain.CapabilityChat,
 		ClientProtocol:    domain.ProtocolOpenAIChat,
-	})
+	}
+	_, err := selector.SelectCandidates(context.Background(), req)
+	if len(req.PlanningSkipped) != 2 || len(req.Attempts) != 0 {
+		t.Fatalf("planning rejections were not retained separately: %+v", req.PlanningSkipped)
+	}
+	detail := string(serving.BuildAuditPayload(req).AttemptsDetail)
+	for _, reason := range []string{"credential_unavailable", "target_inactive"} {
+		if !strings.Contains(detail, reason) {
+			t.Fatalf("audit attempts detail missing %s: %s", reason, detail)
+		}
+	}
 
 	// 对客户端的错误契约不变：仍是 no_available_route，不泄露内部细节。
 	var apiErr *serving.APIError

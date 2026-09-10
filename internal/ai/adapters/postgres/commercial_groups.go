@@ -285,7 +285,7 @@ func (r *CommercialRepo) LoadDispatchData(ctx context.Context, tenantID string, 
 		ORDER BY r.group_id, r.priority ASC, r.created_at ASC, r.id ASC
 	`, ids, tenantID)
 	batch.Queue(`
-		SELECT id::text, group_id::text, target_kind, target_id::text, status, created_at, updated_at
+		SELECT id::text, group_id::text, target_kind, target_id::text, priority, status, created_at, updated_at
 		FROM ai_group_targets gt
 		WHERE gt.group_id = ANY($1::uuid[])
 		  AND EXISTS (
@@ -302,7 +302,7 @@ func (r *CommercialRepo) LoadDispatchData(ctx context.Context, tenantID string, 
 		        )
 		      )
 		  )
-		ORDER BY gt.group_id, gt.target_kind ASC, gt.target_id ASC
+		ORDER BY gt.group_id, gt.priority ASC, gt.target_kind ASC, gt.target_id ASC
 	`, ids, tenantID)
 
 	results := r.pool.SendBatch(ctx, batch)
@@ -468,6 +468,7 @@ func scanCommercialGroupTargetRow(scanner interface {
 		&item.GroupID,
 		&targetKind,
 		&item.TargetID,
+		&item.Priority,
 		&status,
 		&item.CreatedAt,
 		&item.UpdatedAt,

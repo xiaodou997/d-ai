@@ -433,7 +433,7 @@ func BuildAuditPayload(req *Request) *audit.Payload {
 		ErrorCode:                   req.ErrorCode,
 		InternalErrorDetail:         req.InternalErrorDetail,
 		FailedStep:                  req.FailedStep,
-		AttemptsDetail:              BuildAttemptsDetail(req.Attempts),
+		AttemptsDetail:              BuildAttemptsDetailFull(req),
 	}
 	return p
 }

@@ -68,6 +68,7 @@ func (r *Resolver) Resolve(ctx context.Context, subject identity.Subject, req Re
 	return RoutePlan{
 		RequestID:  result.inspection.RequestID,
 		Candidates: result.inspection.Candidates,
+		Rejections: result.inspection.RejectedCandidates,
 	}, nil
 }
 
@@ -139,13 +140,14 @@ func (r *Resolver) inspect(ctx context.Context, subject identity.Subject, req Re
 		bindingResult := bindings[index]
 		if bindingResult.err == nil {
 			inspection.Candidates = append(inspection.Candidates, PlannedTarget{
-				RouteID:     item.target.ID,
-				GroupRank:   item.groupRank,
-				Group:       item.option.Group,
-				Target:      item.target,
-				ModelID:     item.option.ResolvedModelID,
-				MatchedRule: item.option.MatchedRule,
-				Binding:     bindingResult.binding,
+				RouteID:        item.target.ID,
+				GroupRank:      item.groupRank,
+				TargetPriority: int(item.target.Priority),
+				Group:          item.option.Group,
+				Target:         item.target,
+				ModelID:        item.option.ResolvedModelID,
+				MatchedRule:    item.option.MatchedRule,
+				Binding:        bindingResult.binding,
 			})
 			continue
 		}

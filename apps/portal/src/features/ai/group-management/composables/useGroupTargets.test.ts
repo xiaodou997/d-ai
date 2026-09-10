@@ -61,6 +61,7 @@ function createApi(initial: TenantAiGroupTarget[] = [target()]) {
         credential_pool_id: body.credential_pool_id,
         target_type: body.account_id ? "account" : "pool",
         api_formats: [],
+        priority: body.priority ?? 100,
         status: body.status ?? "active"
       };
       stored = [...stored, saved];
@@ -79,6 +80,35 @@ function createApi(initial: TenantAiGroupTarget[] = [target()]) {
 }
 
 describe("useGroupTargets", () => {
+  it("does not mark legacy bindings without priority as changed", async () => {
+    const state = useGroupTargets({ groupId: () => "group-1", api: createApi() });
+    await state.load();
+    expect(state.hasChanges.value).toBe(false);
+    expect(state.rows.value.find((row) => row.linked)?.priority).toBe(100);
+  });
+
+  it("saves priority changes in a versioned replacement and clears the draft", async () => {
+    const api = createApi();
+    api.listTargets = vi.fn(async () => ({ items: [{ ...target(), priority: 100 }], total: 1, route_policy_version: 7 }));
+    api.replace = vi.fn(async (_groupId, body) => ({
+      items: [{ ...target(), priority: body.targets[0].priority }], total: 1, route_policy_version: 8
+    }));
+    const state = useGroupTargets({ groupId: () => "group-1", api });
+    await state.load();
+    state.updateDraft("direct_upstream:account-1", { priority: 0 });
+    expect(state.hasChanges.value).toBe(true);
+    await expect(state.save()).resolves.toMatchObject({ updated: 1, failures: [] });
+    expect(api.replace).toHaveBeenCalledWith("group-1", {
+      expected_version: 7, targets: [{ account_id: "account-1", status: "active", priority: 0 }]
+    });
+    expect(state.hasChanges.value).toBe(false);
+    expect(state.rows.value.find((row) => row.linked)?.priority).toBe(0);
+    state.updateDraft("direct_upstream:account-1", { priority: 50 });
+    state.discard();
+    expect(state.rows.value.find((row) => row.linked)?.priority).toBe(0);
+    expect(state.hasChanges.value).toBe(false);
+  });
+
   it("maps API and OAuth resources, blocks unpriced additions, and saves status", async () => {
     const api = createApi();
     const state = useGroupTargets({ groupId: () => "group-1", api });
@@ -97,7 +127,8 @@ describe("useGroupTargets", () => {
     await expect(state.save()).resolves.toMatchObject({ added: 1, failures: [] });
     expect(api.add).toHaveBeenCalledWith("group-1", {
       credential_pool_id: "pool-1",
-      status: "disabled"
+      status: "disabled",
+      priority: 100
     });
   });
 
@@ -109,7 +140,8 @@ describe("useGroupTargets", () => {
     state.updateDraft("direct_upstream:account-1", { status: "disabled" });
     await expect(state.save()).resolves.toMatchObject({ updated: 1, failures: [] });
     expect(api.update).toHaveBeenCalledWith("group-1", "binding-1", {
-      status: "disabled"
+      status: "disabled",
+      priority: 100
     });
   });
 

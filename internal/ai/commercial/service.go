@@ -560,6 +560,11 @@ func normalizeGroupTargetWrite(in GroupTargetWrite) (GroupTargetWrite, error) {
 	default:
 		return GroupTargetWrite{}, newValidationError("target_kind", "unsupported target_kind")
 	}
+	if in.Priority != nil {
+		if *in.Priority < 0 || *in.Priority > math.MaxInt32 {
+			return GroupTargetWrite{}, newValidationError("priority", "priority must be between 0 and 2147483647")
+		}
+	}
 	status, err := normalizeStatus(in.Status)
 	if err != nil {
 		return GroupTargetWrite{}, err

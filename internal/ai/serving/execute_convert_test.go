@@ -93,6 +93,65 @@ func TestPickCandidateKeepsConversionPreferenceAheadOfScoring(t *testing.T) {
 	}
 }
 
+// Manual TargetPriority is the second structural tier inside a group: only the
+// lowest unexhausted priority level is exposed to the scorer, a worse level is
+// failover, and a peers-only group (all at the 100 default) falls straight
+// through to conversion preference + policy scoring.
+func TestActivePriorityTier(t *testing.T) {
+	cands := []*domain.RouteCandidate{
+		{RouteID: "p100-a", TargetPriority: 100},
+		{RouteID: "p10", TargetPriority: 10},
+		{RouteID: "p100-b", TargetPriority: 100},
+	}
+	used := map[string]bool{}
+
+	tier, manual := activePriorityTier(cands, used)
+	if !manual {
+		t.Fatal("expected manual priority to decide while a worse level is still pending")
+	}
+	if got := routeIDs(tier); len(got) != 1 || got[0] != "p10" {
+		t.Fatalf("priority tier = %v, want [p10]", got)
+	}
+
+	used["p10"] = true
+	tier, manual = activePriorityTier(cands, used)
+	if manual {
+		t.Fatal("expected a single remaining level to fall back to the policy scorer")
+	}
+	if got := routeIDs(tier); len(got) != 2 {
+		t.Fatalf("fallback tier = %v, want both priority-100 peers", got)
+	}
+}
+
+func TestPickCandidateHonorsManualPriorityBeforeConversionAndPolicy(t *testing.T) {
+	req := &Request{
+		Candidates: []*domain.RouteCandidate{
+			// Zero conversion and the cheapest for the scorer, but the tenant
+			// hand-ranked it below the lossy route.
+			{RouteID: "native-cheap", GroupRank: 0, TargetPriority: 50, ConversionBucket: 0, RoutePolicy: "cost"},
+			{RouteID: "converted-preferred", GroupRank: 0, TargetPriority: 5, ConversionBucket: 3, RoutePolicy: "balanced"},
+		},
+		UsedCandidates: map[string]bool{},
+	}
+	got, _ := (&ExecuteStep{Scorer: &MultiDimScorer{}}).pickCandidate(context.Background(), req)
+	if got == nil || got.RouteID != "converted-preferred" {
+		t.Fatalf("picked %#v, want the manually preferred route", got)
+	}
+	if req.SelectionReason != "manual_priority" {
+		t.Fatalf("selection reason = %q, want manual_priority", req.SelectionReason)
+	}
+
+	// Failover exhausts the preferred level and only then reaches priority 50.
+	req.UsedCandidates["converted-preferred"] = true
+	got, _ = (&ExecuteStep{Scorer: &MultiDimScorer{}}).pickCandidate(context.Background(), req)
+	if got == nil || got.RouteID != "native-cheap" {
+		t.Fatalf("picked %#v after failover, want native-cheap", got)
+	}
+	if req.SelectionReason == "manual_priority" {
+		t.Fatalf("selection reason = %q after the last level became the only level", req.SelectionReason)
+	}
+}
+
 func TestPickCandidateRecordsPolicyReason(t *testing.T) {
 	t.Parallel()
 

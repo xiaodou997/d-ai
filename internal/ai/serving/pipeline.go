@@ -110,6 +110,20 @@ type Request struct {
 	// X-Route-Trace observability and to drive 429 backoff decisions.
 	Attempts []AttemptRecord
 
+	// SkippedAttempts records candidates filtered out before any upstream
+	// transport call (e.g. circuit breaker open). Merged into attempts_detail
+	// for admin observability, but deliberately NOT counted in the retry
+	// budget, X-Route-Trace, or 429 backoff loop — so an all-open-breaker
+	// request stays a clean 503 no_healthy_route with no phantom attempts.
+	SkippedAttempts []AttemptRecord
+
+	// PlanningSkipped records planner verdicts (resolver failed to bind a
+	// target) that arrived BEFORE the Execute step runs. These were never in
+	// req.Candidates, so never touched a slot/retry budget/transport.
+	// Rendered into attempts_detail with outcome=rejected + Skipped=true so
+	// ops can see WHY a target was ruled out.
+	PlanningSkipped []AttemptRecord
+
 	// StickyHit is set to true when the first candidate was loaded from the
 	// sticky Redis binding rather than freshly scored.
 	StickyHit bool

@@ -52,12 +52,13 @@ type UserGroup struct {
 
 // GroupTargetBinding 是分组 → 上游目标（账号或凭证池）的直连关联，对齐
 // ai_group_targets。TargetKind/TargetID 直接表达多态目标，不再保留 account/pool
-// 二选一的过渡壳。
+// 二选一的过渡壳。Priority 是同组内人工优先级，越小越优先（100 = 默认平级）。
 type GroupTargetBinding struct {
 	ID         string
 	GroupID    string
 	TargetKind string // "direct_upstream" | "oauth_pool"
 	TargetID   string
+	Priority   int32
 	Status     string
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
@@ -75,6 +76,10 @@ type GroupTargetDetail struct {
 	APIFormats        []string
 	PoolName          string
 	FixedProviderType string
+	// EndpointIDs 是 direct_upstream 目标当前 active 的请求端点 ID 集合，用于把
+	// 运行时熔断器（按 endpoint 维度跟踪）聚合成分组目标级的健康展示。
+	// 仅带租户上下文的列表投影填充。
+	EndpointIDs []string
 	// Available 为该绑定的上游资源当前是否仍可被本租户路由（active 且 public 或已授权）。
 	Available bool
 	// UnavailableReason 在 Available=false 时给出原因：

@@ -1236,22 +1236,27 @@ CREATE INDEX idx_ledger_credit_leases_account
   -- 分组不再按「模型→部署」路由，而是直连一批上游目标（账号或凭证池），
   -- 候选 = 该组关联的 active 目标里存在对应 ai_upstream_models 绑定者；
   -- 运行时按分组路由策略自动择优，并在失败时自动切换。
-  -- 目标为多态：target_kind + target_id 恰好描述一个上游目标。
-  -- ============================================================================
-  CREATE TABLE IF NOT EXISTS ai_group_targets (
-    id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-    group_id     UUID        NOT NULL,
-    target_kind  TEXT        NOT NULL
-      CHECK (target_kind IN ('direct_upstream', 'oauth_pool')),
-    target_id    UUID        NOT NULL,
-    status       TEXT        NOT NULL DEFAULT 'active',
-    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (group_id, target_kind, target_id)
-  );
+-- 目标为多态：target_kind + target_id 恰好描述一个上游目标。
+-- priority：同组内人工优先级，越小越优先；默认 100 = 全部平级，
+-- 平级时回落到协议转换偏好 + 分组路由策略择优。
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS ai_group_targets (
+id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+group_id     UUID        NOT NULL,
+target_kind  TEXT        NOT NULL
+CHECK (target_kind IN ('direct_upstream', 'oauth_pool')),
+target_id    UUID        NOT NULL,
+priority     INTEGER     NOT NULL DEFAULT 100 CHECK (priority >= 0),
+status       TEXT        NOT NULL DEFAULT 'active',
+created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+UNIQUE (group_id, target_kind, target_id)
+);
 
-  CREATE INDEX IF NOT EXISTS idx_ai_group_targets_group
-    ON ai_group_targets (group_id, status);
+CREATE INDEX IF NOT EXISTS idx_ai_group_targets_group
+ON ai_group_targets (group_id, status);
+CREATE INDEX IF NOT EXISTS idx_ai_group_targets_priority
+ON ai_group_targets (group_id, priority);
   CREATE INDEX IF NOT EXISTS idx_ai_group_targets_target
     ON ai_group_targets (target_kind, target_id);
 
@@ -2813,6 +2818,6 @@ CREATE TABLE dai_schema_metadata (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 38);
+INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 39);
 
 COMMIT;

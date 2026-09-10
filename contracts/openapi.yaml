@@ -4060,10 +4060,22 @@ components:
           type: string
         group_id:
           type: string
+        health_state:
+          description: 运行时熔断器状态；unknown 表示该目标暂无健康记录
+          enum:
+            - closed
+            - open
+            - half_open
+            - unknown
+          type: string
         id:
           type: string
         pool_name:
           type: string
+        priority:
+          description: 同组内人工优先级，越小越优先；100 = 默认平级
+          format: int64
+          type: integer
         status:
           type: string
         target_type:
@@ -4079,6 +4091,8 @@ components:
         - id
         - group_id
         - status
+        - priority
+        - health_state
         - available
       type: object
     GroupTargetUpdateRequest:
@@ -4091,6 +4105,12 @@ components:
           format: uri
           readOnly: true
           type: string
+        priority:
+          description: 同组内人工优先级，越小越优先；100 = 默认平级；不传则保留原值
+          format: int32
+          maximum: 2147483647
+          minimum: 0
+          type: integer
         status:
           enum:
             - active
@@ -4113,6 +4133,12 @@ components:
         credential_pool_id:
           description: 凭证池 id；与 account_id 二选一
           type: string
+        priority:
+          description: 同组内人工优先级，越小越优先；不传则默认 100
+          format: int32
+          maximum: 2147483647
+          minimum: 0
+          type: integer
         status:
           enum:
             - active

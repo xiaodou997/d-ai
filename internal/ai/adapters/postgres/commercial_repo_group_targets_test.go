@@ -47,6 +47,7 @@ func openCommercialGroupTestPool(t *testing.T) (*pgxpool.Pool, context.Context) 
 			group_id UUID NOT NULL,
 			target_kind TEXT NOT NULL,
 			target_id UUID NOT NULL,
+			priority INTEGER NOT NULL DEFAULT 100 CHECK (priority >= 0),
 			status TEXT NOT NULL DEFAULT 'active',
 			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 			updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -254,10 +255,11 @@ func TestCommercialRepoReplaceGroupTargetsIsAtomicAndVersioned(t *testing.T) {
 		t.Fatalf("seed pool: %v", err)
 	}
 	scope := commercial.TenantGroupScope{TenantID: "tenant-1", GroupID: groupID}
+	primaryPriority := int32(10)
 	first, err := repo.ReplaceGroupTargets(ctx, scope, commercial.GroupTargetBatchWrite{
 		ExpectedVersion: 3,
 		Targets: []commercial.GroupTargetWrite{
-			{TargetKind: commercial.TargetKindDirectUpstream, TargetID: accountID, Status: commercial.StatusActive},
+			{TargetKind: commercial.TargetKindDirectUpstream, TargetID: accountID, Status: commercial.StatusActive, Priority: &primaryPriority},
 			{TargetKind: commercial.TargetKindOAuthPool, TargetID: poolID, Status: commercial.StatusDisabled},
 		},
 	})
@@ -266,6 +268,13 @@ func TestCommercialRepoReplaceGroupTargetsIsAtomicAndVersioned(t *testing.T) {
 	}
 	if first.RoutePolicyVersion != 4 || len(first.Targets) != 2 {
 		t.Fatalf("first replacement = version %d targets %d, want 4/2", first.RoutePolicyVersion, len(first.Targets))
+	}
+	if first.Targets[0].TargetID != accountID || first.Targets[0].Priority != 10 || first.Targets[1].Priority != 100 {
+		t.Fatalf("replacement priorities = %+v", first.Targets)
+	}
+	dispatch, err := repo.LoadDispatchData(ctx, "tenant-1", []string{groupID})
+	if err != nil || len(dispatch.Targets[groupID]) != 2 || dispatch.Targets[groupID][0].Priority != 10 {
+		t.Fatalf("dispatch priority roundtrip: %+v, err=%v", dispatch, err)
 	}
 
 	_, err = repo.ReplaceGroupTargets(ctx, scope, commercial.GroupTargetBatchWrite{
@@ -303,6 +312,13 @@ func TestCommercialRepoReplaceGroupTargetsIsAtomicAndVersioned(t *testing.T) {
 	}
 	if unchanged.RoutePolicyVersion != 5 || len(unchanged.Targets) != 1 {
 		t.Fatalf("unchanged replacement = version %d targets %d, want 5/1", unchanged.RoutePolicyVersion, len(unchanged.Targets))
+	}
+	priorityOnly, err := repo.ReplaceGroupTargets(ctx, scope, commercial.GroupTargetBatchWrite{
+		ExpectedVersion: 5,
+		Targets:         []commercial.GroupTargetWrite{{TargetKind: commercial.TargetKindOAuthPool, TargetID: poolID, Status: commercial.StatusActive, Priority: &primaryPriority}},
+	})
+	if err != nil || priorityOnly.RoutePolicyVersion != 6 || priorityOnly.Targets[0].Priority != 10 {
+		t.Fatalf("priority-only replacement = %+v, err=%v", priorityOnly, err)
 	}
 }
 
@@ -442,6 +458,16 @@ func TestCommercialRepoUpdateGroupTargetUsesCurrentSchema(t *testing.T) {
 	}
 	if got.Status != commercial.StatusActive {
 		t.Fatalf("updated target = %+v", got)
+	}
+	priority := int32(0)
+	scope := commercial.TenantGroupScope{TenantID: "tenant-1", GroupID: groupID}
+	got, err = repo.UpdateGroupTarget(ctx, scope, bindingID, commercial.GroupTargetWrite{Status: commercial.StatusActive, Priority: &priority})
+	if err != nil || got.Priority != 0 {
+		t.Fatalf("explicit zero priority = %+v, err=%v", got, err)
+	}
+	got, err = repo.UpdateGroupTarget(ctx, scope, bindingID, commercial.GroupTargetWrite{Status: commercial.StatusDisabled})
+	if err != nil || got.Priority != 0 || got.Status != commercial.StatusDisabled {
+		t.Fatalf("omitted priority must retain zero = %+v, err=%v", got, err)
 	}
 }
 

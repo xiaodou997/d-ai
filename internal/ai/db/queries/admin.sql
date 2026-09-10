@@ -222,10 +222,11 @@ INSERT INTO ai_group_targets (
   group_id,
   target_kind,
   target_id,
+  priority,
   status
 ) SELECT
   sqlc.arg(group_id), sqlc.arg(target_kind), sqlc.arg(target_id),
-  sqlc.arg(status)
+  sqlc.arg(priority), sqlc.arg(status)
 FROM ai_groups g
 WHERE g.id = sqlc.arg(group_id) AND g.tenant_id = sqlc.arg(tenant_id)
   AND EXISTS (
@@ -249,13 +250,16 @@ RETURNING
   group_id,
   target_kind,
   target_id,
+  priority,
   status,
   created_at,
   updated_at;
 
 -- name: UpdateGroupTarget :one
+-- priority 传 NULL 时保留原值（partial update 语义）。
 UPDATE ai_group_targets AS gt
 SET status = sqlc.arg(status),
+    priority = COALESCE(sqlc.narg(priority), gt.priority),
     updated_at = now()
 WHERE gt.id = sqlc.arg(id)
   AND EXISTS (
@@ -267,6 +271,7 @@ RETURNING
   group_id,
   target_kind,
   target_id,
+  priority,
   status,
   created_at,
   updated_at;
@@ -277,12 +282,13 @@ WHERE gt.id = $1
   AND EXISTS (SELECT 1 FROM ai_groups g WHERE g.id = gt.group_id AND g.tenant_id = $2);
 
 -- name: ListGroupTargets :many
--- 某分组关联的全部上游目标（账号或池），附目标展示信息。
+-- 某分组关联的全部上游目标（账号或池），附目标展示信息；同组内按人工优先级排序。
 SELECT
   gt.id,
   gt.group_id,
   gt.target_kind,
   gt.target_id,
+  gt.priority,
   gt.status,
   gt.created_at,
   gt.updated_at,
@@ -307,7 +313,7 @@ LEFT JOIN ai_credential_pools cp
   ON gt.target_kind = 'oauth_pool' AND cp.id = gt.target_id
 WHERE gt.group_id = $2
   AND EXISTS (SELECT 1 FROM ai_groups g WHERE g.id = gt.group_id AND g.tenant_id = $1)
-ORDER BY account_name ASC, pool_name ASC, gt.id ASC;
+ORDER BY gt.priority ASC, account_name ASC, pool_name ASC, gt.id ASC;
 
 -- name: ListGroupModels :many
 -- 分组对外可售模型 = 该组售价价格表 entries 去重 by model_code。

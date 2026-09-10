@@ -43,23 +43,30 @@ type Request struct {
 
 // PlannedTarget is one executable group-target binding. RouteID is always the
 // ai_group_targets.id UUID. GroupRank is the caller-visible group failover rank;
-// the targets inside a group are peers selected by its route policy.
+// TargetPriority is the tenant-set manual priority inside the group (smaller =
+// preferred, 100 = peer default). The targets inside a group are peers selected
+// by its route policy after TargetPriority is honored.
 type PlannedTarget struct {
-	RouteID     string
-	GroupRank   int
-	Group       commercial.AccessibleGroup
-	Target      commercial.GroupTarget
-	ModelID     string
-	MatchedRule *commercial.DispatchRule
-	Binding     upstream.RuntimeBinding
+	RouteID        string
+	GroupRank      int
+	TargetPriority int
+	Group          commercial.AccessibleGroup
+	Target         commercial.GroupTarget
+	ModelID        string
+	MatchedRule    *commercial.DispatchRule
+	Binding        upstream.RuntimeBinding
 }
 
 // RoutePlan is the sole output of runtime route planning. Candidates are in
-// deterministic structural order by group rank. Runtime health, conversion
-// compatibility and the group policy choose among targets.
+// deterministic structural order by group rank then manual target priority.
+// Runtime health, conversion compatibility and the group policy choose among
+// targets. Rejections retains the planner/binder verdicts for targets that
+// never became candidates — serving persists them into the admin-only
+// attempts_detail so operators can see who was ruled out and why.
 type RoutePlan struct {
 	RequestID  string
 	Candidates []PlannedTarget
+	Rejections []RejectedTarget
 }
 
 // RouteInspection is the same planner/binder result used by Resolve, with

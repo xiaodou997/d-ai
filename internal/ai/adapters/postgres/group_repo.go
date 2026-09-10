@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	commercial "xiaodou/dai/internal/ai/commercial"
 	dbgen "xiaodou/dai/internal/ai/db/gen"
@@ -219,12 +220,13 @@ func (r *GroupRepo) ListGroupDispatchRules(ctx context.Context, groupID string) 
 
 // ---- Group targets (分组 → 上游目标：账号或凭证池) ----
 
-func groupTargetBindingFromRow(id, groupID, targetKind, targetID, status string, createdAt, updatedAt time.Time) domain.GroupTargetBinding {
+func groupTargetBindingFromRow(id, groupID, targetKind, targetID, status string, priority int32, createdAt, updatedAt time.Time) domain.GroupTargetBinding {
 	return domain.GroupTargetBinding{
 		ID:         id,
 		GroupID:    groupID,
 		TargetKind: targetKind,
 		TargetID:   targetID,
+		Priority:   priority,
 		Status:     status,
 		CreatedAt:  createdAt,
 		UpdatedAt:  updatedAt,
@@ -242,7 +244,7 @@ func (r *GroupRepo) ListGroupTargets(ctx context.Context, tenantID, groupID stri
 	}
 	out := make([]domain.GroupTargetBinding, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, groupTargetBindingFromRow(uuidToString(row.ID), uuidToString(row.GroupID), row.TargetKind, uuidToString(row.TargetID), row.Status, row.CreatedAt.Time, row.UpdatedAt.Time))
+		out = append(out, groupTargetBindingFromRow(uuidToString(row.ID), uuidToString(row.GroupID), row.TargetKind, uuidToString(row.TargetID), row.Status, row.Priority, row.CreatedAt.Time, row.UpdatedAt.Time))
 	}
 	return out, nil
 }
@@ -277,6 +279,7 @@ func (r *GroupRepo) ListGroupTargetDetails(ctx context.Context, tenantID, groupI
 			gt.group_id::text,
 			gt.target_kind,
 			gt.target_id::text,
+			gt.priority,
 			gt.status,
 			gt.created_at,
 			gt.updated_at,
@@ -290,6 +293,10 @@ func (r *GroupRepo) ListGroupTargetDetails(ctx context.Context, tenantID, groupI
 			  WHEN cp.fixed_provider_type IN ('gemini_cli', 'antigravity') THEN 'gemini_generate'
 			  ELSE 'openai_chat'
 			END] ELSE ARRAY[]::text[] END AS api_formats,
+			CASE WHEN a.id IS NOT NULL THEN ARRAY(
+			  SELECT ae.id::text FROM ai_upstream_account_endpoints ae
+			  WHERE ae.account_id = a.id AND ae.status = 'active' ORDER BY ae.api_format
+			) ELSE ARRAY[]::text[] END AS endpoint_ids,
 			COALESCE(cp.tenant_display_name, '') AS pool_name,
 			COALESCE(cp.fixed_provider_type, '') AS fixed_provider_type,
 			COALESCE(a.status, cp.status, '')                          AS target_status,
@@ -304,7 +311,7 @@ func (r *GroupRepo) ListGroupTargetDetails(ctx context.Context, tenantID, groupI
 		  ON tp.resource_kind = gt.target_kind AND tp.resource_id = gt.target_id AND tp.tenant_id = $1
 		WHERE gt.group_id = $2
 		  AND EXISTS (SELECT 1 FROM ai_groups g WHERE g.id = gt.group_id AND g.tenant_id = $1)
-		ORDER BY account_name ASC, pool_name ASC, gt.id ASC
+		ORDER BY gt.priority ASC, account_name ASC, pool_name ASC, gt.id ASC
 	`, tenantID, gid)
 	if err != nil {
 		return nil, err
@@ -314,25 +321,27 @@ func (r *GroupRepo) ListGroupTargetDetails(ctx context.Context, tenantID, groupI
 	for rows.Next() {
 		var (
 			id, groupIDText, tKind, tID          string
+			priority                             int32
 			status                               string
 			createdAt, updatedAt                 time.Time
 			accountName, poolName, fixedProvider string
-			apiFormats                           []string
+			apiFormats, endpointIDs              []string
 			targetStatus, accessMode             string
 			accessGranted                        bool
 		)
 		if err := rows.Scan(
-			&id, &groupIDText, &tKind, &tID, &status, &createdAt, &updatedAt,
-			&accountName, &apiFormats, &poolName, &fixedProvider,
+			&id, &groupIDText, &tKind, &tID, &priority, &status, &createdAt, &updatedAt,
+			&accountName, &apiFormats, &endpointIDs, &poolName, &fixedProvider,
 			&targetStatus, &accessMode, &accessGranted,
 		); err != nil {
 			return nil, err
 		}
 		available, reason := computeTargetAvailability(targetStatus, accessMode, accessGranted)
 		out = append(out, domain.GroupTargetDetail{
-			GroupTargetBinding: groupTargetBindingFromRow(id, groupIDText, tKind, tID, status, createdAt, updatedAt),
+			GroupTargetBinding: groupTargetBindingFromRow(id, groupIDText, tKind, tID, status, priority, createdAt, updatedAt),
 			AccountName:        accountName,
 			APIFormats:         apiFormats,
+			EndpointIDs:        endpointIDs,
 			PoolName:           poolName,
 			FixedProviderType:  fixedProvider,
 			Available:          available,
@@ -354,6 +363,7 @@ func (r *GroupRepo) ListGroupTargetsByTarget(ctx context.Context, targetKind, ta
 			gt.group_id::text,
 			gt.target_kind,
 			gt.target_id::text,
+			gt.priority,
 			gt.status,
 			gt.created_at,
 			gt.updated_at,
@@ -367,6 +377,10 @@ func (r *GroupRepo) ListGroupTargetsByTarget(ctx context.Context, targetKind, ta
 			  WHEN cp.fixed_provider_type IN ('gemini_cli', 'antigravity') THEN 'gemini_generate'
 			  ELSE 'openai_chat'
 			END] ELSE ARRAY[]::text[] END AS api_formats,
+			CASE WHEN a.id IS NOT NULL THEN ARRAY(
+			  SELECT ae.id::text FROM ai_upstream_account_endpoints ae
+			  WHERE ae.account_id = a.id AND ae.status = 'active' ORDER BY ae.api_format
+			) ELSE ARRAY[]::text[] END AS endpoint_ids,
 			COALESCE(cp.tenant_display_name, '') AS pool_name,
 			COALESCE(cp.fixed_provider_type, '') AS fixed_provider_type
 		FROM ai_group_targets gt
@@ -375,7 +389,7 @@ func (r *GroupRepo) ListGroupTargetsByTarget(ctx context.Context, targetKind, ta
 		LEFT JOIN ai_credential_pools cp
 		  ON gt.target_kind = 'oauth_pool' AND cp.id = gt.target_id
 		WHERE gt.target_kind = $1 AND gt.target_id = $2
-		ORDER BY account_name ASC, pool_name ASC, gt.id ASC
+		ORDER BY gt.priority ASC, account_name ASC, pool_name ASC, gt.id ASC
 	`, targetKind, tid)
 	if err != nil {
 		return nil, err
@@ -385,21 +399,23 @@ func (r *GroupRepo) ListGroupTargetsByTarget(ctx context.Context, targetKind, ta
 	for rows.Next() {
 		var (
 			id, groupID, tKind, tID              string
+			priority                             int32
 			status                               string
 			createdAt, updatedAt                 time.Time
 			accountName, poolName, fixedProvider string
-			apiFormats                           []string
+			apiFormats, endpointIDs              []string
 		)
 		if err := rows.Scan(
-			&id, &groupID, &tKind, &tID, &status, &createdAt, &updatedAt,
-			&accountName, &apiFormats, &poolName, &fixedProvider,
+			&id, &groupID, &tKind, &tID, &priority, &status, &createdAt, &updatedAt,
+			&accountName, &apiFormats, &endpointIDs, &poolName, &fixedProvider,
 		); err != nil {
 			return nil, err
 		}
 		item := domain.GroupTargetDetail{
-			GroupTargetBinding: groupTargetBindingFromRow(id, groupID, tKind, tID, status, createdAt, updatedAt),
+			GroupTargetBinding: groupTargetBindingFromRow(id, groupID, tKind, tID, status, priority, createdAt, updatedAt),
 			AccountName:        accountName,
 			APIFormats:         apiFormats,
+			EndpointIDs:        endpointIDs,
 			PoolName:           poolName,
 			FixedProviderType:  fixedProvider,
 		}
@@ -422,6 +438,7 @@ func (r *GroupRepo) GetGroupTargetDetail(ctx context.Context, tenantID, groupID,
 	}
 	var (
 		targetID, targetGroupID, targetKind      string
+		priority                                 int32
 		status                                   string
 		createdAt, updatedAt                     time.Time
 		accountName, poolName, fixedProviderType string
@@ -434,6 +451,7 @@ func (r *GroupRepo) GetGroupTargetDetail(ctx context.Context, tenantID, groupID,
 			gt.target_id::text,
 			gt.group_id::text,
 			gt.target_kind,
+			gt.priority,
 			gt.status,
 			gt.created_at,
 			gt.updated_at,
@@ -462,7 +480,7 @@ func (r *GroupRepo) GetGroupTargetDetail(ctx context.Context, tenantID, groupID,
 		JOIN ai_groups g ON g.id = gt.group_id AND g.tenant_id = $3
 		WHERE gt.group_id = $1 AND gt.id = $2
 	`, gid, rid, tenantID).Scan(
-		&targetID, &targetGroupID, &targetKind, &status, &createdAt, &updatedAt,
+		&targetID, &targetGroupID, &targetKind, &priority, &status, &createdAt, &updatedAt,
 		&accountName, &apiFormats, &poolName, &fixedProviderType,
 		&targetStatus, &accessMode, &accessGranted,
 	); err != nil {
@@ -473,7 +491,7 @@ func (r *GroupRepo) GetGroupTargetDetail(ctx context.Context, tenantID, groupID,
 	}
 	available, reason := computeTargetAvailability(targetStatus, accessMode, accessGranted)
 	return domain.GroupTargetDetail{
-		GroupTargetBinding: groupTargetBindingFromRow(id, targetGroupID, targetKind, targetID, status, createdAt, updatedAt),
+		GroupTargetBinding: groupTargetBindingFromRow(id, targetGroupID, targetKind, targetID, status, priority, createdAt, updatedAt),
 		AccountName:        accountName,
 		APIFormats:         apiFormats,
 		PoolName:           poolName,
@@ -488,13 +506,17 @@ func (r *GroupRepo) UpdateGroupTarget(ctx context.Context, tenantID, id string, 
 	if err != nil {
 		return domain.GroupTargetBinding{}, err
 	}
+	var priorityParam pgtype.Int4
+	if w.Priority != nil {
+		priorityParam = pgtype.Int4{Int32: *w.Priority, Valid: true}
+	}
 	row, err := r.q.UpdateGroupTarget(ctx, dbgen.UpdateGroupTargetParams{
-		ID: rid, Status: string(w.Status), TenantID: tenantID,
+		ID: rid, Status: string(w.Status), Priority: priorityParam, TenantID: tenantID,
 	})
 	if err != nil {
 		return domain.GroupTargetBinding{}, err
 	}
-	return groupTargetBindingFromRow(uuidToString(row.ID), uuidToString(row.GroupID), row.TargetKind, uuidToString(row.TargetID), row.Status, row.CreatedAt.Time, row.UpdatedAt.Time), nil
+	return groupTargetBindingFromRow(uuidToString(row.ID), uuidToString(row.GroupID), row.TargetKind, uuidToString(row.TargetID), row.Status, row.Priority, row.CreatedAt.Time, row.UpdatedAt.Time), nil
 }
 
 func (r *GroupRepo) DeleteGroupTarget(ctx context.Context, tenantID, id string) error {

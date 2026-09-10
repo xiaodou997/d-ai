@@ -90,7 +90,10 @@ type GroupClientSurfaceWrite struct {
 type GroupTargetWrite struct {
 	TargetKind TargetKind
 	TargetID   string
-	Status     Status
+	// Priority 是同组内人工优先级，越小越优先。nil = 新建时取默认 100 /
+	// 更新时保留原值（partial update 语义）。
+	Priority *int32
+	Status   Status
 }
 
 // GroupTargetBatchWrite describes the complete desired target set for a group.

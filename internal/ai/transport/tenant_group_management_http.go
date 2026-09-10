@@ -1,6 +1,10 @@
 package transport
 
-import "github.com/danielgtaylor/huma/v2"
+import (
+	"github.com/danielgtaylor/huma/v2"
+
+	"xiaodou/dai/internal/ai/routing"
+)
 
 // TenantGroupManagementHTTPDeps is the dependency boundary for tenant-owned
 // groups, dispatch rules, upstream targets, user bindings and group transfer.
@@ -15,6 +19,7 @@ type TenantGroupManagementHTTPDeps struct {
 	TenantPriceBooks TenantPriceBookManager
 	GroupTransfer    GroupTransferManager
 	AdminAudit       AdminAuditRecorder
+	RuntimeHealth    routing.HealthTracker
 }
 
 // RegisterTenantGroupManagement owns the tenant-user authenticated commercial

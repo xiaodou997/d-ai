@@ -23,6 +23,11 @@ export type UsageStatsDTO = Schemas["UsageStatsDTO"];
 export type UsageLogDetailDTO = Schemas["UsageLogDetailDTO"] & UsageSettlementStateFields;
 export interface UsageAttemptDetail {
   route_id?: string;
+  group_id?: string;
+  route_policy?: string;
+  group_rank?: number;
+  target_priority?: number;
+  selection_reason?: string;
   provider_code?: string;
   upstream_model?: string;
   endpoint_id?: string;
@@ -30,6 +35,7 @@ export interface UsageAttemptDetail {
   credential_id?: string;
   http_status?: number;
   outcome: string;
+  skipped?: boolean;
   latency_ms?: number;
   first_byte_ms?: number;
   total_ms?: number;
@@ -115,6 +121,11 @@ export function normalizeUsageAttempts(value: unknown): UsageAttemptDetail[] {
   if (!Array.isArray(value)) return [];
   return value.filter(isRecord).map((item) => ({
     route_id: optionalString(item.route_id),
+    group_id: optionalString(item.group_id),
+    route_policy: optionalString(item.route_policy),
+    group_rank: optionalNumber(item.group_rank),
+    target_priority: optionalNumber(item.priority) ?? optionalNumber(item.target_priority),
+    selection_reason: optionalString(item.selection_reason),
     provider_code: optionalString(item.provider_code),
     upstream_model: optionalString(item.upstream_model),
     endpoint_id: optionalString(item.endpoint_id),
@@ -122,6 +133,7 @@ export function normalizeUsageAttempts(value: unknown): UsageAttemptDetail[] {
     credential_id: optionalString(item.credential_id),
     http_status: optionalNumber(item.http_status),
     outcome: optionalString(item.outcome) || "unknown",
+    skipped: typeof item.skipped === "boolean" ? item.skipped : undefined,
     latency_ms: optionalNumber(item.latency_ms),
     first_byte_ms: optionalNumber(item.first_byte_ms),
     total_ms: optionalNumber(item.total_ms),

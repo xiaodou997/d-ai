@@ -3,6 +3,7 @@ package serving
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -507,8 +508,9 @@ func TestExecuteDirect401FailsOverToNextRoute(t *testing.T) {
 	if got, want := attemptRouteIDs(req.Attempts), []string{"bad-key", "good-key"}; !slices.Equal(got, want) {
 		t.Fatalf("attempt routes = %v, want %v", got, want)
 	}
-	if !slices.Contains(health.failures, "account-bad") {
-		t.Fatalf("health failures = %v, want rejected direct account", health.failures)
+	// 401 不再计入熔断计数（去双重惩罚），仅走 MarkAccountInvalid 单一惩罚路径
+	if len(health.failures) != 0 {
+		t.Fatalf("health failures = %v, want empty (401 is single-punishment via MarkAccountInvalid only)", health.failures)
 	}
 	if got, want := accountState.invalidIDs, []string{"account-bad"}; !slices.Equal(got, want) {
 		t.Fatalf("invalid accounts = %v, want %v", got, want)
@@ -533,8 +535,9 @@ func TestExecuteDirect403FailsOverToNextRoute(t *testing.T) {
 	if got, want := attemptRouteIDs(req.Attempts), []string{"forbidden", "fallback"}; !slices.Equal(got, want) {
 		t.Fatalf("attempt routes = %v, want %v", got, want)
 	}
-	if !slices.Contains(health.failures, "account-forbidden") {
-		t.Fatalf("health failures = %v, want account-forbidden", health.failures)
+	// 403 与 401 一致，不再计入熔断计数，仅走 MarkAccountInvalid 单一惩罚路径
+	if len(health.failures) != 0 {
+		t.Fatalf("health failures = %v, want empty (403 is single-punishment via MarkAccountInvalid only)", health.failures)
 	}
 	if got, want := accountState.invalidIDs, []string{"account-forbidden"}; !slices.Equal(got, want) {
 		t.Fatalf("invalid accounts = %v, want %v", got, want)
@@ -597,13 +600,129 @@ func TestExecuteReturnsNoHealthyRouteWithoutCallingTransport(t *testing.T) {
 		{RouteID: "route-1", EndpointID: "account-1", ModelCode: "public-model", Protocol: domain.ProtocolOpenAIChat, Timeouts: domain.DefaultRouteTimeouts(domain.CapabilityChat)},
 		{RouteID: "route-2", EndpointID: "account-2", ModelCode: "public-model", Protocol: domain.ProtocolOpenAIChat, Timeouts: domain.DefaultRouteTimeouts(domain.CapabilityChat)},
 	})
-	err := (&ExecuteStep{Transport: transport, Bridge: testProtocolBridge{}, Health: health}).Execute(context.Background(), req)
+	step := &ExecuteStep{Transport: transport, Bridge: testProtocolBridge{}, Health: health}
+	err := step.Execute(context.Background(), req)
 	var apiErr *APIError
 	if !errors.As(err, &apiErr) || apiErr.Status != http.StatusServiceUnavailable || apiErr.Code != "no_healthy_route" {
 		t.Fatalf("Execute error = %v, want 503 no_healthy_route", err)
 	}
 	if transport.calls != 0 {
 		t.Fatalf("transport calls = %d, want 0", transport.calls)
+	}
+	// Every blocked candidate must be captured on req.SkippedAttempts with
+	// outcome=circuit_open so the admin trail shows WHY none could run, while
+	// req.Attempts stays empty — preserving the retry-budget / X-Route-Trace
+	// invariant that Attempts only carries real transport calls.
+	if len(req.Attempts) != 0 {
+		t.Fatalf("Attempts = %d, want 0 (breaker-skipped candidates must not count)", len(req.Attempts))
+	}
+	if len(req.SkippedAttempts) != 2 {
+		t.Fatalf("SkippedAttempts = %d, want 2", len(req.SkippedAttempts))
+	}
+	for _, s := range req.SkippedAttempts {
+		if s.Outcome != ResultCircuitOpen {
+			t.Fatalf("skipped outcome = %v, want circuit_open", s.Outcome)
+		}
+	}
+}
+
+func TestExecuteSkipsBeyondAttemptCapToHealthyRoute(t *testing.T) {
+	for _, fallbackHealthy := range []bool{true, false} {
+		t.Run(fmt.Sprint(fallbackHealthy), func(t *testing.T) {
+			candidates := make([]*domain.RouteCandidate, 0, maxUpstreamAttempts+1)
+			health := &recordingHealth{blocked: map[string]bool{}}
+			for i := 0; i <= maxUpstreamAttempts; i++ {
+				id := fmt.Sprintf("endpoint-%d", i)
+				candidates = append(candidates, &domain.RouteCandidate{
+					RouteID: id, EndpointID: id, TargetPriority: i, GroupID: "group-1",
+					ModelCode: "public-model", UpstreamModel: "upstream-model", Protocol: domain.ProtocolOpenAIChat,
+					Timeouts: domain.DefaultRouteTimeouts(domain.CapabilityChat),
+				})
+				health.blocked[id] = i < maxUpstreamAttempts || !fallbackHealthy
+			}
+			transport := &sequenceTransport{responses: []*UpstreamResponse{jsonResp(`{"choices":[{"message":{"content":"ok"}}]}`)}}
+			req := executeTestRequest(httptest.NewRecorder(), candidates)
+			err := (&ExecuteStep{Transport: transport, Bridge: testProtocolBridge{}, Health: health}).Execute(context.Background(), req)
+			if fallbackHealthy {
+				if err != nil || transport.calls != 1 || len(req.SkippedAttempts) != maxUpstreamAttempts {
+					t.Fatalf("healthy fallback: calls=%d skips=%d err=%v", transport.calls, len(req.SkippedAttempts), err)
+				}
+				if req.Attempts[0].RouteID != candidates[maxUpstreamAttempts].RouteID {
+					t.Fatalf("attempted wrong route: %+v", req.Attempts)
+				}
+			} else {
+				var apiErr *APIError
+				if !errors.As(err, &apiErr) || apiErr.Code != "no_healthy_route" || transport.calls != 0 || hasUnusedCandidate(req) {
+					t.Fatalf("all-open plan: calls=%d skips=%d err=%v", transport.calls, len(req.SkippedAttempts), err)
+				}
+			}
+		})
+	}
+}
+
+func TestExecutePersistsInterleavedAttemptOrder(t *testing.T) {
+	candidates := make([]*domain.RouteCandidate, 0, 5)
+	for i := 0; i < 5; i++ {
+		id := fmt.Sprintf("route-%d", i)
+		candidates = append(candidates, &domain.RouteCandidate{
+			RouteID: id, EndpointID: id, GroupID: "group-1", TargetPriority: i,
+			ModelCode: "public-model", UpstreamModel: "upstream-model", Protocol: domain.ProtocolOpenAIChat,
+			Timeouts: domain.DefaultRouteTimeouts(domain.CapabilityChat),
+		})
+	}
+	health := &recordingHealth{blocked: map[string]bool{"route-1": true, "route-3": true}}
+	transport := &sequenceTransport{responses: []*UpstreamResponse{
+		{StatusCode: http.StatusBadGateway, Body: io.NopCloser(strings.NewReader(`{"error":"failed"}`))},
+		{StatusCode: http.StatusBadGateway, Body: io.NopCloser(strings.NewReader(`{"error":"failed"}`))},
+		jsonResp(`{"choices":[{"message":{"content":"ok"}}]}`),
+	}}
+	req := executeTestRequest(httptest.NewRecorder(), candidates)
+	req.PlanningSkipped = []AttemptRecord{{RouteID: "rejected", Outcome: ResultRejected}}
+	if err := (&ExecuteStep{Transport: transport, Bridge: testProtocolBridge{}, Health: health}).Execute(context.Background(), req); err != nil {
+		t.Fatal(err)
+	}
+	var rows []attemptDetailDTO
+	if err := json.Unmarshal(BuildAuditPayload(req).AttemptsDetail, &rows); err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 6 || rows[0].RouteID != "rejected" || !rows[0].Skipped {
+		t.Fatalf("planning rejection must precede execution: %+v", rows)
+	}
+	for i, candidate := range candidates {
+		if rows[i+1].RouteID != candidate.RouteID || rows[i+1].Skipped != health.blocked[candidate.EndpointID] {
+			t.Fatalf("event %d out of order: %+v", i, rows)
+		}
+	}
+	if len(req.Attempts) != 3 || req.Attempts[2].Outcome != ResultSuccess {
+		t.Fatalf("transport attempts = %+v", req.Attempts)
+	}
+}
+
+// A mixed fate: some candidates are circuit-open skipped, the rest actually
+// reach transport and fail. The breaker stays out of the retry loop, so the
+// response is 502 all_routes_failed with both slices populated.
+func TestExecuteSkipsOpenCircuitButReportsRealFailures(t *testing.T) {
+	transport := &sequenceTransport{responses: []*UpstreamResponse{
+		{StatusCode: http.StatusBadGateway, Headers: http.Header{}, Body: io.NopCloser(strings.NewReader(`{"error":"one"}`))},
+	}}
+	health := &recordingHealth{blocked: map[string]bool{"account-2": true}}
+	req := executeTestRequest(httptest.NewRecorder(), []*domain.RouteCandidate{
+		{RouteID: "route-1", EndpointID: "account-1", TargetPriority: 10, GroupID: "g1", GroupRank: 0, ModelCode: "public-model", UpstreamModel: "upstream-model", Protocol: domain.ProtocolOpenAIChat, Timeouts: domain.DefaultRouteTimeouts(domain.CapabilityChat)},
+		{RouteID: "route-2", EndpointID: "account-2", TargetPriority: 50, GroupID: "g1", GroupRank: 0, ModelCode: "public-model", Protocol: domain.ProtocolOpenAIChat, Timeouts: domain.DefaultRouteTimeouts(domain.CapabilityChat)},
+	})
+	err := (&ExecuteStep{Transport: transport, Bridge: testProtocolBridge{}, Health: health}).Execute(context.Background(), req)
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) || apiErr.Code != "all_routes_failed" {
+		t.Fatalf("Execute error = %v, want all_routes_failed", err)
+	}
+	if len(req.Attempts) != 1 {
+		t.Fatalf("Attempts = %d, want 1 (only route-1 reached transport)", len(req.Attempts))
+	}
+	if len(req.SkippedAttempts) != 1 {
+		t.Fatalf("SkippedAttempts = %d, want 1 (route-2 skipped open circuit)", len(req.SkippedAttempts))
+	}
+	if req.SkippedAttempts[0].RouteID != "route-2" || req.SkippedAttempts[0].Outcome != ResultCircuitOpen {
+		t.Fatalf("skipped = %+v, want route-2/circuit_open", req.SkippedAttempts[0])
 	}
 }
 

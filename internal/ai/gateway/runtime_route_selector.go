@@ -79,6 +79,10 @@ func (s *RuntimeRouteSelector) SelectCandidates(ctx context.Context, req *servin
 		plan, err = s.planner.Resolve(ctx, *subject, planReq)
 	}
 	if err != nil {
+		var noRoute *coreruntime.NoRouteError
+		if errors.As(err, &noRoute) {
+			req.PlanningSkipped = planRejectedToRecords(noRoute.Rejections)
+		}
 		s.logRouteFailure(req, subject, err)
 		return nil, routePlanningError(err)
 	}
@@ -91,7 +95,41 @@ func (s *RuntimeRouteSelector) SelectCandidates(ctx context.Context, req *servin
 		}
 		candidates = append(candidates, candidate)
 	}
+	// Persist planner verdicts (resolver rejected these targets before they
+	// could become candidates / touch a slot). They surface in attempts_detail
+	// as outcome=rejected + Skipped=true, giving operators the WHY without
+	// polluting req.Attempts / the retry budget / X-Route-Trace.
+	req.PlanningSkipped = planRejectedToRecords(plan.Rejections)
 	return candidates, nil
+}
+
+// planRejectedToRecords planner 阶段被拒绝的目标转为 serving AttemptRecord，
+// 仅作为 admin-only attempts_detail 的观察轨迹写入 req.PlanningSkipped。
+// 不写入 req.Attempts，因此不影响重试预算 / 429 退避 / X-Route-Trace。
+func planRejectedToRecords(rejections []coreruntime.RejectedTarget) []serving.AttemptRecord {
+	if len(rejections) == 0 {
+		return nil
+	}
+	records := make([]serving.AttemptRecord, 0, len(rejections))
+	for _, r := range rejections {
+		records = append(records, serving.AttemptRecord{
+			RouteID:         r.RouteID,
+			GroupID:         r.Group.Group.ID,
+			RoutePolicy:     string(r.Group.Group.RoutePolicy),
+			GroupRank:       r.GroupRank,
+			TargetPriority:  int(r.Target.Priority),
+			SelectionReason: "rejected:" + string(r.Code),
+			TargetID:        r.Target.TargetID,
+			ProviderCode:    string(r.Target.TargetKind),
+			EndpointID:      r.Target.TargetID,
+			UpstreamModel:   r.ModelID,
+			HTTPStatus:      0,
+			Outcome:         serving.ResultRejected,
+			ErrorMsg:        string(r.Code) + ": " + r.Detail,
+			Score:           0,
+		})
+	}
+	return records
 }
 
 func plannedCandidate(planned coreruntime.PlannedTarget, req coreruntime.Request) (*domain.RouteCandidate, error) {
@@ -110,6 +148,7 @@ func plannedCandidate(planned coreruntime.PlannedTarget, req coreruntime.Request
 	cand := &domain.RouteCandidate{
 		RouteID:                      planned.RouteID,
 		GroupRank:                    planned.GroupRank,
+		TargetPriority:               planned.TargetPriority,
 		SupportsStream:               true,
 		ModelCode:                    planned.ModelID,
 		CapabilityType:               runtimecompat.CapabilityFromCore(req.Capability),

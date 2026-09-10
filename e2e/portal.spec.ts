@@ -324,6 +324,60 @@ async function loginAs(page: Page, role: PortalRole, redirect = "/overview", opt
   return state;
 }
 
+test("tenant group priority edits persist after reload", async ({ page }, testInfo) => {
+  test.skip(!useMockApi, "Uses isolated group fixtures");
+  const errors = watchBrowserErrors(page);
+  await loginAs(page, roles[2]);
+  await expect(page).toHaveURL(new RegExp(`${escapeRegExp(roles[2].defaultPath)}$`));
+  let priority = 100;
+  let version = 7;
+  const target = () => ({
+    id: "binding-1", group_id: "priority-group", account_id: "account-1", target_type: "account",
+    account_name: "Primary", api_formats: ["openai_chat"], status: "active", available: true,
+    priority, health_state: "open"
+  });
+  await page.route(/\/api\/v1\/tenants\/me\/groups\/priority-group(?:\/[^?]*)?(?:\?.*)?$/, async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith("/targets")) {
+      if (route.request().method() === "PUT") {
+        const body = route.request().postDataJSON();
+        expect(body.expected_version).toBe(version);
+        expect(body.targets).toEqual([{ account_id: "account-1", status: "active", priority: 10 }]);
+        priority = body.targets[0].priority;
+        version++;
+      }
+      await fulfillJson(route, { items: [target()], total: 1, route_policy_version: version });
+    } else if (path.endsWith("/client-surface-policy")) {
+      await fulfillJson(route, { group_id: "priority-group", mode: "all", allowed_surfaces: [] });
+    } else if (path.endsWith("/priority-group")) {
+      await fulfillJson(route, {
+        id: "priority-group", name: "Priority routing", retail_price_book_id: "book-1", retail_price_book_name: "Standard",
+        status: "active", default_user_multiplier: 1, user_default_visible: true, sort_order: 0,
+        allow_protocol_conversion: false, route_policy: "balanced", route_policy_version: version
+      });
+    } else {
+      await fulfillJson(route, { items: [], total: 0 });
+    }
+  });
+  await page.route("**/api/v1/tenants/me/upstream-resources", (route) => fulfillJson(route, {
+    items: [{ id: "account-1", resource_kind: "direct_upstream", name: "Primary", api_formats: ["openai_chat"], tenant_multiplier: 1,
+      models: [{ model_code: "chat-model", capability_type: "chat", availability: "available" }] }], total: 1
+  }));
+  await page.goto("/tenant/ai/models/groups/priority-group?tab=targets");
+  const input = page.getByRole("spinbutton", { name: "Primary优先级" });
+  await expect(input).toHaveValue("100");
+  await input.fill("10");
+  await input.press("Tab");
+  await expect.poll(() => priority).toBe(10);
+  await expect(input).toBeEnabled();
+  await page.reload();
+  await expect(input).toHaveValue("10");
+  await expect(page.locator(".targets-panel").getByText("熔断", { exact: true }).last()).toBeVisible();
+  await input.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath("group-priority.png"), fullPage: true });
+  expect(errors).toEqual([]);
+});
+
 for (const role of roles) {
   test(`${role.userType}: login resolves the correct shell and authorized menu`, async ({ page }) => {
     const errors = watchBrowserErrors(page);

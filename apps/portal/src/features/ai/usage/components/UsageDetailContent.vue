@@ -144,8 +144,39 @@ function timestampLabel(value?: number | null) {
   return value ? formatTimestamp(value) : "—";
 }
 
+function attemptPriorityLabel(value?: number | null) {
+  return value != null ? String(value) : "—";
+}
+
+function attemptGroupRankLabel(value?: number | null) {
+  return value != null ? String(value) : "—";
+}
+
 function attemptOutcomeLabel(value: string) {
-  return value === "success" ? "成功" : value === "failed" ? "失败" : value === "canceled" ? "已取消" : value || "未知";
+  const map: Record<string, string> = {
+    success: "成功",
+    failed: "失败",
+    canceled: "已取消",
+    circuit_open: "熔断跳过",
+    rejected: "计划拒绝",
+    unknown: "未知"
+  };
+  return map[value] || value || "未知";
+}
+
+function attemptOutcomeTone(value: string) {
+  switch (value) {
+    case "success":
+      return "is-success";
+    case "circuit_open":
+    case "rejected":
+      return "is-skipped";
+    case "failed":
+    case "canceled":
+      return "is-danger";
+    default:
+      return "is-unknown";
+  }
 }
 
 const timingSource = computed(() => ({
@@ -498,19 +529,32 @@ function copyActivePayload() {
         </button>
         <el-table v-if="attemptsOpen" :data="attempts" size="small" class="attempts-table">
           <el-table-column label="#" type="index" width="44" />
+          <el-table-column label="分组" prop="group_id" min-width="120" show-overflow-tooltip>
+            <template #default="{ row }">{{ row.group_id || "—" }}</template>
+          </el-table-column>
+          <el-table-column label="分组序" prop="group_rank" width="72" align="right">
+            <template #default="{ row }">{{ attemptGroupRankLabel(row.group_rank) }}</template>
+          </el-table-column>
+          <el-table-column label="优先级" prop="target_priority" width="72" align="right">
+            <template #default="{ row }">{{ attemptPriorityLabel(row.target_priority) }}</template>
+          </el-table-column>
           <el-table-column label="供应商" prop="provider_code" min-width="110">
             <template #default="{ row }">{{ row.provider_code || "—" }}</template>
           </el-table-column>
           <el-table-column label="上游模型" prop="upstream_model" min-width="160" show-overflow-tooltip>
             <template #default="{ row }">{{ row.upstream_model || "—" }}</template>
           </el-table-column>
-          <el-table-column label="结果" width="80">
+          <el-table-column label="结果" width="100">
             <template #default="{ row }">
-              <span :class="['attempt-result', row.outcome === 'success' ? 'is-success' : 'is-danger']">{{ attemptOutcomeLabel(row.outcome) }}</span>
+              <span v-if="row.skipped" class="attempt-skipped-mark" title="该候选未实际调用上游（计划阶段被拒绝或熔断器已断开）">⤳ 跳过</span>
+              <span v-else :class="['attempt-result', attemptOutcomeTone(row.outcome)]">{{ attemptOutcomeLabel(row.outcome) }}</span>
             </template>
           </el-table-column>
+          <el-table-column label="选择原因" prop="selection_reason" min-width="160" show-overflow-tooltip>
+            <template #default="{ row }">{{ row.selection_reason || "—" }}</template>
+          </el-table-column>
           <el-table-column label="总耗时" width="92" align="right">
-            <template #default="{ row }">{{ durationLabel(row.total_ms) }}</template>
+            <template #default="{ row }">{{ row.skipped ? "—" : durationLabel(row.total_ms) }}</template>
           </el-table-column>
         </el-table>
       </PortalContentCard>
@@ -1034,6 +1078,16 @@ function copyActivePayload() {
 
 .attempt-result.is-danger {
   color: var(--ds-danger);
+}
+
+.attempt-result.is-skipped {
+  color: var(--ds-muted);
+}
+
+.attempt-skipped-mark {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ds-muted);
 }
 
 .failure-card :deep(.portal-content-card__body--md) {

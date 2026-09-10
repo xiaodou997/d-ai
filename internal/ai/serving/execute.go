@@ -188,8 +188,9 @@ func (s *ExecuteStep) Execute(ctx context.Context, req *Request) error {
 		prepared     corebridge.PreparedRequest
 		bodyBuiltFor string
 		lastErr      error
+		backoffAfter int
 	)
-	for attempt := 1; attempt <= budget.MaxAttempts; attempt++ {
+	for len(req.Attempts) < budget.MaxAttempts {
 		if err := requestContextError(ctx, executionCtx, req); err != nil {
 			return err
 		}
@@ -227,8 +228,9 @@ func (s *ExecuteStep) Execute(ctx context.Context, req *Request) error {
 
 		// 429 backoff: applies on retry only and only when the previous
 		// attempt was rate-limited.
-		if attempt > 1 && lastAttemptWas(req, ResultRateLimited) {
-			if delay := budget.BackoffFor(attempt); delay > 0 {
+		if len(req.Attempts) > backoffAfter && lastAttemptWas(req, ResultRateLimited) {
+			backoffAfter = len(req.Attempts)
+			if delay := budget.BackoffFor(len(req.Attempts) + 1); delay > 0 {
 				select {
 				case <-time.After(delay):
 				case <-executionCtx.Done():
@@ -272,6 +274,7 @@ func (s *ExecuteStep) Execute(ctx context.Context, req *Request) error {
 		// IsBlocked atomically claims a HALF_OPEN probe. Keep it immediately
 		// before Transport.Do so local preparation failures cannot strand the slot.
 		if s.candidateBlocked(cand) {
+			req.recordSkippedCandidate(cand, "circuit_open")
 			exhaustPhysicalTarget(req, cand)
 			req.SelectedCredential = nil
 			continue
@@ -322,6 +325,10 @@ func (s *ExecuteStep) Execute(ctx context.Context, req *Request) error {
 				req.ErrorMessage = apiErr.Message
 			}
 			return lastErr
+		}
+		if len(req.SkippedAttempts) > 0 {
+			zap.L().Info("no healthy upstream route: every candidate skipped before reaching transport",
+				requestLogFields(req, zap.Int("skipped_candidates", len(req.SkippedAttempts)))...)
 		}
 		req.ErrorCode = "no_healthy_route"
 		req.ErrorMessage = "all upstream routes are temporarily unavailable"
@@ -376,7 +383,39 @@ func (s *ExecuteStep) relay(dc *deadlineController, req *Request, upResp *Upstre
 	return s.executeSync(dc, req, upResp, req.Envelope.W)
 }
 
-// recordAttempt appends a structured trace record for this attempt.
+// recordSkippedCandidate appends a Synthetic AttemptRecord for a candidate that
+// was filtered out before any upstream transport call (e.g. circuit breaker
+// open). It carries observability fields + outcome=circuit_open but is stored
+// on req.SkippedAttempts — never req.Attempts — so it stays out of the retry
+// budget, the X-Route-Trace header, and 429 backoff bookkeeping.
+func (req *Request) recordSkippedCandidate(cand *domain.RouteCandidate, reason string) {
+	if req == nil || cand == nil {
+		return
+	}
+	targetID := cand.EndpointID
+	if cand.IsPoolRoute() {
+		targetID = cand.PoolID
+	}
+	skipped := AttemptRecord{
+		Sequence:        len(req.Attempts) + len(req.SkippedAttempts) + 1,
+		RouteID:         cand.RouteID,
+		GroupID:         cand.GroupID,
+		RoutePolicy:     cand.RoutePolicy,
+		GroupRank:       cand.GroupRank,
+		TargetPriority:  cand.TargetPriority,
+		SelectionReason: req.SelectionReason,
+		TargetID:        targetID,
+		ProviderCode:    cand.ProviderCode,
+		EndpointID:      cand.EndpointID,
+		PoolID:          cand.PoolID,
+		UpstreamModel:   cand.EffectiveUpstreamModel(),
+		HTTPStatus:      0,
+		Outcome:         ResultCircuitOpen,
+		ErrorMsg:        reason,
+		Score:           0,
+	}
+	req.SkippedAttempts = append(req.SkippedAttempts, skipped)
+}
 func (s *ExecuteStep) recordAttempt(req *Request, cand *domain.RouteCandidate, outcome Outcome, attemptStartedAt, transportStartedAt time.Time, latencyMs int, score float64) {
 	targetID := cand.EndpointID
 	credentialID := ""
@@ -399,10 +438,12 @@ func (s *ExecuteStep) recordAttempt(req *Request, cand *domain.RouteCandidate, o
 		errMsg = outcome.Err.Error()
 	}
 	req.Attempts = append(req.Attempts, AttemptRecord{
+		Sequence:           len(req.Attempts) + len(req.SkippedAttempts) + 1,
 		RouteID:            cand.RouteID,
 		GroupID:            cand.GroupID,
 		RoutePolicy:        cand.RoutePolicy,
 		GroupRank:          cand.GroupRank,
+		TargetPriority:     cand.TargetPriority,
 		SelectionReason:    req.SelectionReason,
 		TargetID:           targetID,
 		ProviderCode:       cand.ProviderCode,
@@ -421,9 +462,9 @@ func (s *ExecuteStep) recordAttempt(req *Request, cand *domain.RouteCandidate, o
 }
 
 // notifyHealth records the outcome with the HealthTracker and the OAuth pool.
-// 429 is intentionally excluded from health failure accounting (see
-// CountsAsHealthFailure). Both deployment and credential targets share the
-// same HealthTracker interface; TargetKind distinguishes them in Snapshot.
+// 401/403 不计入熔断计数：单一惩罚路径（execute_attempt.go 的 case DecisionRetry
+// 分支已即时 MarkAccountInvalid）已处理，若再累加到熔断计数会导致凭据失效与
+// 半开恢复语义混淆。429 同样排除（见 CountsAsHealthFailure）。
 func (s *ExecuteStep) notifyHealth(ctx context.Context, req *Request, cand *domain.RouteCandidate, outcome Outcome) {
 	if s.Health != nil {
 		targetID, kind := healthTarget(cand)
@@ -431,7 +472,7 @@ func (s *ExecuteStep) notifyHealth(ctx context.Context, req *Request, cand *doma
 		case ResultSuccess:
 			s.Health.RecordSuccess(targetID, kind)
 		default:
-			if outcome.CountsAsHealthFailure() || (!cand.IsPoolRoute() && outcome.Status == ResultUnauthorized) {
+			if outcome.CountsAsHealthFailure() {
 				s.Health.RecordFailure(targetID, kind)
 			}
 		}

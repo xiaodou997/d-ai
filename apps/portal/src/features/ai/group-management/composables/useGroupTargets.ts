@@ -64,8 +64,9 @@ export function useGroupTargets(options: UseGroupTargetsOptions) {
 
   const bindingByKey = computed(() => new Map(bindings.value.map((binding) => [bindingKey(binding), binding])));
   const selectedSet = computed(() => new Set(selectedKeys.value));
+  const DEFAULT_TARGET_PRIORITY = 100;
   const rows = computed<GroupTargetRow[]>(() => {
-    const options = new Map<string, Omit<GroupTargetRow, keyof GroupTargetDraft | "selected" | "change">>();
+    const options = new Map<string, Omit<GroupTargetRow, "status" | "selected" | "change">>();
     for (const resource of resources.value) {
       const key = resourceKey(resource.resource_kind, resource.id);
       const availableModels = resourceAvailableModelCount(resource);
@@ -83,7 +84,9 @@ export function useGroupTargets(options: UseGroupTargetsOptions) {
         linked,
         selectable: availableModels > 0 || linked,
         resourceState: availableModels > 0 ? "available" : "unpriced",
-        bindingUnavailableReason: bindingUnavailableReason(binding)
+        bindingUnavailableReason: bindingUnavailableReason(binding),
+        priority: binding?.priority ?? DEFAULT_TARGET_PRIORITY,
+        healthState: binding?.health_state ?? "unknown"
       });
     }
     for (const binding of bindings.value) {
@@ -100,7 +103,9 @@ export function useGroupTargets(options: UseGroupTargetsOptions) {
         linked: true,
         selectable: true,
         resourceState: "missing",
-        bindingUnavailableReason: bindingUnavailableReason(binding) ?? "missing"
+        bindingUnavailableReason: bindingUnavailableReason(binding) ?? "missing",
+        priority: binding.priority ?? DEFAULT_TARGET_PRIORITY,
+        healthState: binding.health_state ?? "unknown"
       });
     }
     return [...options.values()].map((option) => {
@@ -108,12 +113,14 @@ export function useGroupTargets(options: UseGroupTargetsOptions) {
       const selected = selectedSet.value.has(option.key);
       const draft = drafts.value[option.key] || { status: "active" as GroupTargetStatus };
       let change: GroupTargetChange | null = null;
+      const draftPriority = draft.priority ?? option.priority;
       if (option.linked && !selected) change = "remove";
       else if (!option.linked && selected) change = "add";
-      else if (binding && selected && binding.status !== draft.status) change = "update";
-      return { ...option, ...draft, selected, change };
+      else if (binding && selected && (binding.status !== draft.status || (binding.priority ?? DEFAULT_TARGET_PRIORITY) !== draftPriority)) change = "update";
+      return { ...option, ...draft, selected, change, priority: draftPriority };
     }).sort((left, right) => {
       if (left.linked !== right.linked) return left.linked ? -1 : 1;
+      if (left.priority !== right.priority) return left.priority - right.priority;
       if (left.kind !== right.kind) return left.kind.localeCompare(right.kind);
       return left.name.localeCompare(right.name, "zh-CN");
     });
@@ -126,7 +133,8 @@ export function useGroupTargets(options: UseGroupTargetsOptions) {
   function resetDrafts(nextBindings: TenantAiGroupTarget[]) {
     selectedKeys.value = nextBindings.map(bindingKey);
     drafts.value = Object.fromEntries(nextBindings.map((binding) => [bindingKey(binding), {
-      status: binding.status
+      status: binding.status,
+      priority: binding.priority ?? DEFAULT_TARGET_PRIORITY
     }]));
   }
 
@@ -166,7 +174,7 @@ export function useGroupTargets(options: UseGroupTargetsOptions) {
     if (selected) {
       next.add(key);
       if (!drafts.value[key]) {
-        drafts.value = { ...drafts.value, [key]: { status: "active" } };
+        drafts.value = { ...drafts.value, [key]: { status: "active", priority: row.priority } };
       }
     } else next.delete(key);
     selectedKeys.value = [...next];
@@ -209,7 +217,8 @@ export function useGroupTargets(options: UseGroupTargetsOptions) {
           const removedCount = removals.value.length;
           const desiredTargets = rows.value.filter((row) => row.selected).map((row) => ({
             ...(row.kind === "direct_upstream" ? { account_id: row.targetId } : { credential_pool_id: row.targetId }),
-            status: row.status
+            status: row.status,
+            priority: row.priority
           }));
           const response = await api.replace(groupId, {
             expected_version: routePolicyVersion.value,
@@ -241,13 +250,15 @@ export function useGroupTargets(options: UseGroupTargetsOptions) {
           if (command.action === "add") {
             const saved = await api.add(groupId, {
               ...(command.row.kind === "direct_upstream" ? { account_id: command.row.targetId } : { credential_pool_id: command.row.targetId }),
-              status: command.row.status
+              status: command.row.status,
+              priority: command.row.priority
             });
             applySavedBinding(saved);
             result.added++;
           } else if (command.action === "update" && binding) {
             const saved = await api.update(groupId, binding.id, {
-              status: command.row.status
+              status: command.row.status,
+              priority: command.row.priority
             });
             applySavedBinding(saved);
             result.updated++;

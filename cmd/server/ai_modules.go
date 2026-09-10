@@ -497,6 +497,7 @@ func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisCl
 				TenantPriceBooks: priceBookSvc,
 				GroupTransfer:    groupTransferSvc,
 				AdminAudit:       auditSvc,
+				RuntimeHealth:    healthTracker,
 				BanChecker:       banChecker,
 			},
 			APIKeyManagement: transport.AIAPIKeyManagementHTTPDeps{

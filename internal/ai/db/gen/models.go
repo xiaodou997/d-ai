@@ -291,6 +291,7 @@ type AiGroupTarget struct {
 	GroupID    pgtype.UUID        `json:"group_id"`
 	TargetKind string             `json:"target_kind"`
 	TargetID   pgtype.UUID        `json:"target_id"`
+	Priority   int32              `json:"priority"`
 	Status     string             `json:"status"`
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`

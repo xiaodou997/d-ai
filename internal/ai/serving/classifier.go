@@ -22,6 +22,8 @@ const (
 	ResultTimeout      // ctx deadline exceeded / explicit timeout
 	ResultNetwork      // transport-level error (DNS / connection refused / TLS)
 	ResultCanceled     // caller context ended; never retry or penalize upstream health
+	ResultCircuitOpen  // candidate skipped: circuit breaker open, never reached transport
+	ResultRejected     // candidate skipped by planner/binder verdict, never reached transport
 )
 
 // String returns a short human-readable label for the status.
@@ -43,6 +45,10 @@ func (s ResultStatus) String() string {
 		return "network_error"
 	case ResultCanceled:
 		return "canceled"
+	case ResultCircuitOpen:
+		return "circuit_open"
+	case ResultRejected:
+		return "rejected"
 	default:
 		return "unknown"
 	}
@@ -143,10 +149,12 @@ func (o Outcome) CountsAsHealthFailure() bool {
 // CredentialID/ErrorMsg must never reach the client — they identify internal
 // upstream accounts and may contain raw transport error text.
 type AttemptRecord struct {
+	Sequence           int `json:"-"` // Request-local order shared by calls and execution skips; planning precedes both.
 	RouteID            string
 	GroupID            string
 	RoutePolicy        string
 	GroupRank          int
+	TargetPriority     int // 分组内人工优先级（越小越优先，100 = 默认平级），用于 attempts_detail 展示
 	SelectionReason    string
 	TargetID           string // deployment_id or credential_id (legacy/opaque; kept for existing consumers)
 	ProviderCode       string

@@ -6985,8 +6985,18 @@ export interface components {
             credential_pool_id?: string;
             fixed_provider_type?: string;
             group_id: string;
+            /**
+             * @description 运行时熔断器状态；unknown 表示该目标暂无健康记录
+             * @enum {string}
+             */
+            health_state: "closed" | "open" | "half_open" | "unknown";
             id: string;
             pool_name?: string;
+            /**
+             * Format: int64
+             * @description 同组内人工优先级，越小越优先；100 = 默认平级
+             */
+            priority: number;
             status: string;
             /** @description account|pool */
             target_type?: string;
@@ -7002,6 +7012,11 @@ export interface components {
              * @example https://example.com/schemas/GroupTargetUpdateRequest.json
              */
             readonly $schema?: string;
+            /**
+             * Format: int32
+             * @description 同组内人工优先级，越小越优先；100 = 默认平级；不传则保留原值
+             */
+            priority?: number;
             /** @enum {string} */
             status?: "active" | "disabled";
         };
@@ -7016,6 +7031,11 @@ export interface components {
             account_id?: string;
             /** @description 凭证池 id；与 account_id 二选一 */
             credential_pool_id?: string;
+            /**
+             * Format: int32
+             * @description 同组内人工优先级，越小越优先；不传则默认 100
+             */
+            priority?: number;
             /** @enum {string} */
             status?: "active" | "disabled";
         };

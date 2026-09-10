@@ -238,6 +238,12 @@ func registerUpstreamAccounts(api huma.API, d UpstreamAccountManagementHTTPDeps)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
+		// admin 主动启/停用账号 → 清理该账号及其所有端点的运行时熔断状态。
+		// 启用：RecordSuccess 清零计数，若半开则直接回 closed；与 connectivity 探测
+		// 触发的同步语义一致。停用：Forget 避免残余状态对新绑定产生误判。
+		if d.RuntimeHealth != nil && d.EndpointManager != nil {
+			reconcileAccountRuntimeHealth(d.RuntimeHealth, d.EndpointManager, a)
+		}
 		return &accountOutput{Body: accountToDTO(a)}, nil
 	})
 
@@ -389,6 +395,22 @@ func syncEndpointRuntimeHealth(health routing.HealthTracker, endpoint domain.Ups
 		return
 	}
 	health.Forget(endpoint.ID)
+}
+
+// reconcileAccountRuntimeHealth 在 admin 启/停用账号后，把该账号下所有端点的
+// 运行时熔断状态同步到与持久化 status 一致：active → RecordSuccess（清零计数 /
+// 半开回 closed），disabled → Forget（避免残余状态对新绑定产生误判）。
+func reconcileAccountRuntimeHealth(health routing.HealthTracker, endpoints UpstreamAccountEndpointManager, a domain.UpstreamAccount) {
+	if health == nil || endpoints == nil {
+		return
+	}
+	items, err := endpoints.ListEndpoints(context.Background(), a.ID)
+	if err != nil {
+		return
+	}
+	for _, ep := range items {
+		syncEndpointRuntimeHealth(health, ep)
+	}
 }
 
 func timeToMillisPtrFromOptional(value *time.Time) *int64 {

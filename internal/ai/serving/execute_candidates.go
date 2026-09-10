@@ -24,13 +24,13 @@ func (s *ExecuteStep) pickCandidate(ctx context.Context, req *Request) (*domain.
 		req.SelectionReason = "sticky"
 		return candidate, 0
 	}
-	// A lower-ranked group is a failover boundary. Within the active group,
-	// protocol conversion preference is the only hard compatibility boundary;
-	// the group route policy chooses among the remaining targets.
-	tier := activeBucketTier(
-		activeGroupTier(req.Candidates, req.UsedCandidates),
-		req.UsedCandidates,
-	)
+	// A lower-ranked group is a failover boundary. Inside the active group the
+	// tenant's manual TargetPriority is the next boundary (smaller = preferred;
+	// default 100 keeps every target a peer); protocol conversion preference
+	// follows, and the group route policy chooses among what remains.
+	groupTier := activeGroupTier(req.Candidates, req.UsedCandidates)
+	priorityTier, manualPriority := activePriorityTier(groupTier, req.UsedCandidates)
+	tier := activeBucketTier(priorityTier, req.UsedCandidates)
 	if len(tier) == 0 {
 		return nil, 0
 	}
@@ -54,6 +54,12 @@ func (s *ExecuteStep) pickCandidate(ctx context.Context, req *Request) (*domain.
 	req.SelectionReason = routeSelectionReason(cand, score, s.Scorer != nil)
 	if len(tier) == 1 && s.Scorer != nil {
 		req.SelectionReason = "single_candidate"
+	}
+	// The active group still carries unused targets at distinct manual
+	// priorities: the tenant's hand-set order decided this attempt, not the
+	// policy scorer (the scorer only breaks ties inside one priority level).
+	if manualPriority {
+		req.SelectionReason = "manual_priority"
 	}
 	return cand, score
 }
@@ -193,6 +199,40 @@ func activeGroupTier(candidates []*domain.RouteCandidate, used map[string]bool) 
 		}
 	}
 	return tier
+}
+
+// activePriorityTier returns the not-yet-used candidates sharing the lowest
+// manual TargetPriority inside the active group tier. The second return value
+// reports whether the group still holds unused targets at more than one
+// priority level: when true, the tenant's hand-set order decided this attempt
+// (the scorer only breaks ties inside one level) and a worse level is reached
+// only after the whole preferred level is exhausted by failover.
+func activePriorityTier(candidates []*domain.RouteCandidate, used map[string]bool) ([]*domain.RouteCandidate, bool) {
+	minPriority := int(^uint(0) >> 1) // max int
+	levels := 0
+	seen := make(map[int]bool, len(candidates))
+	for _, c := range candidates {
+		if c == nil || used[c.RouteID] {
+			continue
+		}
+		if !seen[c.TargetPriority] {
+			seen[c.TargetPriority] = true
+			levels++
+		}
+		if c.TargetPriority < minPriority {
+			minPriority = c.TargetPriority
+		}
+	}
+	if levels == 0 {
+		return nil, false
+	}
+	tier := make([]*domain.RouteCandidate, 0, len(candidates))
+	for _, c := range candidates {
+		if c != nil && !used[c.RouteID] && c.TargetPriority == minPriority {
+			tier = append(tier, c)
+		}
+	}
+	return tier, levels > 1
 }
 
 // activeBucketTier returns the not-yet-used candidates sharing the lowest
