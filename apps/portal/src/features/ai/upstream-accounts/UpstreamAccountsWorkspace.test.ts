@@ -64,6 +64,14 @@ const ElRadioGroupStub = defineComponent({
   template: '<div><slot /></div>'
 })
 
+const ElTableStub = defineComponent({
+  props: { data: { type: Array, default: () => [] } },
+  data() {
+    return { initialData: this.data }
+  },
+  template: '<div><span v-for="row in initialData" :key="row.id" class="table-base-url">{{ row.base_url }}</span><slot /></div>'
+})
+
 const UpstreamModelBindingsPanelStub = defineComponent({
   name: 'UpstreamModelBindingsPanelStub',
   props: { defaultBindingProtocol: { type: String, default: '' } },
@@ -98,7 +106,7 @@ const global = {
     ElSwitch: true,
     ElEmpty: true,
     ElAlert: true,
-    ElTable: SlotStub,
+    ElTable: ElTableStub,
     ElTableColumn: true,
     ElTag: SlotStub,
     ElIcon: SlotStub,
@@ -190,6 +198,57 @@ describe('UpstreamAccountsWorkspace', () => {
     await dialog.findAll('button').find((button) => button.text() === '保存')!.trigger('click')
     await flushPromises()
     expect(api.updateUpstreamAccount.mock.calls[0]![1]).not.toHaveProperty('weight')
+  })
+
+  it('restores and submits the account description when editing', async () => {
+    api.listUpstreamAccounts.mockResolvedValue({
+      items: [{
+        id: 'account-described',
+        name: 'Described account',
+        description: 'Existing description',
+        endpoints: [{ id: 'endpoint-described', api_format: 'openai_responses', base_url: 'https://described.example.com', status: 'active' }],
+        status: 'active'
+      }]
+    })
+    const wrapper = mount(AccountsView, { global })
+    await flushPromises()
+
+    await wrapper.findAll('button').find((button) => button.text() === '编辑账号')!.trigger('click')
+    const dialog = wrapper.get('[data-dialog-title="编辑上游账号"]')
+    const description = dialog.get('input[placeholder="给租户展示的一句话说明（可选）"]')
+    expect((description.element as HTMLInputElement).value).toBe('Existing description')
+
+    await description.setValue('Updated description')
+    await dialog.findAll('button').find((button) => button.text() === '保存')!.trigger('click')
+    await flushPromises()
+
+    expect(api.updateUpstreamAccount).toHaveBeenCalledWith(
+      'account-described',
+      expect.objectContaining({ description: 'Updated description' })
+    )
+  })
+
+  it('remounts the endpoint table so Base URL follows the selected account', async () => {
+    api.listUpstreamAccounts.mockResolvedValue({
+      items: [
+        {
+          id: 'account-a', name: 'Account A', status: 'active',
+          endpoints: [{ id: 'endpoint-a', api_format: 'openai_responses', base_url: 'https://a.example.com', status: 'active' }]
+        },
+        {
+          id: 'account-b', name: 'Account B', status: 'active',
+          endpoints: [{ id: 'endpoint-b', api_format: 'openai_responses', base_url: 'https://b.example.com', status: 'active' }]
+        }
+      ]
+    })
+    const wrapper = mount(AccountsView, { global })
+    await flushPromises()
+
+    expect(wrapper.find('.table-base-url').text()).toBe('https://a.example.com')
+    await wrapper.findAll('.account-item')[1]!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.table-base-url').text()).toBe('https://b.example.com')
   })
 
   it('defaults a new account endpoint to OpenAI Responses', async () => {

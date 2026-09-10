@@ -15,6 +15,7 @@ beforeEach(() => mocks.request.mockReset());
 const account = {
   id: "account-1",
   name: "Primary",
+  description: "Primary upstream account",
   tenant_display_name: "Primary",
   tenant_access_mode: "public",
   endpoints: [{ id: "endpoint-1", account_id: "account-1", api_format: "openai_responses", base_url: "https://api.example.com", auth_scheme: "format_default", extra_headers: {}, status: "active", health_status: "unknown" }],
@@ -31,7 +32,7 @@ describe("AI admin upstream account generated operation facade", () => {
   it("normalizes account lists and rejects unknown response status", async () => {
     mocks.request.mockResolvedValueOnce({ items: [account], total: 1 });
     await expect(aiAdminApi.listUpstreamAccounts()).resolves.toMatchObject({
-      items: [{ id: "account-1", status: "active", tenant_access_mode: "public" }],
+      items: [{ id: "account-1", description: "Primary upstream account", status: "active", tenant_access_mode: "public" }],
       total: 1
     });
 
@@ -48,6 +49,7 @@ describe("AI admin upstream account generated operation facade", () => {
 
     const body = {
       name: "Primary",
+      description: "Primary upstream account",
       tenant_display_name: "Primary",
       tenant_access_mode: "public" as const,
       api_key: "secret",
@@ -63,12 +65,12 @@ describe("AI admin upstream account generated operation facade", () => {
     await expect(aiAdminApi.deleteUpstreamAccount("account/1")).resolves.toEqual({ deleted: true });
 
     expect(mocks.request.mock.calls[0]?.[0]).toMatchObject({
-      body: { name: "Primary", api_key: "secret", concurrency_limit: undefined }
+      body: { name: "Primary", description: "Primary upstream account", api_key: "secret", concurrency_limit: undefined }
     });
     expect(mocks.request.mock.calls[1]?.[0]).toMatchObject({
       path: "/api/v1/upstream-accounts/account%2F1",
       pathParams: { accountID: "account/1" },
-      body: { api_key: "secret" }
+      body: { description: "Primary upstream account", api_key: "secret" }
     });
     expect(mocks.request.mock.calls[2]?.[0]).toMatchObject({
       pathParams: { accountID: "account/1" },

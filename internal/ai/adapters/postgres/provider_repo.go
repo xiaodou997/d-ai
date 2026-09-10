@@ -116,6 +116,7 @@ func (r *AccountRepo) GetAccount(ctx context.Context, id string) (domain.Upstrea
 	account := domain.UpstreamAccount{
 		ID:                uuidToString(row.ID),
 		Name:              row.Name,
+		Description:       row.Description,
 		TenantDisplayName: row.TenantDisplayName,
 		TenantAccessMode:  row.TenantAccessMode,
 		ConcurrencyLimit:  int32PtrToIntPtr(akInt4StrPtr(row.ConcurrencyLimit)),

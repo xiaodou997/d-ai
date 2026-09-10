@@ -44,6 +44,8 @@ components:
           description: 创建时间，Unix 毫秒
           format: int64
           type: integer
+        description:
+          type: string
         endpoints:
           description: 账号支持的请求端点；同一 API 格式至多一个
           items:
@@ -1952,6 +1954,8 @@ components:
           format: int32
           minimum: 1
           type: integer
+        description:
+          type: string
         endpoints:
           description: 账号支持的请求端点；同一 API 格式至多一个
           items:
@@ -9957,18 +9961,18 @@ components:
     TopupOrderItem:
       additionalProperties: false
       properties:
-        codeUrl:
-          type: string
         balanceExpiresAt:
           format: int64
           type: integer
+        codeUrl:
+          type: string
         createdAt:
           format: int64
           type: integer
-        expiresAt:
+        creditedAmountMicroUsd:
           format: int64
           type: integer
-        creditedAmountMicroUsd:
+        expiresAt:
           format: int64
           type: integer
         feeAmountMicroUsd:
@@ -10188,6 +10192,8 @@ components:
           format: int32
           minimum: 1
           type: integer
+        description:
+          type: string
         name:
           description: 账号名称
           type: string

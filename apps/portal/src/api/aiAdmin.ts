@@ -192,6 +192,7 @@ function toPriceBookEntryBody(value: PriceBookEntryWriteRequest): OperationBody<
 function toAccountBodyFields(value: AccountWriteRequest) {
   return {
     name: value.name,
+    description: value.description,
     tenant_display_name: value.tenant_display_name,
     tenant_access_mode: value.tenant_access_mode,
     concurrency_limit: value.concurrency_limit ?? undefined,
@@ -220,6 +221,7 @@ function toAccount(value: AccountTransport): AccountDTO {
   return {
     id: value.id,
     name: value.name,
+    description: value.description,
     tenant_display_name: value.tenant_display_name,
     tenant_access_mode: value.tenant_access_mode,
     endpoints: value.endpoints?.map(toAccountEndpoint) ?? [],

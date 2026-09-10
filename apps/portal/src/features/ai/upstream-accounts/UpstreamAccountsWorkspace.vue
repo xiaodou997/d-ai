@@ -868,7 +868,7 @@ onBeforeUnmount(() => {
               <template #actions>
                 <el-button size="small" type="primary" :icon="Plus" @click="openEndpointCreate">添加端点</el-button>
               </template>
-              <el-table :data="selectedAccount.endpoints || []" border stripe>
+              <el-table :key="selectedAccount.id" :data="selectedAccount.endpoints || []" border stripe>
                 <el-table-column label="API 格式" min-width="190">
                   <template #default="{ row }">{{ upstreamAPIFormatLabel(row.api_format) }}</template>
                 </el-table-column>

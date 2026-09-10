@@ -2813,6 +2813,6 @@ CREATE TABLE dai_schema_metadata (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 37);
+INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 38);
 
 COMMIT;

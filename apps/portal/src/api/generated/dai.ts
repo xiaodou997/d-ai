@@ -4817,6 +4817,7 @@ export interface components {
              * @description 创建时间，Unix 毫秒
              */
             created_at?: number;
+            description?: string;
             /** @description 账号支持的请求端点；同一 API 格式至多一个 */
             endpoints: components["schemas"]["AccountEndpointDTO"][] | null;
             /** @description 上游账号 ID */
@@ -5821,6 +5822,7 @@ export interface components {
              * @description 最大并发请求数；为空表示不限制
              */
             concurrency_limit?: number;
+            description?: string;
             /** @description 账号支持的请求端点；同一 API 格式至多一个 */
             endpoints: components["schemas"]["AccountEndpointWriteRequest"][] | null;
             /** @description 账号名称 */
@@ -10042,15 +10044,15 @@ export interface components {
             validityDays?: number;
         };
         TopupOrderItem: {
-            codeUrl?: string;
             /** Format: int64 */
             balanceExpiresAt?: number;
+            codeUrl?: string;
             /** Format: int64 */
             createdAt: number;
             /** Format: int64 */
-            expiresAt: number;
-            /** Format: int64 */
             creditedAmountMicroUsd: number;
+            /** Format: int64 */
+            expiresAt: number;
             /** Format: int64 */
             feeAmountMicroUsd: number;
             /** Format: int64 */
@@ -10159,6 +10161,7 @@ export interface components {
              * @description 最大并发请求数；为空表示不限制
              */
             concurrency_limit?: number;
+            description?: string;
             /** @description 账号名称 */
             name: string;
             /** @description 租户结算价格表 ID；为空不绑定 */
