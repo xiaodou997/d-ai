@@ -9788,6 +9788,7 @@ export interface components {
         };
         TenantUpstreamResourceDTO: {
             api_formats: string[] | null;
+            description?: string;
             id: string;
             models: components["schemas"]["TenantUpstreamModelDTO"][] | null;
             name: string;
@@ -10587,6 +10588,7 @@ export interface components {
             api_key: string;
             /** Format: int32 */
             concurrency_limit?: number;
+            description?: string;
             endpoints: components["schemas"]["UpstreamAccountTransferEndpointDTO"][] | null;
             model_bindings?: components["schemas"]["UpstreamAccountTransferBindingDTO"][] | null;
             name: string;

@@ -21,6 +21,7 @@ type tenantUpstreamResourceDTO struct {
 	ID                string                   `json:"id"`
 	ResourceKind      string                   `json:"resource_kind" enum:"direct_upstream,oauth_pool"`
 	Name              string                   `json:"name"`
+	Description       string                   `json:"description,omitempty"`
 	TenantMultiplier  float64                  `json:"tenant_multiplier"`
 	PriceBookID       string                   `json:"price_book_id,omitempty"`
 	PriceBookName     string                   `json:"price_book_name,omitempty"`
@@ -75,7 +76,7 @@ func loadTenantUpstreamResources(ctx context.Context, reader ModelCatalogReader,
 	items := make([]tenantUpstreamResourceDTO, 0, len(resources))
 	for _, resource := range resources {
 		item := tenantUpstreamResourceDTO{
-			ID: resource.ID, ResourceKind: string(resource.Kind), Name: resource.Name,
+			ID: resource.ID, ResourceKind: string(resource.Kind), Name: resource.Name, Description: resource.Description,
 			TenantMultiplier: resource.TenantMultiplier, PriceBookID: resource.PriceBookID,
 			PriceBookName: resource.PriceBookName, PriceBookRevision: resource.PriceBookRevision,
 			APIFormats: append([]string(nil), resource.APIFormats...),

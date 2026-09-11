@@ -462,8 +462,8 @@ async function handleImportFileSelected(event: Event) {
 }
 
 function parseImportAccounts(parsed: any): UpstreamAccountTransferAccountDTO[] {
-  if (!Array.isArray(parsed) && parsed?.schema_version !== undefined && parsed.schema_version !== 5) {
-    throw new Error(`不支持的上游账号导入版本：${parsed.schema_version}；当前需要 schema_version 5`)
+  if (!Array.isArray(parsed) && parsed?.schema_version !== undefined && parsed.schema_version !== 5 && parsed.schema_version !== 6) {
+    throw new Error(`不支持的上游账号导入版本：${parsed.schema_version}；当前支持 schema_version 5/6`)
   }
   const accountsToImport = Array.isArray(parsed) ? parsed : parsed?.accounts
   if (!Array.isArray(accountsToImport) || accountsToImport.length === 0) {
@@ -808,7 +808,10 @@ onBeforeUnmount(() => {
                 />
               </div>
               <div class="account-item-subtitle truncate">{{ accountSubtitle(a) }}</div>
-              <div v-if="a.description" class="account-item-description truncate" :title="a.description">{{ a.description }}</div>
+              <div v-if="a.description" class="account-item-description" :title="a.description">
+                <span class="account-item-description-label">说明</span>
+                <span class="account-item-description-text">{{ a.description }}</span>
+              </div>
               <div class="account-item-host truncate">{{ accountEndpointHosts(a) }}</div>
             </div>
             <div ref="listSentinelEl" class="account-list-sentinel" aria-hidden="true">
@@ -856,6 +859,11 @@ onBeforeUnmount(() => {
                   </DsTag>
                 </el-descriptions-item>
                 <el-descriptions-item label="租户可见性">{{ selectedAccount.tenant_access_mode === 'restricted' ? '专属' : '公开' }}</el-descriptions-item>
+                <el-descriptions-item label="账号描述" :span="2">
+                  <span :class="{ 'account-overview-description-empty': !selectedAccount.description }">
+                    {{ selectedAccount.description || '暂无描述' }}
+                  </span>
+                </el-descriptions-item>
                 <el-descriptions-item label="价格表">{{ priceBookName(selectedAccount.price_book_id) }}</el-descriptions-item>
                 <el-descriptions-item label="租户倍率">{{ formatMultiplier(selectedAccount.tenant_multiplier) }}</el-descriptions-item>
                 <el-descriptions-item v-if="selectedAccount.status === 'invalid'" label="失效原因" :span="2">
@@ -1307,13 +1315,17 @@ onBeforeUnmount(() => {
 }
 .account-list-sentinel { text-align: center; font-size: 12px; color: var(--ds-faint); }
 .account-list-sentinel span { display: block; padding: 4px 0 10px; }
-.account-item { padding: 10px 12px; border-radius: var(--ds-radius-control); cursor: pointer; border: 1px solid transparent; margin-bottom: 6px; }
+.account-item { padding: 12px 12px 11px; border-radius: var(--ds-radius-control); cursor: pointer; border: 1px solid transparent; margin-bottom: 6px; transition: background .16s ease, border-color .16s ease; }
 .account-item:hover { background: var(--ds-panel-muted); }
 .account-item.active { background: var(--ds-accent-soft); border-color: color-mix(in srgb, var(--ds-accent) 40%, var(--ds-line)); }
 .account-item-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; min-width: 0; }
 .account-item-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.account-item-subtitle { font-size: 12px; color: var(--ds-muted); margin-top: 2px; }
-.account-item-host { font-size: 12px; color: var(--ds-faint); }
+.account-item-subtitle { font-size: 12px; color: var(--ds-muted); margin: 5px 0 0 32px; }
+.account-item-description { display: flex; align-items: baseline; gap: 8px; margin: 8px 0 7px 32px; padding: 6px 8px; border-left: 2px solid color-mix(in srgb, var(--ds-accent) 42%, var(--ds-line)); background: color-mix(in srgb, var(--ds-accent-soft) 55%, transparent); border-radius: var(--ds-radius-sm); min-width: 0; }
+.account-item-description-label { flex: 0 0 auto; color: var(--ds-muted); font-size: 11px; font-weight: 600; letter-spacing: .04em; }
+.account-item-description-text { min-width: 0; overflow: hidden; color: var(--ds-ink); font-size: 12px; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
+.account-item-host { margin-left: 32px; font-size: 12px; color: var(--ds-faint); }
+.account-overview-description-empty { color: var(--ds-faint); }
 .account-content-scroll {
   flex: 1;
   min-width: 0;

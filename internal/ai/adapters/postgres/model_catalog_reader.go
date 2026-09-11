@@ -156,6 +156,7 @@ func (r *ModelCatalogReader) ListTenantUpstreamResources(ctx context.Context, te
 			r.id::text,
 			r.resource_kind,
 			r.tenant_display_name,
+			COALESCE(r.description, ''),
 			COALESCE(tp.tenant_multiplier_override, r.tenant_multiplier, 1)::float8,
 			COALESCE(pb.id::text, ''),
 			COALESCE(pb.name, ''),
@@ -217,7 +218,7 @@ func (r *ModelCatalogReader) ListTenantUpstreamResources(ctx context.Context, te
 		var price domain.PriceBookEntry
 		if err := rows.Scan(
 			&resource.ID, &resource.Kind, &resource.Name, &resource.TenantMultiplier,
-			&resource.PriceBookID, &resource.PriceBookName, &resource.PriceBookRevision,
+			&resource.Description, &resource.PriceBookID, &resource.PriceBookName, &resource.PriceBookRevision,
 			&resource.APIFormats, &model.ModelCode, &model.CapabilityType, &hasPrice,
 			&tokenTiersRaw, &price.ImageDefaultPrice, &price.VideoDefaultPrice,
 			&imagePricesRaw, &videoPricesRaw, &price.AudioTTSPerChar,

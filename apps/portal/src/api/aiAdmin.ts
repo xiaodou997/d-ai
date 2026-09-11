@@ -301,6 +301,7 @@ function toTransferAccount(value: AccountTransferTransport): UpstreamAccountTran
   }
   return {
     name: value.name,
+    description: value.description,
     tenant_display_name: value.tenant_display_name,
     tenant_access_mode: value.tenant_access_mode,
     api_key: value.api_key,
@@ -329,6 +330,7 @@ function toAccountImportRequest(value: UpstreamAccountImportRequest): OperationB
   return {
     accounts: value.accounts.map((account) => ({
       name: account.name,
+      description: account.description,
       tenant_display_name: account.tenant_display_name,
       tenant_access_mode: account.tenant_access_mode,
       api_key: account.api_key,

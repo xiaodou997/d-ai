@@ -52,6 +52,7 @@ type AccountUpdate struct {
 
 type AccountSecret struct {
 	Ciphertext        string
+	Description       string
 	Endpoints         []domain.UpstreamAccountEndpoint
 	TenantDisplayName string
 	TenantAccessMode  string

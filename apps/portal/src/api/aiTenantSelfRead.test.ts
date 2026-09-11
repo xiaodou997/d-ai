@@ -31,6 +31,7 @@ describe("AI tenant self-read generated operation facade", () => {
           id: "resource-1",
           resource_kind: "direct_upstream",
           name: "Primary",
+          description: "Primary description",
           tenant_multiplier: 1.2,
           models: [{
             model_code: "gpt-4o",
@@ -79,7 +80,7 @@ describe("AI tenant self-read generated operation facade", () => {
 
     await expect(aiTenantApi.listAvailableModels()).resolves.toEqual({ items: [], total: 0 });
     await expect(aiTenantApi.listUpstreamResources()).resolves.toMatchObject({
-      items: [{ models: [{ price: { token_price_tiers: [] } }] }],
+      items: [{ description: "Primary description", models: [{ price: { token_price_tiers: [] } }] }],
       total: 1
     });
     await expect(aiTenantApi.listAvailableModels()).resolves.toMatchObject({

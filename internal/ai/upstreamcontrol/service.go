@@ -100,7 +100,7 @@ func (s *Service) GetAccountSecret(ctx context.Context, id string) (AccountSecre
 type UpdateAccountInput struct {
 	ID                string
 	Name              string
-	Description       string
+	Description       *string
 	TenantDisplayName string
 	TenantAccessMode  string
 	APIKey            string
@@ -158,10 +158,14 @@ func (s *Service) UpdateAccount(ctx context.Context, in UpdateAccountInput) (dom
 	if displayName == "" {
 		displayName = upstreamaccess.NormalizeDisplayName(in.Name, "")
 	}
+	description := current.Description
+	if in.Description != nil {
+		description = strings.TrimSpace(*in.Description)
+	}
 	return s.repo.UpdateAccount(ctx, AccountUpdate{
 		ID:                in.ID,
 		Name:              strings.TrimSpace(in.Name),
-		Description:       strings.TrimSpace(in.Description),
+		Description:       description,
 		TenantDisplayName: displayName,
 		TenantAccessMode:  accessMode,
 		Ciphertext:        ciphertext,

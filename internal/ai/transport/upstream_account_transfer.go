@@ -15,7 +15,7 @@ import (
 	"xiaodou/dai/libs/go/httpx"
 )
 
-const upstreamAccountTransferSchemaVersion = 5
+const upstreamAccountTransferSchemaVersion = 6
 
 type upstreamAccountExportInput struct {
 	Body struct {
@@ -48,6 +48,7 @@ type upstreamAccountTransferEndpointDTO struct {
 
 type upstreamAccountTransferAccountDTO struct {
 	Name              string                               `json:"name"`
+	Description       string                               `json:"description,omitempty"`
 	TenantDisplayName string                               `json:"tenant_display_name"`
 	TenantAccessMode  string                               `json:"tenant_access_mode"`
 	APIKey            string                               `json:"api_key"`
@@ -237,6 +238,7 @@ func exportUpstreamAccounts(ctx context.Context, d UpstreamAccountManagementHTTP
 		}
 		item := upstreamAccountTransferAccountDTO{
 			Name:              account.Name,
+			Description:       account.Description,
 			TenantDisplayName: account.TenantDisplayName,
 			TenantAccessMode:  account.TenantAccessMode,
 			APIKey:            apiKey,
@@ -333,6 +335,7 @@ func importUpstreamAccounts(ctx context.Context, d UpstreamAccountManagementHTTP
 		multiplier := defaultTenantMultiplier(req.DefaultTenantMultiplier)
 		created, err := d.AccountManager.CreateAccount(ctx, upstreamcontrol.CreateAccountInput{
 			Name:              strings.TrimSpace(account.Name),
+			Description:       strings.TrimSpace(account.Description),
 			TenantDisplayName: strings.TrimSpace(account.TenantDisplayName),
 			TenantAccessMode:  strings.TrimSpace(account.TenantAccessMode),
 			APIKey:            strings.TrimSpace(account.APIKey),

@@ -24,6 +24,7 @@ type TenantUpstreamResource struct {
 	ID                string
 	Kind              UpstreamKind
 	Name              string
+	Description       string
 	TenantMultiplier  float64
 	PriceBookID       string
 	PriceBookName     string

@@ -9549,6 +9549,8 @@ components:
           type:
             - array
             - "null"
+        description:
+          type: string
         id:
           type: string
         models:
@@ -10950,6 +10952,8 @@ components:
           format: int32
           minimum: 1
           type: integer
+        description:
+          type: string
         endpoints:
           items:
             $ref: "#/components/schemas/UpstreamAccountTransferEndpointDTO"

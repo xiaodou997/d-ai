@@ -309,6 +309,7 @@ export interface UpstreamAccountTransferEndpointDTO {
 
 export interface UpstreamAccountTransferAccountDTO {
   name: string;
+  description?: string;
   tenant_display_name: string;
   tenant_access_mode: "public" | "restricted";
   api_key: string;

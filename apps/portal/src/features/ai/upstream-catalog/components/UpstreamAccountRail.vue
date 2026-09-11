@@ -28,6 +28,7 @@ const emit = defineEmits<{
         @click="emit('select', account.id)"
       >
         <span class="account-option__name" :title="account.name">{{ account.name }}</span>
+        <span v-if="account.description" class="account-option__description" :title="account.description">{{ account.description }}</span>
         <DsTag
           v-for="protocol in resourceProtocolLabels(account)"
           :key="protocol"
@@ -108,6 +109,16 @@ const emit = defineEmits<{
   color: var(--ds-ink);
   font-size: 13px;
   font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-option__description {
+  flex: 0 1 42%;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ds-muted);
+  font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

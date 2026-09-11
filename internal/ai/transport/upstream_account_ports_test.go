@@ -119,21 +119,21 @@ func TestUpstreamAccountRoutesUseSeparatedPorts(t *testing.T) {
 	}
 
 	createRecorder := performUpstreamAccountRequest(router, http.MethodPost, "/api/v1/upstream-accounts", `{
-		"name":"Created","tenant_display_name":"Tenant created","tenant_access_mode":"public",
+		"name":"Created","description":"Created description","tenant_display_name":"Tenant created","tenant_access_mode":"public",
 		"api_key":"create-secret","endpoints":[{"api_format":"anthropic_messages","base_url":"https://create.example","extra_headers":{"X-Trace":"create"}}],
 		"concurrency_limit":4,"price_book_id":"price-1","tenant_multiplier":1.25
 	}`)
 	requireUpstreamAccountStatus(t, createRecorder, http.StatusOK)
-	if stub.createInput.Name != "Created" || stub.createInput.APIKey != "create-secret" || stub.createInput.ConcurrencyLimit == nil || *stub.createInput.ConcurrencyLimit != 4 {
+	if stub.createInput.Name != "Created" || stub.createInput.Description != "Created description" || stub.createInput.APIKey != "create-secret" || stub.createInput.ConcurrencyLimit == nil || *stub.createInput.ConcurrencyLimit != 4 {
 		t.Fatalf("create input = %#v", stub.createInput)
 	}
 
 	updateRecorder := performUpstreamAccountRequest(router, http.MethodPatch, "/api/v1/upstream-accounts/account-update", `{
-		"name":"Updated","tenant_display_name":"Tenant updated","tenant_access_mode":"restricted",
+		"name":"Updated","description":"Updated description","tenant_display_name":"Tenant updated","tenant_access_mode":"restricted",
 		"api_key":"update-secret","concurrency_limit":6,"price_book_id":"price-2","tenant_multiplier":1.5
 	}`)
 	requireUpstreamAccountStatus(t, updateRecorder, http.StatusOK)
-	if stub.updateInput.ID != "account-update" || stub.updateInput.Name != "Updated" || stub.updateInput.APIKey != "update-secret" || stub.updateInput.ConcurrencyLimit == nil || *stub.updateInput.ConcurrencyLimit != 6 {
+	if stub.updateInput.ID != "account-update" || stub.updateInput.Name != "Updated" || stub.updateInput.Description == nil || *stub.updateInput.Description != "Updated description" || stub.updateInput.APIKey != "update-secret" || stub.updateInput.ConcurrencyLimit == nil || *stub.updateInput.ConcurrencyLimit != 6 {
 		t.Fatalf("update input = %#v", stub.updateInput)
 	}
 
@@ -177,6 +177,7 @@ func TestUpstreamAccountTransferComposesCatalogReaderAndManager(t *testing.T) {
 		accounts: []domain.UpstreamAccount{{
 			ID:                "account-export",
 			Name:              "Exported",
+			Description:       "Exported description",
 			TenantDisplayName: "Tenant exported",
 			TenantAccessMode:  "public",
 			Endpoints: []domain.UpstreamAccountEndpoint{{
@@ -204,7 +205,7 @@ func TestUpstreamAccountTransferComposesCatalogReaderAndManager(t *testing.T) {
 	if stub.secretID != "account-export" || codec.decryptInput != "ciphertext" {
 		t.Fatalf("export secret lookup = id %q ciphertext %q", stub.secretID, codec.decryptInput)
 	}
-	if len(exported.Body.Accounts) != 1 || exported.Body.Accounts[0].APIKey != "plaintext-key" || exported.Body.Accounts[0].Name != "Exported" {
+	if len(exported.Body.Accounts) != 1 || exported.Body.Accounts[0].APIKey != "plaintext-key" || exported.Body.Accounts[0].Name != "Exported" || exported.Body.Accounts[0].Description != "Exported description" {
 		t.Fatalf("export response = %#v", exported.Body.Accounts)
 	}
 
@@ -214,6 +215,7 @@ func TestUpstreamAccountTransferComposesCatalogReaderAndManager(t *testing.T) {
 	imported, err := importUpstreamAccounts(t.Context(), d, upstreamAccountImportRequest{
 		Accounts: []upstreamAccountTransferAccountDTO{{
 			Name:              " Imported ",
+			Description:       " Imported description ",
 			TenantDisplayName: " Tenant imported ",
 			TenantAccessMode:  "public",
 			APIKey:            " import-secret ",
@@ -233,7 +235,7 @@ func TestUpstreamAccountTransferComposesCatalogReaderAndManager(t *testing.T) {
 	if len(imported.Body.CreatedAccountIDs) != 1 || imported.Body.CreatedAccountIDs[0] != "account-import" {
 		t.Fatalf("import response = %#v", imported.Body)
 	}
-	if stub.createInput.Name != "Imported" || stub.createInput.APIKey != "import-secret" || stub.createInput.Status != domain.UpstreamAccountStatusDisabled {
+	if stub.createInput.Name != "Imported" || stub.createInput.Description != "Imported description" || stub.createInput.APIKey != "import-secret" || stub.createInput.Status != domain.UpstreamAccountStatusDisabled {
 		t.Fatalf("import create input = %#v", stub.createInput)
 	}
 	if stub.createInput.PriceBookID != "" || stub.createInput.TenantMultiplier == nil || *stub.createInput.TenantMultiplier != multiplier {

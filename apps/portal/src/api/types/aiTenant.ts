@@ -179,6 +179,7 @@ export interface TenantAiUpstreamResource {
   id: string;
   resource_kind: "direct_upstream" | "oauth_pool";
   name: string;
+  description?: string;
   tenant_multiplier: number;
   price_book_id?: string;
   price_book_name?: string;

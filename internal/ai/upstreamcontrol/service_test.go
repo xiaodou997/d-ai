@@ -138,6 +138,35 @@ func TestUpdateAccountKeepsExistingCiphertextWhenAPIKeyOmitted(t *testing.T) {
 	}
 }
 
+func TestUpdateAccountPreservesDescriptionWhenOmitted(t *testing.T) {
+	repo := &repoStub{secret: AccountSecret{
+		Ciphertext:  "cipher",
+		Description: "existing description",
+		Status:      domain.UpstreamAccountStatusActive,
+	}}
+	svc := New(repo, func(plaintext string) (string, error) { return plaintext, nil })
+
+	if _, err := svc.UpdateAccount(t.Context(), UpdateAccountInput{ID: "acc-1", Name: "account"}); err != nil {
+		t.Fatalf("UpdateAccount() error = %v", err)
+	}
+	if repo.lastUpdate.Description != "existing description" {
+		t.Fatalf("description = %q, want preserved existing description", repo.lastUpdate.Description)
+	}
+}
+
+func TestUpdateAccountAllowsDescriptionToBeCleared(t *testing.T) {
+	description := "   "
+	repo := &repoStub{secret: AccountSecret{Description: "existing description", Status: domain.UpstreamAccountStatusActive}}
+	svc := New(repo, func(plaintext string) (string, error) { return plaintext, nil })
+
+	if _, err := svc.UpdateAccount(t.Context(), UpdateAccountInput{ID: "acc-1", Name: "account", Description: &description}); err != nil {
+		t.Fatalf("UpdateAccount() error = %v", err)
+	}
+	if repo.lastUpdate.Description != "" {
+		t.Fatalf("description = %q, want empty after explicit clear", repo.lastUpdate.Description)
+	}
+}
+
 func TestCreateAccountPersistsConcurrencyLimit(t *testing.T) {
 	repo := &repoStub{}
 	svc := New(repo, func(plaintext string) (string, error) { return plaintext + "-enc", nil })

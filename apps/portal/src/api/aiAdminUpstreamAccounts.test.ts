@@ -80,14 +80,14 @@ describe("AI admin upstream account generated operation facade", () => {
 
   it("maps nullable transfer responses and forwards import/export contracts", async () => {
     mocks.request
-      .mockResolvedValueOnce({ schema_version: 5, exported_at: "2026-08-28T00:00:00Z", contains_plaintext_api_keys: true, accounts: null })
+      .mockResolvedValueOnce({ schema_version: 6, exported_at: "2026-08-28T00:00:00Z", contains_plaintext_api_keys: true, accounts: [{ name: "Exported", description: "Exported description", tenant_display_name: "Exported", tenant_access_mode: "public", api_key: "secret", status: "active", endpoints: [] }] })
       .mockResolvedValueOnce({
         items: [{ name: "Imported", endpoint_count: 1, action: "create", model_binding_count: 0, warnings: null }],
         summary: { create_accounts: 1, skip_accounts: 0, create_model_bindings: 0, skip_model_bindings: 0, error_accounts: 0 }
       })
       .mockResolvedValueOnce({ created_account_ids: null, skipped_accounts: null, created_model_bindings: null, skipped_model_bindings: null, summary: { create_accounts: 0, skip_accounts: 1, create_model_bindings: 0, skip_model_bindings: 0, error_accounts: 0 } });
 
-    await expect(aiAdminApi.exportUpstreamAccounts({ account_ids: ["account-1"] })).resolves.toMatchObject({ accounts: [] });
+    await expect(aiAdminApi.exportUpstreamAccounts({ account_ids: ["account-1"] })).resolves.toMatchObject({ accounts: [{ description: "Exported description" }] });
     await expect(aiAdminApi.previewImportUpstreamAccounts({
       accounts: [{ name: "Imported", tenant_display_name: "Imported", tenant_access_mode: "public", api_key: "secret", endpoints: [{ api_format: "openai_responses", base_url: "https://api.example.com", status: "active" }], status: "active" }]
     })).resolves.toMatchObject({ items: [{ action: "create", warnings: [] }] });

@@ -302,6 +302,7 @@ function toUpstreamResources(value: UpstreamResourcesTransport): { items: Tenant
         id: resource.id,
         resource_kind: resource.resource_kind,
         name: resource.name,
+        description: resource.description,
         tenant_multiplier: resource.tenant_multiplier,
         price_book_id: resource.price_book_id,
         price_book_name: resource.price_book_name,

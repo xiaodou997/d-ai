@@ -85,7 +85,7 @@ type createAccountRequest struct {
 }
 
 type updateAccountRequest struct {
-	Description       string   `json:"description,omitempty"`
+	Description       *string  `json:"description,omitempty"`
 	Name              string   `json:"name" doc:"账号名称"`
 	TenantDisplayName string   `json:"tenant_display_name,omitempty" doc:"租户侧展示名称；为空时使用账号名称"`
 	TenantAccessMode  string   `json:"tenant_access_mode,omitempty" enum:"public,restricted" doc:"租户访问范围；为空默认 public"`
