@@ -407,6 +407,7 @@ func BuildAuditPayload(req *Request) *audit.Payload {
 	}
 
 	p := &audit.Payload{
+		CapabilityType:              string(req.CapabilityType),
 		RequestID:                   req.RequestID,
 		ClientProtocol:              string(req.ClientProtocol),
 		ClientIP:                    clientIP,
@@ -435,6 +436,7 @@ func BuildAuditPayload(req *Request) *audit.Payload {
 		FailedStep:                  req.FailedStep,
 		AttemptsDetail:              BuildAttemptsDetailFull(req),
 	}
+	audit.CompactTextPayload(p)
 	return p
 }
 

@@ -15,18 +15,22 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
+	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/internal/ai/serving"
 )
 
 // Gateway holds all Prometheus metrics for the AI serving pipeline.
 type Gateway struct {
-	requestsTotal   *prometheus.CounterVec
-	requestDuration *prometheus.HistogramVec
-	tokenUsage      *prometheus.CounterVec
-	pipelineErrors  *prometheus.CounterVec
-	circuitBreaker  *prometheus.GaugeVec
-	routeAttempts   *prometheus.CounterVec
-	routeLatency    *prometheus.HistogramVec
+	requestsTotal       *prometheus.CounterVec
+	requestDuration     *prometheus.HistogramVec
+	tokenUsage          *prometheus.CounterVec
+	pipelineErrors      *prometheus.CounterVec
+	circuitBreaker      *prometheus.GaugeVec
+	routeAttempts       *prometheus.CounterVec
+	routeLatency        *prometheus.HistogramVec
+	usageReports        *prometheus.CounterVec
+	missingUsageCharged *prometheus.CounterVec
+	auditCompacted      *prometheus.CounterVec
 }
 
 var buckets = []float64{50, 100, 250, 500, 1000, 2500, 5000, 10000, 30000, 60000}
@@ -34,6 +38,9 @@ var buckets = []float64{50, 100, 250, 500, 1000, 2500, 5000, 10000, 30000, 60000
 // NewGateway registers all metrics with the default Prometheus registry.
 func NewGateway() *Gateway {
 	return &Gateway{
+		usageReports:        promauto.NewCounterVec(prometheus.CounterOpts{Name: "dai_ai_usage_reports_total", Help: "Text requests by reported usage source and route."}, []string{"route_id", "source", "status"}),
+		missingUsageCharged: promauto.NewCounterVec(prometheus.CounterOpts{Name: "dai_ai_missing_usage_charged_total", Help: "Text requests charged without reported usage; must remain zero."}, []string{"route_id"}),
+		auditCompacted:      promauto.NewCounterVec(prometheus.CounterOpts{Name: "dai_ai_audit_compacted_total", Help: "Text audit payloads compacted to retain diagnostics."}, []string{"route_id"}),
 		requestsTotal: promauto.NewCounterVec(prometheus.CounterOpts{
 			Name: "dai_ai_requests_total",
 			Help: "Total number of AI requests processed, by model, status, and capability.",
@@ -93,6 +100,16 @@ func (g *Gateway) RecordRequest(req *serving.Request) {
 	}
 
 	g.requestsTotal.WithLabelValues(model, capability, status, provider).Inc()
+	if req.Candidate != nil && domain.UsesReportedTokenBilling(req.CapabilityType) {
+		route := req.Candidate.RouteID
+		g.usageReports.WithLabelValues(route, req.TokenCountSource, status).Inc()
+		if req.TokenCountSource == domain.TokenUsageSourceMissing && (req.BillingResult.UserChargedMicro > 0 || req.BillingResult.TenantPayableMicro > 0 || req.BillingResult.APIKeyQuotaCostMicro > 0 || req.BillingResult.RetailBaseMicro > 0) {
+			g.missingUsageCharged.WithLabelValues(route).Inc()
+		}
+		if req.AuditPayload != nil && req.AuditPayload.Compaction.Truncated {
+			g.auditCompacted.WithLabelValues(route).Inc()
+		}
+	}
 
 	if totalMs, ok := req.RequestTotalMs(); ok {
 		g.requestDuration.WithLabelValues(model, capability, provider).Observe(float64(totalMs))

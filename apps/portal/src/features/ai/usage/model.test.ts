@@ -3,6 +3,9 @@ import { describe, expect, it } from "vitest";
 import { normalizeUsageAttempts } from "./model";
 
 describe("normalizeUsageAttempts", () => {
+  it("retains the upstream request id for incident correlation", () => {
+    expect(normalizeUsageAttempts([{ outcome: "failed", upstream_request_id: "upstream-123" }])[0]?.upstream_request_id).toBe("upstream-123");
+  });
   it("reads persisted priority and retains server event order", () => {
     const rows = normalizeUsageAttempts([
       { route_id: "failed", group_id: "group-1", group_rank: 0, priority: 0, outcome: "server_error", skipped: false },

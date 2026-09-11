@@ -20,27 +20,28 @@ const attemptsDetailErrorMaxLen = 2048
 // AttemptRecord cannot leak upstream identity or raw error text to callers —
 // but this DTO is the one place that intentionally persists it, admin-only.
 type attemptDetailDTO struct {
-	Sequence        int     `json:"-"`
-	RouteID         string  `json:"route_id,omitempty"`
-	GroupID         string  `json:"group_id,omitempty"`
-	RoutePolicy     string  `json:"route_policy,omitempty"`
-	GroupRank       int     `json:"group_rank"`
-	Priority        int     `json:"priority"`
-	SelectionReason string  `json:"selection_reason,omitempty"`
-	ProviderCode    string  `json:"provider_code,omitempty"`
-	UpstreamModel   string  `json:"upstream_model,omitempty"`
-	EndpointID      string  `json:"endpoint_id,omitempty"`
-	PoolID          string  `json:"pool_id,omitempty"`
-	CredentialID    string  `json:"credential_id,omitempty"`
-	ProfileRevision string  `json:"profile_revision,omitempty"`
-	HTTPStatus      int     `json:"http_status,omitempty"`
-	Skipped         bool    `json:"skipped"`
-	Outcome         string  `json:"outcome"`
-	LatencyMs       int     `json:"latency_ms,omitempty"`
-	FirstByteMs     int     `json:"first_byte_ms,omitempty"`
-	TotalMs         int     `json:"total_ms,omitempty"`
-	Error           string  `json:"error,omitempty"`
-	Score           float64 `json:"score,omitempty"`
+	Sequence          int     `json:"-"`
+	RouteID           string  `json:"route_id,omitempty"`
+	GroupID           string  `json:"group_id,omitempty"`
+	RoutePolicy       string  `json:"route_policy,omitempty"`
+	GroupRank         int     `json:"group_rank"`
+	Priority          int     `json:"priority"`
+	SelectionReason   string  `json:"selection_reason,omitempty"`
+	ProviderCode      string  `json:"provider_code,omitempty"`
+	UpstreamModel     string  `json:"upstream_model,omitempty"`
+	EndpointID        string  `json:"endpoint_id,omitempty"`
+	PoolID            string  `json:"pool_id,omitempty"`
+	CredentialID      string  `json:"credential_id,omitempty"`
+	ProfileRevision   string  `json:"profile_revision,omitempty"`
+	UpstreamRequestID string  `json:"upstream_request_id,omitempty"`
+	HTTPStatus        int     `json:"http_status,omitempty"`
+	Skipped           bool    `json:"skipped"`
+	Outcome           string  `json:"outcome"`
+	LatencyMs         int     `json:"latency_ms,omitempty"`
+	FirstByteMs       int     `json:"first_byte_ms,omitempty"`
+	TotalMs           int     `json:"total_ms,omitempty"`
+	Error             string  `json:"error,omitempty"`
+	Score             float64 `json:"score,omitempty"`
 }
 
 // BuildAttemptsDetail renders req.Attempts (every upstream candidate tried
@@ -54,26 +55,27 @@ func BuildAttemptsDetail(attempts []AttemptRecord) json.RawMessage {
 	out := make([]attemptDetailDTO, 0, len(attempts))
 	for _, a := range attempts {
 		out = append(out, attemptDetailDTO{
-			Sequence:        a.Sequence,
-			RouteID:         a.RouteID,
-			GroupID:         a.GroupID,
-			RoutePolicy:     a.RoutePolicy,
-			GroupRank:       a.GroupRank,
-			Priority:        a.TargetPriority,
-			SelectionReason: a.SelectionReason,
-			ProviderCode:    a.ProviderCode,
-			UpstreamModel:   a.UpstreamModel,
-			EndpointID:      a.EndpointID,
-			PoolID:          a.PoolID,
-			CredentialID:    a.CredentialID,
-			ProfileRevision: a.ProfileRevision,
-			HTTPStatus:      a.HTTPStatus,
-			Outcome:         a.Outcome.String(),
-			LatencyMs:       a.LatencyMs,
-			FirstByteMs:     a.FirstByteMs,
-			TotalMs:         a.TotalMs,
-			Error:           RedactInternalErrorDetail(truncateValidUTF8(a.ErrorMsg, attemptsDetailErrorMaxLen)),
-			Score:           a.Score,
+			Sequence:          a.Sequence,
+			RouteID:           a.RouteID,
+			GroupID:           a.GroupID,
+			RoutePolicy:       a.RoutePolicy,
+			GroupRank:         a.GroupRank,
+			Priority:          a.TargetPriority,
+			SelectionReason:   a.SelectionReason,
+			ProviderCode:      a.ProviderCode,
+			UpstreamModel:     a.UpstreamModel,
+			EndpointID:        a.EndpointID,
+			PoolID:            a.PoolID,
+			CredentialID:      a.CredentialID,
+			ProfileRevision:   a.ProfileRevision,
+			UpstreamRequestID: a.UpstreamRequestID,
+			HTTPStatus:        a.HTTPStatus,
+			Outcome:           a.Outcome.String(),
+			LatencyMs:         a.LatencyMs,
+			FirstByteMs:       a.FirstByteMs,
+			TotalMs:           a.TotalMs,
+			Error:             RedactInternalErrorDetail(truncateValidUTF8(a.ErrorMsg, attemptsDetailErrorMaxLen)),
+			Score:             a.Score,
 		})
 	}
 	return marshalAttemptsDetail(out)
@@ -113,26 +115,27 @@ func BuildAttemptsDetailWithSkipped(attempts []AttemptRecord, skipped []AttemptR
 	}
 	for _, a := range attempts {
 		out = append(out, attemptDetailDTO{
-			Sequence:        a.Sequence,
-			RouteID:         a.RouteID,
-			GroupID:         a.GroupID,
-			RoutePolicy:     a.RoutePolicy,
-			GroupRank:       a.GroupRank,
-			Priority:        a.TargetPriority,
-			SelectionReason: a.SelectionReason,
-			ProviderCode:    a.ProviderCode,
-			UpstreamModel:   a.UpstreamModel,
-			EndpointID:      a.EndpointID,
-			PoolID:          a.PoolID,
-			CredentialID:    a.CredentialID,
-			ProfileRevision: a.ProfileRevision,
-			HTTPStatus:      a.HTTPStatus,
-			Outcome:         a.Outcome.String(),
-			LatencyMs:       a.LatencyMs,
-			FirstByteMs:     a.FirstByteMs,
-			TotalMs:         a.TotalMs,
-			Error:           RedactInternalErrorDetail(truncateValidUTF8(a.ErrorMsg, attemptsDetailErrorMaxLen)),
-			Score:           a.Score,
+			Sequence:          a.Sequence,
+			RouteID:           a.RouteID,
+			GroupID:           a.GroupID,
+			RoutePolicy:       a.RoutePolicy,
+			GroupRank:         a.GroupRank,
+			Priority:          a.TargetPriority,
+			SelectionReason:   a.SelectionReason,
+			ProviderCode:      a.ProviderCode,
+			UpstreamModel:     a.UpstreamModel,
+			EndpointID:        a.EndpointID,
+			PoolID:            a.PoolID,
+			CredentialID:      a.CredentialID,
+			ProfileRevision:   a.ProfileRevision,
+			UpstreamRequestID: a.UpstreamRequestID,
+			HTTPStatus:        a.HTTPStatus,
+			Outcome:           a.Outcome.String(),
+			LatencyMs:         a.LatencyMs,
+			FirstByteMs:       a.FirstByteMs,
+			TotalMs:           a.TotalMs,
+			Error:             RedactInternalErrorDetail(truncateValidUTF8(a.ErrorMsg, attemptsDetailErrorMaxLen)),
+			Score:             a.Score,
 		})
 	}
 	return marshalAttemptsDetail(out)

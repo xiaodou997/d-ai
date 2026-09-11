@@ -3,12 +3,11 @@ package serving
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
-	"strings"
 	"syscall"
 
 	"xiaodou/dai/internal/ai/domain"
+	"xiaodou/dai/internal/ai/formats"
 )
 
 // observeProviderStreamFrame recognizes terminal signals without assuming a
@@ -19,44 +18,27 @@ func observeProviderStreamFrame(req *Request, payload []byte, eventType string) 
 		return
 	}
 	initializeSettlementState(req)
-	eventType = strings.ToLower(strings.TrimSpace(eventType))
-	if bytes.Equal(bytes.TrimSpace(payload), []byte("[DONE]")) ||
-		eventType == "message_stop" || eventType == "response.completed" ||
-		eventType == "response.complete" || eventType == "done" {
-		markProviderTerminal(req, domain.ProviderTerminalCompleted)
-		return
+	outcome := formats.InspectStreamOutcome(payload, eventType)
+	if outcome.Event == "[DONE]" && req.Candidate != nil && req.Candidate.Protocol == domain.ProtocolOpenAIResponses {
+		return // Responses requires an explicit response terminal, not just EOF/[DONE].
 	}
-	if eventType == "response.failed" || eventType == "response.error" || eventType == "error" {
-		markProviderTerminal(req, domain.ProviderTerminalFailed)
-		return
+	if outcome.State != "" {
+		markProviderTerminal(req, outcome.State)
 	}
-	if eventType == "response.cancelled" || eventType == "response.canceled" || eventType == "cancelled" || eventType == "canceled" {
-		markProviderTerminal(req, domain.ProviderTerminalCancelled)
-		return
+	if outcome.State == domain.ProviderTerminalFailed || outcome.State == domain.ProviderTerminalIncomplete || outcome.State == domain.ProviderTerminalCancelled {
+		req.FailedStep = "execute"
+		if outcome.Message != "" {
+			detail := outcome.Message
+			if outcome.Code != "" {
+				detail = outcome.Code + ": " + detail
+			}
+			req.InternalErrorDetail = RedactInternalErrorDetail(detail)
+		}
+		if outcome.Code != "" {
+			req.UpstreamErrorCode = outcome.Code
+		}
 	}
 
-	var envelope struct {
-		Type   string `json:"type"`
-		Status string `json:"status"`
-		Error  any    `json:"error"`
-	}
-	if json.Unmarshal(bytes.TrimSpace(payload), &envelope) != nil {
-		return
-	}
-	typ := strings.ToLower(strings.TrimSpace(envelope.Type))
-	status := strings.ToLower(strings.TrimSpace(envelope.Status))
-	switch {
-	case strings.Contains(typ, "response.completed"), typ == "message_stop", typ == "done":
-		markProviderTerminal(req, domain.ProviderTerminalCompleted)
-	case strings.Contains(typ, "response.failed"), typ == "error" || envelope.Error != nil:
-		markProviderTerminal(req, domain.ProviderTerminalFailed)
-	case strings.Contains(typ, "response.cancel") || status == "cancelled" || status == "canceled":
-		markProviderTerminal(req, domain.ProviderTerminalCancelled)
-	case status == "completed" || status == "complete" || status == "succeeded":
-		markProviderTerminal(req, domain.ProviderTerminalCompleted)
-	case status == "failed":
-		markProviderTerminal(req, domain.ProviderTerminalFailed)
-	}
 }
 
 func updateResponseSummaryState(req *Request, summary []byte, complete bool) {
@@ -104,6 +86,12 @@ func markProviderTerminal(req *Request, state domain.ProviderTerminalState) {
 		return
 	}
 	initializeSettlementState(req)
+	if req.ProviderTerminalState == domain.ProviderTerminalFailed && state != domain.ProviderTerminalFailed {
+		return
+	}
+	if state == domain.ProviderTerminalCompleted && (req.ProviderTerminalState == domain.ProviderTerminalFailed || req.ProviderTerminalState == domain.ProviderTerminalIncomplete || req.ProviderTerminalState == domain.ProviderTerminalCancelled) {
+		return
+	}
 	req.ProviderTerminalState = state
 }
 
@@ -167,6 +155,9 @@ func shouldVoidBilling(req *Request) bool {
 		return false
 	}
 	initializeSettlementState(req)
+	if domain.UsesReportedTokenBilling(req.CapabilityType) {
+		return !req.UsageEvidence.Reported()
+	}
 	return req.RequestStatus == domain.RequestCancelled &&
 		(req.CancellationOrigin == domain.CancellationClient || req.CancellationOrigin == domain.CancellationGateway || req.CancellationOrigin == domain.CancellationProvider) &&
 		req.ProviderTerminalState != domain.ProviderTerminalCompleted &&

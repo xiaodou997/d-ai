@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -171,6 +172,7 @@ func (e *postcommitError) Error() string { return e.message }
 // held across the relay and returns it on every exit path, including the ones
 // that abandon this route and fail over to another account.
 func (s *ExecuteStep) runAttempt(parentCtx context.Context, req *Request, cand *domain.RouteCandidate, prepared corebridge.PreparedRequest, upReq *UpstreamRequest, score float64, slot UpstreamSlot) attemptResult {
+	resetAttemptUsage(req)
 	if slot != nil {
 		defer slot.Release(parentCtx)
 	}
@@ -262,11 +264,17 @@ func (s *ExecuteStep) runAttempt(parentCtx context.Context, req *Request, cand *
 	req.LatencyMs = latencyMs
 	s.recordAttempt(req, cand, outcome, attemptStartedAt, transportStartedAt, latencyMs, score)
 	attemptIndex := len(req.Attempts) - 1
+	if upResp != nil {
+		req.Attempts[attemptIndex].UpstreamRequestID = truncateValidUTF8(upResp.Headers.Get("x-request-id"), 256)
+	}
 	if runtimeTrace != nil {
 		req.Attempts[attemptIndex].ProfileRevision = runtimeTrace.ProfileRevision
 	}
 	defer func() {
 		req.CompleteAttempt(attemptIndex, time.Now())
+		if req.InternalErrorDetail != "" {
+			req.Attempts[attemptIndex].ErrorMsg = req.InternalErrorDetail
+		}
 	}()
 	if outcome.Status == ResultCanceled {
 		s.releaseHealthProbe(cand)
@@ -306,7 +314,14 @@ func (s *ExecuteStep) runAttempt(parentCtx context.Context, req *Request, cand *
 	var errBody string
 	if outcome.Status != ResultSuccess {
 		if callErr == nil && upResp != nil {
-			errBody = snippetBody(upResp)
+			if domain.UsesReportedTokenBilling(req.CapabilityType) && upResp.Body != nil {
+				raw, _ := io.ReadAll(io.LimitReader(upResp.Body, syncBodyLimit(req)))
+				observeReportedUsage(req, raw, "json")
+				observeProviderStreamFrame(req, raw, "")
+				errBody = truncateValidUTF8(string(raw), 4096)
+			} else {
+				errBody = snippetBody(upResp)
+			}
 		}
 		logUpstreamFailure(parentCtx, req, cand, upstreamURL, status, latencyMs, callErr, errBody, upstreamContentType, upstreamRequestSummary)
 		s.notifyHealth(parentCtx, req, cand, outcome)
@@ -319,6 +334,12 @@ func (s *ExecuteStep) runAttempt(parentCtx context.Context, req *Request, cand *
 	}
 
 	decision := outcome.Decision(req.SelectedCredential != nil)
+	if outcome.Status != ResultSuccess && req.UsageEvidence.HasTokens() {
+		req.RequestStatus = domain.RequestFailed
+		req.ErrorCode, req.ErrorMessage = "upstream_error", "upstream request failed after reporting usage"
+		req.FailedStep = "execute"
+		return attemptResult{finished: true, finalErr: apiError(upstreamStatusToGateway(status), req.ErrorCode, req.ErrorMessage)}
+	}
 	if runtimeTrace != nil &&
 		runtimeTrace.CredentialEffect == clientruntime.CredentialEffectCooldown &&
 		req.SelectedCredential != nil {
@@ -369,6 +390,11 @@ func (s *ExecuteStep) runAttempt(parentCtx context.Context, req *Request, cand *
 			markAttemptFailed(req, pre.message)
 			s.notifyHealth(parentCtx, req, cand, Outcome{Status: ResultServerError, HTTPStatus: pre.httpStatus})
 			logUpstreamFailure(parentCtx, req, cand, upstreamURL, pre.httpStatus, latencyMs, pre.cause, pre.message, upstreamContentType, upstreamRequestSummary)
+			if req.UsageEvidence.HasTokens() || req.ResponseCommitted {
+				req.RequestStatus = domain.RequestFailed
+				req.ErrorCode, req.ErrorMessage = "upstream_error", pre.message
+				return attemptResult{finished: true, finalErr: apiError(http.StatusBadGateway, req.ErrorCode, req.ErrorMessage)}
+			}
 			if req.CapabilityType == domain.CapabilityImage && isAmbiguousImageTimeout(pre.cause) {
 				return finishAmbiguousImageTimeout(req, "image generation timed out while the upstream may still be processing it")
 			}

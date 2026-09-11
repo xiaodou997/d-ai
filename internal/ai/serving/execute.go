@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"go.uber.org/zap"
@@ -686,21 +685,9 @@ func trimEOL(line []byte) []byte {
 // recognises the OpenAI/Gemini `{"error":{...}}` shape and the Anthropic
 // `{"type":"error",...}` shape.
 func payloadIsError(data []byte) bool {
-	t := bytes.TrimSpace(data)
-	if len(t) == 0 || t[0] != '{' {
-		return false
-	}
-	var probe struct {
-		Error json.RawMessage `json:"error"`
-		Type  string          `json:"type"`
-	}
-	if json.Unmarshal(t, &probe) != nil {
-		return false
-	}
-	if probe.Type == "error" {
-		return true
-	}
-	return formats.ErrorFieldIsPresent(probe.Error)
+	outcome := formats.InspectStreamOutcome(data, "")
+	return outcome.State == domain.ProviderTerminalFailed || outcome.State == domain.ProviderTerminalIncomplete || outcome.State == domain.ProviderTerminalCancelled
+
 }
 
 // streamClientWriteError marks the request as failed when the client socket
@@ -843,6 +830,10 @@ func upstreamStatusToGateway(code int) int {
 // English text is ~4 chars/token but CJK and code are closer to 2–3 bytes/token,
 // so using 3 avoids systematic under-billing.
 func fillEstimatedUsage(req *Request, outputBytes int) {
+	if domain.UsesReportedTokenBilling(req.CapabilityType) {
+		ApplyReportedUsage(req)
+		return
+	}
 	missingPrompt := req.TokenUsage.PromptTokens == 0
 	missingCompletion := req.TokenUsage.CompletionTokens == 0
 	switch {

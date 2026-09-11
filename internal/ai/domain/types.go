@@ -528,6 +528,7 @@ type TokenUsage struct {
 }
 
 const (
+	TokenUsageSourceMissing = "missing"
 	// TokenUsageSourceUpstream means every billable token counter came from the
 	// upstream provider's reported usage.
 	TokenUsageSourceUpstream = "upstream"

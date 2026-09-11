@@ -345,6 +345,12 @@ func (w *Worker) SubmitContext(ctx context.Context, p *Payload) bool {
 		}
 	}
 	sz := payloadSize(p)
+	auditSizeBefore := sz
+	CompactTextPayload(p)
+	if p.Compaction.Truncated {
+		sz = payloadSize(p)
+		zap.L().Warn("audit: large text payload compacted", zap.String("request_id", p.RequestID), zap.Int("original_bytes", auditSizeBefore))
+	}
 	if sz > workerMaxPayload {
 		failedPayloads.Inc()
 		zap.L().Error("audit: payload too large, rejecting", zap.String("request_id", p.RequestID), zap.Int("size_bytes", sz))

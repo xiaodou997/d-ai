@@ -173,7 +173,7 @@ func (p *responsesProvider) PushLine(line []byte) ([]StreamFrame, error) {
 		p.handleArgsDone(obj, &out)
 	case "response.function_call_output.delta", "response.function_call_output.done":
 		p.handleToolOutput(obj, &out)
-	case "response.completed":
+	case "response.completed", "response.done":
 		p.handleCompleted(obj, &out)
 	default:
 		id, model := p.identity()

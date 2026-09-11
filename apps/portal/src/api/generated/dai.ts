@@ -10940,7 +10940,7 @@ export interface components {
              * @description 平台向租户应收：上游参考成本乘租户结算倍率
              */
             tenant_payable_usd: number;
-            /** @description token 用量来源：upstream=上游统计 / mixed=部分估算 / estimated=完全估算 */
+            /** @description token 用量来源：upstream=上游报告 / missing=缺失用量未计费 / mixed=历史或媒体部分估算 / estimated=历史或媒体完全估算 */
             token_usage_source: string;
             /**
              * Format: int32
@@ -11122,6 +11122,8 @@ export interface components {
              * @description 租户扣除积分，即平台与租户之间的结算USD 金额
              */
             tenant_payable_usd: number;
+            /** @description 用量来源：upstream=上游报告 / missing=缺失用量未计费 / mixed、estimated=历史或媒体估算 */
+            token_usage_source?: string;
             /** Format: int32 */
             total_tokens: number;
             trace_id?: string;

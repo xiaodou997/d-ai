@@ -67,6 +67,7 @@ func (s *AuditStore) EnqueueTx(ctx context.Context, tx pgx.Tx, payload *audit.Pa
 		return errors.New("audit payload requires a request id")
 	}
 	copyPayload := *payload
+	audit.CompactTextPayload(&copyPayload)
 	settings, err := recordingSettingsInTx(ctx, tx)
 	if err != nil {
 		// Audit configuration must not roll back consumption and billing facts.

@@ -149,6 +149,8 @@ type Request struct {
 
 	// Filled by Execute step
 	TokenUsage           domain.TokenUsage
+	UsageEvidence        domain.UsageEvidence
+	UpstreamErrorCode    string
 	TokenCountSource     string // domain.TokenUsageSource* — set by Execute, read by UsageLogger
 	ClientPath           string
 	UpstreamBodySize     int    // byte length of the serialised upstream request body; used for token estimation

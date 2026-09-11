@@ -473,6 +473,7 @@ func billableUnitsForCapability(u domain.TokenUsage, capability domain.Capabilit
 }
 
 func settlementUsage(req *serving.Request) domain.TokenUsage {
+	serving.ApplyReportedUsage(req)
 	usage := req.TokenUsage
 	// Provider usage payloads occasionally report overlapping cache counters.
 	// Keep one deterministic snapshot for billing and usage records: cache-read

@@ -140,7 +140,7 @@ type usageLogDTO struct {
 	UpstreamModelMappingApplied        bool     `json:"upstream_model_mapping_applied" doc:"是否发生了上游模型名映射"`
 	PublicResponseModel                *string  `json:"public_response_model,omitempty" doc:"对客户端暴露的响应模型名"`
 	UsageEstimated                     bool     `json:"usage_estimated" doc:"是否估算用量"`
-	TokenUsageSource                   string   `json:"token_usage_source" doc:"token 用量来源：upstream=上游统计 / mixed=部分估算 / estimated=完全估算"`
+	TokenUsageSource                   string   `json:"token_usage_source" doc:"token 用量来源：upstream=上游报告 / missing=缺失用量未计费 / mixed=历史或媒体部分估算 / estimated=历史或媒体完全估算"`
 	BillingSource                      string   `json:"billing_source" doc:"计费来源：payg=按量 / subscription=订阅内"`
 	CreatedAt                          *int64   `json:"created_at,omitempty" doc:"创建时间，Unix 毫秒"`
 }
@@ -221,6 +221,7 @@ type usageLogDetailDTO struct {
 	UserChargedUSD                     float64         `json:"user_charged_usd" doc:"用户实际扣除积分USD 金额"`
 	APIKeyQuotaUSD                     float64         `json:"api_key_quota_usd" doc:"API key 配额USD 金额"`
 	BillingBreakdown                   json.RawMessage `json:"billing_breakdown,omitempty"`
+	TokenUsageSource                   string          `json:"token_usage_source,omitempty" doc:"用量来源：upstream=上游报告 / missing=缺失用量未计费 / mixed、estimated=历史或媒体估算"`
 	BillingStatus                      string          `json:"billing_status"`
 	BillingSource                      string          `json:"billing_source,omitempty" doc:"计费来源"`
 	SettlementError                    *string         `json:"settlement_error,omitempty"`
@@ -985,6 +986,7 @@ func usageLogDetailToDTO(detail domain.UsageLogDetail) usageLogDetailDTO {
 		UserChargedUSD:                     moneyfmt.MicroToUSD(detail.UserChargedMicro),
 		APIKeyQuotaUSD:                     moneyfmt.MicroToUSD(detail.APIKeyQuotaCostMicro),
 		BillingBreakdown:                   jsonObjectOrEmpty(detail.BillingBreakdownJSON),
+		TokenUsageSource:                   detail.TokenUsageSource,
 		BillingStatus:                      detail.BillingStatus,
 		BillingSource:                      billingSourceOrDefault(detail.BillingSource),
 		SettlementError:                    stringPtrOrNil(detail.SettlementError),

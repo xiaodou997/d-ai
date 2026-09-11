@@ -90,6 +90,10 @@ func (l *UsageLogger) WithAuditEnqueuer(enqueuer auditTxEnqueuer) *UsageLogger {
 // quota, and the direct balance charge are committed in one transaction.
 func (l *UsageLogger) Log(ctx context.Context, req *serving.Request) error {
 	serving.EnsureSettlementState(req)
+	serving.ApplyReportedUsage(req)
+	if req.AuditPayload != nil {
+		audit.CompactTextPayload(req.AuditPayload)
+	}
 	subject := req.RuntimeSubject()
 	if subject == nil || req.Candidate == nil {
 		return nil
@@ -100,6 +104,9 @@ func (l *UsageLogger) Log(ctx context.Context, req *serving.Request) error {
 		return fmt.Errorf("calculate prepared billing: %w", err)
 	}
 	if serving.ShouldVoidBilling(req) {
+		if domain.UsesReportedTokenBilling(req.CapabilityType) {
+			req.BillingReason = "missing_upstream_usage"
+		}
 		billing = voidBilling(billing, req.BillingReason)
 		req.BillingStatus = domain.BillingVoid
 	} else if len(req.Attempts) == 0 && req.RequestStatus == domain.RequestFailed {
@@ -554,6 +561,12 @@ func annotateSettlementMetadata(raw []byte, req *serving.Request) []byte {
 		value = map[string]any{}
 	}
 	if req != nil {
+		if domain.UsesReportedTokenBilling(req.CapabilityType) {
+			value["usage_evidence"] = req.UsageEvidence
+		}
+		if req.AuditPayload != nil && req.AuditPayload.Compaction.Truncated {
+			value["audit_compaction"] = req.AuditPayload.Compaction
+		}
 		value["request_status"] = string(req.RequestStatus)
 		value["provider_terminal_state"] = string(req.ProviderTerminalState)
 		value["client_delivery_state"] = string(req.ClientDeliveryState)
@@ -577,7 +590,7 @@ func annotateSettlementMetadata(raw []byte, req *serving.Request) []byte {
 // (e.g. failed requests where Execute never reached the estimation path).
 func tokenCountSource(s string) string {
 	switch s {
-	case domain.TokenUsageSourceEstimated, domain.TokenUsageSourceMixed, domain.TokenUsageSourceUpstream:
+	case domain.TokenUsageSourceEstimated, domain.TokenUsageSourceMixed, domain.TokenUsageSourceUpstream, domain.TokenUsageSourceMissing:
 		return s
 	default:
 		return domain.TokenUsageSourceUpstream

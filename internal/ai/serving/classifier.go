@@ -163,6 +163,7 @@ type AttemptRecord struct {
 	PoolID             string // ai_credential_pools.id; empty for account routes
 	CredentialID       string // OAuth credential actually used this attempt; empty when not pool-based
 	ProfileRevision    string // fixed-client profile frozen for this attempt
+	UpstreamRequestID  string // admin-only correlation from the upstream response
 	HTTPStatus         int
 	Outcome            ResultStatus
 	StartedAt          time.Time `json:"-"`

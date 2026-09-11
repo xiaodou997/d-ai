@@ -36,7 +36,8 @@ export const streamMeta: Record<string, UsageTagMeta> = {
 };
 
 export const tokenUsageSourceMeta: Record<string, UsageTagMeta> = {
-  upstream: { label: "上游", tone: "positive" },
+  upstream: { label: "上游报告", tone: "positive" },
+  missing: { label: "缺失用量未计费", tone: "warning" },
   mixed: { label: "部分估算", tone: "warning" },
   estimated: { label: "估算", tone: "warning" }
 };

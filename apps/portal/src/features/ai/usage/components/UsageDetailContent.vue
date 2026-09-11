@@ -108,6 +108,16 @@ function billingStatusLabel(status?: string | null) {
   }[status || ""] || status || "—";
 }
 
+function billingReasonLabel(reason: string) {
+  const reported = props.detail?.token_usage_source === "upstream";
+  return {
+    missing_upstream_usage: "缺失上游用量，未计费",
+    provider_terminal_failure: reported ? "上游失败，仅结算已报告用量" : "上游失败",
+    provider_cancelled: reported ? "上游取消，仅结算已报告用量" : "上游取消",
+    upstream_stream_interrupted: reported ? "流中断，仅结算已报告用量" : "流中断"
+  }[reason] || reason;
+}
+
 function providerTerminalLabel(value?: string | null) {
   return {
     unknown: "未确认",
@@ -250,6 +260,7 @@ interface BillingCostLineSnapshot {
 }
 
 interface BillingBreakdownSnapshot {
+  audit_compaction?: { truncated?: boolean; original_bytes?: number };
   version?: number;
   catalog_base?: BillingCostLineSnapshot;
   tenant_payable?: BillingCostLineSnapshot;
@@ -257,6 +268,8 @@ interface BillingBreakdownSnapshot {
   user_charged_micro?: number;
   price_lines?: BillingPriceLineSnapshot;
 }
+
+const auditCompaction = computed(() => parseBillingBreakdown(props.detail?.billing_breakdown)?.audit_compaction);
 
 function parseBillingBreakdown(raw: unknown): BillingBreakdownSnapshot | null {
   if (typeof raw === "string") {
@@ -440,10 +453,11 @@ function copyActivePayload() {
           <div class="billing-facts">
             <div><span>计费来源</span><strong>{{ billingSourceText }}</strong></div>
             <div><span>计费状态</span><strong>{{ billingStatusLabel(detail?.billing_status) }}</strong></div>
+            <div><span>用量来源</span><UsageTag kind="tokenUsageSource" :value="detail?.token_usage_source" /></div>
             <div><span>上游终态</span><strong>{{ providerTerminalLabel(detail?.provider_terminal_state) }}</strong></div>
             <div><span>客户端交付</span><strong>{{ deliveryStateLabel(detail?.client_delivery_state) }}</strong></div>
             <div><span>响应摘要</span><strong>{{ summaryStateLabel(detail?.response_summary_state) }}</strong></div>
-            <div v-if="detail?.billing_reason"><span>计费判定</span><strong>{{ detail.billing_reason }}</strong></div>
+            <div v-if="detail?.billing_reason"><span>计费判定</span><strong>{{ billingReasonLabel(detail.billing_reason) }}</strong></div>
             <div><span>结算时间</span><strong>{{ timestampLabel(detail?.settled_at) }}</strong></div>
             <div><span>退款状态</span><strong>{{ refundStatusLabel(detail?.refund_status) }}</strong></div>
           </div>
@@ -544,6 +558,9 @@ function copyActivePayload() {
           <el-table-column label="上游模型" prop="upstream_model" min-width="160" show-overflow-tooltip>
             <template #default="{ row }">{{ row.upstream_model || "—" }}</template>
           </el-table-column>
+          <el-table-column label="上游请求 ID" prop="upstream_request_id" min-width="180" show-overflow-tooltip>
+            <template #default="{ row }">{{ row.upstream_request_id || "—" }}</template>
+          </el-table-column>
           <el-table-column label="结果" width="100">
             <template #default="{ row }">
               <span v-if="row.skipped" class="attempt-skipped-mark" title="该候选未实际调用上游（计划阶段被拒绝或熔断器已断开）">⤳ 跳过</span>
@@ -575,6 +592,7 @@ function copyActivePayload() {
     </PortalContentCard>
 
     <PortalContentCard title="载荷与响应" description="原始 JSON 默认收起，展开后按分区查看并复制。">
+      <p v-if="auditCompaction?.truncated">请求记录过大，已保留精简记录和诊断信息（原始 {{ formatNumber(auditCompaction.original_bytes || 0) }} 字节）。</p>
       <template #actions>
         <button class="payload-toggle" type="button" @click="payloadOpen = !payloadOpen">
           <Braces :size="15" />

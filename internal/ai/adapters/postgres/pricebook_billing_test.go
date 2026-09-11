@@ -113,9 +113,10 @@ func TestPriceBreakdownRejectsCacheTokensExceedingPrompt(t *testing.T) {
 func TestCalculateNormalizesOverlappingCacheUsageOnce(t *testing.T) {
 	candidate := &domain.RouteCandidate{RouteID: "route-cache", TenantMultiplier: 1, GroupDefaultUserMultiplier: 1}
 	req := &serving.Request{
-		Subject:    &coreidentity.Subject{Scope: coreidentity.ScopeTenant, TenantID: "tenant-cache"},
-		Candidate:  candidate,
-		TokenUsage: domain.TokenUsage{PromptTokens: 100, CompletionTokens: 10, CacheReadTokens: 80, CacheWriteTokens: 50},
+		Subject:       &coreidentity.Subject{Scope: coreidentity.ScopeTenant, TenantID: "tenant-cache"},
+		Candidate:     candidate,
+		TokenUsage:    domain.TokenUsage{PromptTokens: 100, CompletionTokens: 10, CacheReadTokens: 80, CacheWriteTokens: 50},
+		UsageEvidence: domain.UsageEvidence{Fields: map[string]int{"input_tokens": 100, "output_tokens": 10, "cache_read_tokens": 80, "cache_write_tokens": 50}},
 		BillingSnapshots: map[string]domain.BillingSnapshot{candidate.RouteID: {RetailEntry: chatEntry(), AccountEntry: chatEntry(),
 			GroupDefaultUserMultiplier: 1, EffectiveUserMultiplier: 1,
 		}},
@@ -206,9 +207,10 @@ func TestCalculateUsesPreparedSnapshotWithoutRuntimeDependencies(t *testing.T) {
 		GroupDefaultUserMultiplier: 3,
 	}
 	req := &serving.Request{
-		Subject:    &coreidentity.Subject{Scope: coreidentity.ScopeUser, TenantID: "tenant-1", UserID: "user-1"},
-		Candidate:  candidate,
-		TokenUsage: domain.TokenUsage{PromptTokens: 1000, CompletionTokens: 500},
+		Subject:       &coreidentity.Subject{Scope: coreidentity.ScopeUser, TenantID: "tenant-1", UserID: "user-1"},
+		Candidate:     candidate,
+		TokenUsage:    domain.TokenUsage{PromptTokens: 1000, CompletionTokens: 500},
+		UsageEvidence: domain.UsageEvidence{Fields: map[string]int{"input_tokens": 1000, "output_tokens": 500}},
 		BillingSnapshots: map[string]domain.BillingSnapshot{
 			candidate.RouteID: {
 				RetailEntry:                chatEntry(),
@@ -266,9 +268,10 @@ func TestCalculateSelectsAccountAndRetailTiersIndependently(t *testing.T) {
 	}}
 	candidate := &domain.RouteCandidate{RouteID: "route-1", TenantMultiplier: 1, GroupDefaultUserMultiplier: 1}
 	req := &serving.Request{
-		Subject:    &coreidentity.Subject{Scope: coreidentity.ScopeUser, TenantID: "tenant-1", UserID: "user-1"},
-		Candidate:  candidate,
-		TokenUsage: domain.TokenUsage{PromptTokens: 1500, CompletionTokens: 100},
+		Subject:       &coreidentity.Subject{Scope: coreidentity.ScopeUser, TenantID: "tenant-1", UserID: "user-1"},
+		Candidate:     candidate,
+		TokenUsage:    domain.TokenUsage{PromptTokens: 1500, CompletionTokens: 100},
+		UsageEvidence: domain.UsageEvidence{Fields: map[string]int{"input_tokens": 1500, "output_tokens": 100}},
 		BillingSnapshots: map[string]domain.BillingSnapshot{candidate.RouteID: {RetailEntry: retailEntry, AccountEntry: accountEntry,
 			GroupDefaultUserMultiplier: 1, EffectiveUserMultiplier: 1,
 			ServiceTier: domain.ServiceTierStandard,
@@ -381,6 +384,7 @@ func TestFailedRequestStillBillsUpstreamTokens(t *testing.T) {
 	req := &serving.Request{
 		RequestStatus: domain.RequestFailed,
 		TokenUsage:    domain.TokenUsage{PromptTokens: 100, CompletionTokens: 40},
+		UsageEvidence: domain.UsageEvidence{Fields: map[string]int{"input_tokens": 100, "output_tokens": 40}},
 	}
 	usage := settlementUsage(req)
 	if usage.PromptTokens != 100 || usage.CompletionTokens != 40 {

@@ -45,6 +45,10 @@ func (s *ExecuteStep) executeSync(dc *deadlineController, req *Request, resp *Up
 		}
 	}
 	req.UpstreamResponseBody = bodyBytes
+	observeReportedUsage(req, s.Bridge.NormalizeResponseBody(req, bodyBytes), "json")
+	if domain.UsesReportedTokenBilling(req.CapabilityType) {
+		observeProviderStreamFrame(req, bodyBytes, "")
+	}
 	if len(bytes.TrimSpace(bodyBytes)) == 0 {
 		return &precommitError{
 			cause:      errUpstreamEmpty,
@@ -169,6 +173,9 @@ const (
 )
 
 func (s *ExecuteStep) executeStream(dc *deadlineController, req *Request, resp *UpstreamResponse, w http.ResponseWriter, startTime time.Time) error {
+	if domain.UsesReportedTokenBilling(req.CapabilityType) {
+		return s.executeReportedStream(dc, req, resp, w, startTime, false)
+	}
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		return &precommitError{cause: errStreamNoFlusher, message: errStreamNoFlusher.Error()}
@@ -516,6 +523,10 @@ func (s *ExecuteStep) executeSyncConvert(dc *deadlineController, req *Request, r
 
 	// provider-format body (strip CodeAssist envelope for gemini pools).
 	provBody := s.Bridge.NormalizeResponseBody(req, bodyBytes)
+	observeReportedUsage(req, provBody, "json")
+	if domain.UsesReportedTokenBilling(req.CapabilityType) {
+		observeProviderStreamFrame(req, provBody, "")
+	}
 
 	// A 200 whose body is an error object is a failed attempt — fail over.
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 && payloadIsError(provBody) {
@@ -573,6 +584,9 @@ func (s *ExecuteStep) executeSyncConvert(dc *deadlineController, req *Request, r
 }
 
 func (s *ExecuteStep) executeStreamConvert(dc *deadlineController, req *Request, resp *UpstreamResponse, w http.ResponseWriter, startTime time.Time) error {
+	if domain.UsesReportedTokenBilling(req.CapabilityType) {
+		return s.executeReportedStream(dc, req, resp, w, startTime, true)
+	}
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		return &precommitError{cause: errStreamNoFlusher, message: errStreamNoFlusher.Error()}

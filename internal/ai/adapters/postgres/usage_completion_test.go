@@ -145,6 +145,7 @@ func TestUsageCompletionIsIdempotentAndAtomic(t *testing.T) {
 	failedSubLogger := NewUsageLogger(pool, fixedUsageBiller{result: failedSubBilling})
 	failedSubReq := usageCompletionRequest(failedSubRequestID, failedSubTenantID, failedSubUserID)
 	failedSubReq.TokenUsage = domain.TokenUsage{}
+	failedSubReq.UsageEvidence = domain.UsageEvidence{}
 	failedSubReq.BillingSource = subscription.BillingSourceSubscription
 	failedSubReq.SubscriptionID = "33333333-3333-3333-3333-333333333333"
 	failedSubReq.RequestStatus = domain.RequestFailed
@@ -232,6 +233,7 @@ func usageCompletionRequest(requestID, tenantID, userID string) *serving.Request
 			TenantMultiplier:           1,
 			ResolvedProviderFamily:     "openai",
 		},
+		UsageEvidence: domain.UsageEvidence{Fields: map[string]int{"input_tokens": 10, "output_tokens": 20}},
 		TokenUsage: domain.TokenUsage{
 			PromptTokens:     10,
 			CompletionTokens: 20,
@@ -339,7 +341,7 @@ func assertUsageCompletionState(
 		t.Fatalf("read usage billing state: %v", err)
 	}
 	if wantTenantMicro == 0 && wantUserMicro == 0 {
-		if billingStatus != "free" {
+		if billingStatus != "free" && billingStatus != "void" {
 			t.Fatalf("zero-amount usage billing = status:%s", billingStatus)
 		}
 		return

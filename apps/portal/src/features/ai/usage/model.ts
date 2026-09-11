@@ -33,6 +33,7 @@ export interface UsageAttemptDetail {
   endpoint_id?: string;
   pool_id?: string;
   credential_id?: string;
+  upstream_request_id?: string;
   http_status?: number;
   outcome: string;
   skipped?: boolean;
@@ -131,6 +132,7 @@ export function normalizeUsageAttempts(value: unknown): UsageAttemptDetail[] {
     endpoint_id: optionalString(item.endpoint_id),
     pool_id: optionalString(item.pool_id),
     credential_id: optionalString(item.credential_id),
+    upstream_request_id: optionalString(item.upstream_request_id),
     http_status: optionalNumber(item.http_status),
     outcome: optionalString(item.outcome) || "unknown",
     skipped: typeof item.skipped === "boolean" ? item.skipped : undefined,

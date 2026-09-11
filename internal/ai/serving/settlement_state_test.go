@@ -20,7 +20,7 @@ func TestShouldVoidBillingBeforeProviderTerminal(t *testing.T) {
 }
 
 func TestClientDeliveryFailureAfterProviderTerminalRemainsBillable(t *testing.T) {
-	req := &Request{ProviderTerminalState: domain.ProviderTerminalCompleted}
+	req := &Request{ProviderTerminalState: domain.ProviderTerminalCompleted, UsageEvidence: domain.UsageEvidence{Fields: map[string]int{"input_tokens": 10}}}
 	markClientCancellation(req)
 	if req.RequestStatus != domain.RequestFailed {
 		t.Fatalf("request status = %q, want failed delivery", req.RequestStatus)
@@ -62,7 +62,7 @@ func TestObserveProviderStreamEventOnlyFailureTerminal(t *testing.T) {
 }
 
 func TestUpstreamCancellationIsNotClientCancellation(t *testing.T) {
-	req := &Request{}
+	req := &Request{UsageEvidence: domain.UsageEvidence{Fields: map[string]int{"input_tokens": 10}}}
 	markUpstreamCancellation(req)
 	if req.RequestStatus != domain.RequestFailed || req.CancellationOrigin != domain.CancellationProvider {
 		t.Fatalf("upstream cancellation state = %s/%s", req.RequestStatus, req.CancellationOrigin)

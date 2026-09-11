@@ -1222,7 +1222,7 @@ func TestExecuteStreamPreservesClaudeTerminalUsageSnapshot(t *testing.T) {
 func TestExecuteStreamSanitizesResponsesModel(t *testing.T) {
 	body := "event: response.created\n" +
 		"data: {\"type\":\"response.created\",\"response\":{\"model\":\"gpt-5.4-mini-2026-03-17\"}}\n\n" +
-		"data: [DONE]\n\n"
+		"event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\"}}\n\ndata: [DONE]\n\n"
 	w := httptest.NewRecorder()
 	dc := genTestDC()
 	defer dc.stop()
