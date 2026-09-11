@@ -1092,7 +1092,8 @@ CREATE INDEX idx_ledger_credit_leases_account
       created_at,
       updated_at,
       tenant_display_name,
-      tenant_access_mode
+      tenant_access_mode,
+      description
     FROM ai_upstream_accounts
     UNION ALL
     SELECT
@@ -1105,7 +1106,8 @@ CREATE INDEX idx_ledger_credit_leases_account
       created_at,
       updated_at,
       tenant_display_name,
-      tenant_access_mode
+      tenant_access_mode,
+      NULL::TEXT AS description
     FROM ai_credential_pools;
 
   -- 租户上游资源策略。资源生命周期与策略一致性由业务事务维护，不使用外键。
@@ -2818,6 +2820,6 @@ CREATE TABLE dai_schema_metadata (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 39);
+INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 40);
 
 COMMIT;
