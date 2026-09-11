@@ -149,6 +149,7 @@ func (r *AccountRepo) GetAccountSecret(ctx context.Context, id string) (upstream
 func accountSecretFromRow(row dbgen.AiUpstreamAccount) upstreamcontrol.AccountSecret {
 	return upstreamcontrol.AccountSecret{
 		Ciphertext:        row.ApiKeyCiphertext,
+		Description:       row.Description,
 		TenantDisplayName: row.TenantDisplayName,
 		TenantAccessMode:  row.TenantAccessMode,
 		Status:            row.Status,
