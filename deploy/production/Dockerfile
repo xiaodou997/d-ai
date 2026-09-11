@@ -1,10 +1,12 @@
-FROM alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce
+FROM debian:bookworm-slim
 
 WORKDIR /app
 
-RUN apk add --no-cache ca-certificates tzdata \
-    && addgroup -S -g 10001 dai \
-    && adduser -S -D -H -u 10001 -G dai dai \
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates tzdata wget \
+    && rm -rf /var/lib/apt/lists/* \
+    && addgroup --system --gid 10001 dai \
+    && adduser --system --uid 10001 --ingroup dai --no-create-home --disabled-login dai \
     && mkdir -p /data/images /data/files \
     && chown -R dai:dai /data
 
