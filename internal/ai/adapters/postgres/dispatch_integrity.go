@@ -16,17 +16,18 @@ type lockedGroup struct {
 	Name               string
 	PriceBookID        string
 	Status             string
+	RoutePolicy        string
 	RoutePolicyVersion int64
 }
 
 func lockGroupForTenant(ctx context.Context, tx pgx.Tx, tenantID string, groupID pgtype.UUID) (lockedGroup, error) {
 	var group lockedGroup
 	err := tx.QueryRow(ctx, `
-		SELECT id::text, tenant_id, name, retail_price_book_id::text, status, route_policy_version
+		SELECT id::text, tenant_id, name, retail_price_book_id::text, status, route_policy, route_policy_version
 		FROM ai_groups
 		WHERE id = $1 AND tenant_id = $2
 		FOR UPDATE
-	`, groupID, tenantID).Scan(&group.ID, &group.TenantID, &group.Name, &group.PriceBookID, &group.Status, &group.RoutePolicyVersion)
+	`, groupID, tenantID).Scan(&group.ID, &group.TenantID, &group.Name, &group.PriceBookID, &group.Status, &group.RoutePolicy, &group.RoutePolicyVersion)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return lockedGroup{}, domain.ErrNotFound
 	}

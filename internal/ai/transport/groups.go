@@ -44,7 +44,7 @@ type groupWriteRequest struct {
 	DefaultUserMultiplier   *float64 `json:"default_user_multiplier,omitempty" doc:"为空默认 1"`
 	UserDefaultVisible      bool     `json:"user_default_visible,omitempty"`
 	AllowProtocolConversion bool     `json:"allow_protocol_conversion,omitempty" doc:"允许协议转换；默认 false=仅同家族 passthrough"`
-	RoutePolicy             string   `json:"route_policy,omitempty" enum:"balanced,cost,latency,stability" doc:"分组路由策略；为空默认智能均衡"`
+	RoutePolicy             *string  `json:"route_policy,omitempty" enum:"balanced,cost,latency,stability" doc:"分组路由策略；创建时为空默认智能均衡"`
 	RoutePolicyVersion      *int64   `json:"route_policy_version,omitempty" doc:"更新分组时用于防止覆盖较新的路由策略"`
 	SortOrder               int32    `json:"sort_order,omitempty"`
 	Status                  string   `json:"status,omitempty" enum:"active,disabled"`
@@ -378,7 +378,7 @@ func registerGroups(api huma.API, d TenantGroupManagementHTTPDeps) {
 			if err := commercialPortReady(d.GroupManager); err != nil {
 				return nil, err
 			}
-			group, err := d.GroupManager.UpdateGroup(ctx, tenantGroupScope(ctx, in.GroupID), groupWriteFromReq(in.Body))
+			group, err := d.GroupManager.UpdateGroup(ctx, tenantGroupScope(ctx, in.GroupID), groupUpdateWriteFromReq(in.Body))
 			if err != nil {
 				return nil, mapServiceError(err)
 			}
@@ -765,6 +765,10 @@ func groupWriteFromReq(req groupWriteRequest) commercial.GroupWrite {
 	if req.DefaultUserMultiplier != nil {
 		defaultMultiplier = *req.DefaultUserMultiplier
 	}
+	routePolicy := commercial.RoutePolicyBalanced
+	if req.RoutePolicy != nil && *req.RoutePolicy != "" {
+		routePolicy = commercial.RoutePolicy(*req.RoutePolicy)
+	}
 	return commercial.GroupWrite{
 		Name:                       req.Name,
 		Description:                req.Description,
@@ -772,11 +776,19 @@ func groupWriteFromReq(req groupWriteRequest) commercial.GroupWrite {
 		DefaultUserMultiplier:      defaultMultiplier,
 		UserDefaultVisible:         req.UserDefaultVisible,
 		AllowProtocolConversion:    req.AllowProtocolConversion,
-		RoutePolicy:                commercial.RoutePolicy(req.RoutePolicy),
+		RoutePolicy:                routePolicy,
 		ExpectedRoutePolicyVersion: int64PtrOrDefault(req.RoutePolicyVersion, 0),
 		SortOrder:                  int(req.SortOrder),
 		Status:                     commercial.Status(req.Status),
 	}
+}
+
+func groupUpdateWriteFromReq(req groupWriteRequest) commercial.GroupWrite {
+	write := groupWriteFromReq(req)
+	if req.RoutePolicy == nil {
+		write.RoutePolicy = ""
+	}
+	return write
 }
 
 func groupToDTO(group commercial.Group) groupDTO {

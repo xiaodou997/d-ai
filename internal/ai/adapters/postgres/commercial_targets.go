@@ -230,9 +230,6 @@ func (r *CommercialRepo) ReplaceGroupTargets(ctx context.Context, scope commerci
 			return commercial.GroupTargetBatchResult{}, domain.NewValidationError("targets", "duplicate target: "+target.TargetID)
 		}
 		desired[key] = target
-		if _, exists := current[key]; exists {
-			continue
-		}
 		var targetStatus string
 		var allowed bool
 		if err := tx.QueryRow(ctx, `
@@ -250,11 +247,18 @@ func (r *CommercialRepo) ReplaceGroupTargets(ctx context.Context, scope commerci
 			}
 			return commercial.GroupTargetBatchResult{}, err
 		}
-		if targetStatus != string(commercial.StatusActive) {
+		_, existing := current[key]
+		if !existing && targetStatus != string(commercial.StatusActive) {
 			return commercial.GroupTargetBatchResult{}, domain.NewValidationError("target_id", "target must be active")
 		}
-		if !allowed {
+		// Existing disabled bindings may remain in a draft so they can be
+		// removed later, but an active binding must never be written for a
+		// currently inactive or inaccessible resource.
+		if commercialStatusOrDefault(target.Status) == string(commercial.StatusActive) && !allowed {
 			return commercial.GroupTargetBatchResult{}, domain.NewValidationError("target_id", "target is not available to tenant")
+		}
+		if commercialStatusOrDefault(target.Status) == string(commercial.StatusActive) && targetStatus != string(commercial.StatusActive) {
+			return commercial.GroupTargetBatchResult{}, domain.NewValidationError("target_id", "target must be active")
 		}
 	}
 
@@ -412,19 +416,24 @@ func (r *CommercialRepo) UpdateGroupTarget(ctx context.Context, scope commercial
 	if strings.TrimSpace(in.TargetID) != "" && strings.TrimSpace(in.TargetID) != existingTargetID {
 		return commercial.GroupTarget{}, domain.NewValidationError("target_id", "group target id cannot be changed")
 	}
+	var targetStatus string
 	var allowed bool
 	if err := tx.QueryRow(ctx, `
-		SELECT r.tenant_access_mode = 'public' OR EXISTS (
+		SELECT r.status,
+		       r.tenant_access_mode = 'public' OR EXISTS (
 		  SELECT 1 FROM ai_upstream_resource_tenant_policies rg
 		  WHERE rg.resource_kind = r.resource_kind AND rg.resource_id = r.id AND rg.tenant_id = $3
 		    AND rg.access_granted
 		)
 		FROM ai_upstream_resources r
 		WHERE r.resource_kind = $1 AND r.id = $2::uuid
-	`, existingKind, existingTargetID, scope.TenantID).Scan(&allowed); err != nil {
+	`, existingKind, existingTargetID, scope.TenantID).Scan(&targetStatus, &allowed); err != nil {
 		return commercial.GroupTarget{}, err
 	}
-	if !allowed {
+	if commercialStatusOrDefault(in.Status) == string(commercial.StatusActive) && targetStatus != string(commercial.StatusActive) {
+		return commercial.GroupTarget{}, domain.NewValidationError("target_id", "target must be active")
+	}
+	if commercialStatusOrDefault(in.Status) == string(commercial.StatusActive) && !allowed {
 		return commercial.GroupTarget{}, domain.NewValidationError("target_id", "target is not available to tenant")
 	}
 	// nil Priority = 保留原值（partial update）；非 nil = 覆盖。

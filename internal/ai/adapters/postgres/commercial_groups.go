@@ -104,6 +104,10 @@ func (r *CommercialRepo) UpdateGroup(ctx context.Context, scope commercial.Tenan
 			return commercial.Group{}, err
 		}
 	}
+	routePolicy := string(in.RoutePolicy)
+	if routePolicy == "" {
+		routePolicy = current.RoutePolicy
+	}
 	item, err := queriesWithTx(tx).UpdateGroup(ctx, dbgen.UpdateGroupParams{
 		ID:                      gid,
 		Name:                    name,
@@ -112,7 +116,7 @@ func (r *CommercialRepo) UpdateGroup(ctx context.Context, scope commercial.Tenan
 		DefaultUserMultiplier:   floatToNumeric(in.DefaultUserMultiplier),
 		UserDefaultVisible:      in.UserDefaultVisible,
 		AllowProtocolConversion: in.AllowProtocolConversion,
-		RoutePolicy:             string(in.RoutePolicy),
+		RoutePolicy:             routePolicy,
 		SortOrder:               int32(in.SortOrder),
 		Status:                  nextStatus,
 		TenantID:                scope.TenantID,

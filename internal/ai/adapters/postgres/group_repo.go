@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	commercial "xiaodou/dai/internal/ai/commercial"
 	dbgen "xiaodou/dai/internal/ai/db/gen"
@@ -442,7 +442,7 @@ func (r *GroupRepo) GetGroupTargetDetail(ctx context.Context, tenantID, groupID,
 		status                                   string
 		createdAt, updatedAt                     time.Time
 		accountName, poolName, fixedProviderType string
-		apiFormats                               []string
+		apiFormats, endpointIDs                  []string
 		targetStatus, accessMode                 string
 		accessGranted                            bool
 	)
@@ -465,6 +465,10 @@ func (r *GroupRepo) GetGroupTargetDetail(ctx context.Context, tenantID, groupID,
 			  WHEN cp.fixed_provider_type IN ('gemini_cli', 'antigravity') THEN 'gemini_generate'
 			  ELSE 'openai_chat'
 			END] ELSE ARRAY[]::text[] END AS api_formats,
+			CASE WHEN a.id IS NOT NULL THEN ARRAY(
+			  SELECT ae.id::text FROM ai_upstream_account_endpoints ae
+			  WHERE ae.account_id = a.id AND ae.status = 'active' ORDER BY ae.api_format
+			) ELSE ARRAY[]::text[] END AS endpoint_ids,
 			COALESCE(cp.tenant_display_name, '') AS pool_name,
 			COALESCE(cp.fixed_provider_type, '') AS fixed_provider_type,
 			COALESCE(a.status, cp.status, '')                          AS target_status,
@@ -481,7 +485,7 @@ func (r *GroupRepo) GetGroupTargetDetail(ctx context.Context, tenantID, groupID,
 		WHERE gt.group_id = $1 AND gt.id = $2
 	`, gid, rid, tenantID).Scan(
 		&targetID, &targetGroupID, &targetKind, &priority, &status, &createdAt, &updatedAt,
-		&accountName, &apiFormats, &poolName, &fixedProviderType,
+		&accountName, &apiFormats, &endpointIDs, &poolName, &fixedProviderType,
 		&targetStatus, &accessMode, &accessGranted,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -494,6 +498,7 @@ func (r *GroupRepo) GetGroupTargetDetail(ctx context.Context, tenantID, groupID,
 		GroupTargetBinding: groupTargetBindingFromRow(id, targetGroupID, targetKind, targetID, status, priority, createdAt, updatedAt),
 		AccountName:        accountName,
 		APIFormats:         apiFormats,
+		EndpointIDs:        endpointIDs,
 		PoolName:           poolName,
 		FixedProviderType:  fixedProviderType,
 		Available:          available,

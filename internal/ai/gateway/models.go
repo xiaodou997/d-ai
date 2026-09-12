@@ -123,13 +123,15 @@ func (s *Gateway) callableModels(r *http.Request, auth RuntimeAuth) ([]string, e
 		 AND ug.user_id = $2
 		LEFT JOIN ai_upstream_accounts a
 		  ON gt.target_kind = 'direct_upstream' AND a.id = gt.target_id
+		LEFT JOIN ai_upstream_account_endpoints ae
+		  ON gt.target_kind = 'direct_upstream' AND ae.account_id = a.id AND ae.status = 'active'
 		LEFT JOIN ai_credential_pools cp
 		  ON gt.target_kind = 'oauth_pool' AND cp.id = gt.target_id
 		WHERE gt.status = 'active'
 		  AND g.tenant_id = $1
 		  AND ($2::text = '' OR g.user_default_visible OR ug.id IS NOT NULL)
 		  AND (
-		    (gt.target_kind = 'direct_upstream' AND a.status = 'active')
+		    (gt.target_kind = 'direct_upstream' AND a.status = 'active' AND ae.id IS NOT NULL)
 		    OR
 		    (gt.target_kind = 'oauth_pool' AND cp.status = 'active')
 		  )

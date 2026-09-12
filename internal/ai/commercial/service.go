@@ -43,6 +43,9 @@ func (s *Service) CreateGroup(ctx context.Context, tenantID string, in GroupWrit
 	if tenantID == "" {
 		return Group{}, newValidationError("tenant_id", "tenant_id is required")
 	}
+	if in.RoutePolicy == "" {
+		in.RoutePolicy = RoutePolicyBalanced
+	}
 	normalized, err := normalizeGroupWrite(in)
 	if err != nil {
 		return Group{}, err
@@ -506,11 +509,13 @@ func normalizeGroupWrite(in GroupWrite) (GroupWrite, error) {
 	in.Code = strings.TrimSpace(in.Code)
 	in.Name = strings.TrimSpace(in.Name)
 	in.Description = strings.TrimSpace(in.Description)
-	policy, err := normalizeGroupRoutePolicyWrite(GroupRoutePolicyWrite{RoutePolicy: in.RoutePolicy})
-	if err != nil {
-		return GroupWrite{}, err
+	if in.RoutePolicy != "" {
+		policy, err := normalizeGroupRoutePolicyWrite(GroupRoutePolicyWrite{RoutePolicy: in.RoutePolicy})
+		if err != nil {
+			return GroupWrite{}, err
+		}
+		in.RoutePolicy = policy.RoutePolicy
 	}
-	in.RoutePolicy = policy.RoutePolicy
 	in.RetailPriceBookID = strings.TrimSpace(in.RetailPriceBookID)
 	if in.Name == "" && in.Code == "" {
 		return GroupWrite{}, newValidationError("name", "name or code is required")

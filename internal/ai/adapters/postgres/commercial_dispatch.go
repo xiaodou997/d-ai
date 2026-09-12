@@ -113,7 +113,13 @@ func (r *CommercialRepo) ListDispatchModels(ctx context.Context, scope commercia
 	rows, err := r.pool.Query(ctx, `
 		SELECT e.model_code,
 		       e.capability_type,
-		       COUNT(DISTINCT CASE WHEN gt.status = 'active' AND um.status = 'active' THEN gt.target_id END)::int
+		       COUNT(DISTINCT (gt.target_kind, gt.target_id)) FILTER (WHERE
+		         gt.status = 'active' AND um.status = 'active'
+		         AND ((gt.target_kind = 'direct_upstream' AND a.status = 'active' AND ae.id IS NOT NULL)
+		              OR (gt.target_kind = 'oauth_pool' AND cp.status = 'active'))
+		         AND (COALESCE(a.tenant_access_mode, cp.tenant_access_mode) = 'public'
+		              OR COALESCE(tp.access_granted, false))
+		       )::int
 		FROM ai_groups g
 		JOIN ai_price_book_entries e ON e.price_book_id = g.retail_price_book_id
 		LEFT JOIN ai_group_targets gt ON gt.group_id = g.id
@@ -122,6 +128,14 @@ func (r *CommercialRepo) ListDispatchModels(ctx context.Context, scope commercia
 		 AND um.upstream_id = gt.target_id
 		 AND um.model_code = e.model_code
 		 AND um.capability_type = e.capability_type
+		LEFT JOIN ai_upstream_accounts a
+		  ON gt.target_kind = 'direct_upstream' AND a.id = gt.target_id
+		LEFT JOIN ai_upstream_account_endpoints ae
+		  ON gt.target_kind = 'direct_upstream' AND ae.account_id = a.id AND ae.status = 'active'
+		LEFT JOIN ai_credential_pools cp
+		  ON gt.target_kind = 'oauth_pool' AND cp.id = gt.target_id
+		LEFT JOIN ai_upstream_resource_tenant_policies tp
+		  ON tp.resource_kind = gt.target_kind AND tp.resource_id = gt.target_id AND tp.tenant_id = $2
 		WHERE g.id = $1 AND g.tenant_id = $2 AND e.capability_type = $3
 		GROUP BY e.model_code, e.capability_type
 		ORDER BY e.model_code ASC

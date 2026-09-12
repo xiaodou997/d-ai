@@ -29,6 +29,17 @@ func TestGroupWriteFromRequestCarriesRoutePolicyVersion(t *testing.T) {
 	}
 }
 
+func TestGroupUpdateWriteFromRequestPreservesOmittedRoutePolicy(t *testing.T) {
+	write := groupUpdateWriteFromReq(groupWriteRequest{Name: "group", RetailPriceBookID: "book"})
+	if write.RoutePolicy != "" {
+		t.Fatalf("omitted route policy = %q, want empty sentinel", write.RoutePolicy)
+	}
+	create := groupWriteFromReq(groupWriteRequest{Name: "group", RetailPriceBookID: "book"})
+	if create.RoutePolicy != commercial.RoutePolicyBalanced {
+		t.Fatalf("create route policy = %q, want balanced", create.RoutePolicy)
+	}
+}
+
 func TestGroupDispatchPreviewToDTOIncludesRoutePolicy(t *testing.T) {
 	dto := groupDispatchPreviewToDTO(commercial.DispatchPreview{
 		RequestedModel:  "gpt-latest",
