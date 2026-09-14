@@ -2,11 +2,13 @@ package serving
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"go.uber.org/zap"
 
 	"xiaodou/dai/internal/ai/domain"
+	"xiaodou/dai/internal/ai/routing"
 )
 
 // pickCandidate returns the next candidate using the group's built-in route
@@ -14,29 +16,62 @@ import (
 // immediately before the transport call.
 func (s *ExecuteStep) pickCandidate(ctx context.Context, req *Request) (*domain.RouteCandidate, float64) {
 	req.SelectionReason = ""
-	// Sticky is an explicit caller affinity decision. RouteCandidatesStep has
-	// already validated the binding and BillingGuard has kept Candidate aligned
-	// with the filtered list, so honor it for the first attempt before applying
-	// structural tiers and dynamic scoring.
-	if req.StickyHit && len(req.Attempts) == 0 && req.Candidate != nil && !req.UsedCandidates[req.Candidate.RouteID] {
-		candidate := req.Candidate
-		req.ModelCode = candidate.ModelCode
-		req.SelectionReason = "sticky"
-		return candidate, 0
+	req.SelectionError = nil
+	candidates := req.Candidates
+	recovery := map[string]bool{}
+	if s.Availability != nil {
+		var err error
+		candidates, recovery, err = s.prepareEligible(ctx, req)
+		if err != nil {
+			req.SelectionError = err
+			return nil, 0
+		}
 	}
-	// A lower-ranked group is a failover boundary. Inside the active group the
-	// tenant's manual TargetPriority is the next boundary (smaller = preferred;
-	// default 100 keeps every target a peer); protocol conversion preference
-	// follows, and the group route policy chooses among what remains.
-	groupTier := activeGroupTier(req.Candidates, req.UsedCandidates)
+	groupTier := activeGroupTier(candidates, req.UsedCandidates)
 	priorityTier, manualPriority := activePriorityTier(groupTier, req.UsedCandidates)
 	tier := activeBucketTier(priorityTier, req.UsedCandidates)
 	if len(tier) == 0 {
 		return nil, 0
 	}
+	if s.Availability != nil {
+		trials := []string{}
+		normal := []*domain.RouteCandidate{}
+		for _, c := range tier {
+			if recovery[c.Key()] {
+				trials = append(trials, c.Key())
+			} else {
+				normal = append(normal, c)
+			}
+		}
+		key := fmt.Sprintf("%s:%d:%d:%s:%s", tier[0].GroupID, tier[0].TargetPriority, tier[0].ConversionBucket, req.StickyModelKey(), req.ClientProtocol)
+		trial, err := s.Availability.RecoveryTurn(ctx, key, trials, len(normal) > 0)
+		if err != nil {
+			req.SelectionError = err
+			return nil, 0
+		}
+		if trial != "" {
+			for _, c := range tier {
+				if c.Key() == trial {
+					req.SelectionReason = "recovery"
+					return c, 0
+				}
+			}
+		}
+		if len(normal) > 0 {
+			tier = normal
+		}
+	}
+	if req.StickyHit && len(req.Attempts) == 0 && req.Candidate != nil {
+		for _, c := range tier {
+			if c.Key() == req.Candidate.Key() || c.CredentialID != "" && c.CredentialID == stickyCredentialID(req, c) {
+				req.SelectionReason = "sticky"
+				return c, 0
+			}
+		}
+	}
 	var cand *domain.RouteCandidate
 	var score float64
-	scoring := RouteScoringContext{}
+	scoring := RouteScoringContext{Stream: req.IsStream}
 	if subject := req.RuntimeSubject(); subject != nil {
 		scoring.TenantID = subject.TenantID
 	}
@@ -121,17 +156,6 @@ func stickyCredentialID(req *Request, cand *domain.RouteCandidate) string {
 	return b.CredentialID
 }
 
-func (s *ExecuteStep) candidateBlocked(candidate *domain.RouteCandidate) bool {
-	if s.Health == nil || candidate == nil {
-		return false
-	}
-	targetID := candidate.EndpointID
-	if candidate.IsPoolRoute() {
-		targetID = candidate.PoolID
-	}
-	return targetID != "" && s.Health.IsBlocked(targetID, candidateProbeLease(candidate))
-}
-
 func candidateProbeLease(candidate *domain.RouteCandidate) time.Duration {
 	if candidate == nil || candidate.Timeouts.MaxDuration <= 0 {
 		return 30 * time.Minute
@@ -139,14 +163,9 @@ func candidateProbeLease(candidate *domain.RouteCandidate) time.Duration {
 	return candidate.Timeouts.MaxDuration + 2*time.Minute
 }
 
-func (s *ExecuteStep) releaseHealthProbe(candidate *domain.RouteCandidate) {
-	if s.Health == nil || candidate == nil {
-		return
-	}
-	targetID, _ := healthTarget(candidate)
-	if targetID != "" {
-		s.Health.ReleaseProbe(targetID)
-	}
+func (s *ExecuteStep) releaseAvailability(req *Request) {
+	req.AvailabilityResult = routing.AvailabilityOutcome{}
+	s.finishAvailability(req)
 }
 
 func exhaustPhysicalTarget(req *Request, failed *domain.RouteCandidate) {
@@ -159,7 +178,7 @@ func exhaustPhysicalTarget(req *Request, failed *domain.RouteCandidate) {
 			continue
 		}
 		if physicalTargetKey(candidate) == key {
-			req.UsedCandidates[candidate.RouteID] = true
+			req.UsedCandidates[candidate.Key()] = true
 		}
 	}
 }
@@ -169,10 +188,13 @@ func physicalTargetKey(candidate *domain.RouteCandidate) string {
 		return ""
 	}
 	if candidate.IsPoolRoute() {
+		if candidate.CredentialID != "" {
+			return "credential:" + candidate.CredentialID + ":" + candidate.EffectiveUpstreamModel() + ":" + candidate.OperationKey()
+		}
 		return "pool:" + candidate.PoolID
 	}
 	if candidate.EndpointID != "" {
-		return "account:" + candidate.EndpointID
+		return "endpoint:" + candidate.EndpointID + ":" + candidate.EffectiveUpstreamModel() + ":" + candidate.OperationKey()
 	}
 	return "route:" + candidate.RouteID
 }
@@ -182,7 +204,7 @@ func physicalTargetKey(candidate *domain.RouteCandidate) string {
 func activeGroupTier(candidates []*domain.RouteCandidate, used map[string]bool) []*domain.RouteCandidate {
 	minRank := int(^uint(0) >> 1)
 	for _, candidate := range candidates {
-		if candidate == nil || used[candidate.RouteID] {
+		if candidate == nil || used[candidate.Key()] {
 			continue
 		}
 		if candidate.GroupRank < minRank {
@@ -194,7 +216,7 @@ func activeGroupTier(candidates []*domain.RouteCandidate, used map[string]bool) 
 	}
 	tier := make([]*domain.RouteCandidate, 0, len(candidates))
 	for _, candidate := range candidates {
-		if candidate != nil && !used[candidate.RouteID] && candidate.GroupRank == minRank {
+		if candidate != nil && !used[candidate.Key()] && candidate.GroupRank == minRank {
 			tier = append(tier, candidate)
 		}
 	}
@@ -212,7 +234,7 @@ func activePriorityTier(candidates []*domain.RouteCandidate, used map[string]boo
 	levels := 0
 	seen := make(map[int]bool, len(candidates))
 	for _, c := range candidates {
-		if c == nil || used[c.RouteID] {
+		if c == nil || used[c.Key()] {
 			continue
 		}
 		if !seen[c.TargetPriority] {
@@ -228,7 +250,7 @@ func activePriorityTier(candidates []*domain.RouteCandidate, used map[string]boo
 	}
 	tier := make([]*domain.RouteCandidate, 0, len(candidates))
 	for _, c := range candidates {
-		if c != nil && !used[c.RouteID] && c.TargetPriority == minPriority {
+		if c != nil && !used[c.Key()] && c.TargetPriority == minPriority {
 			tier = append(tier, c)
 		}
 	}
@@ -242,7 +264,7 @@ func activePriorityTier(candidates []*domain.RouteCandidate, used map[string]boo
 func activeBucketTier(candidates []*domain.RouteCandidate, used map[string]bool) []*domain.RouteCandidate {
 	minBucket := int(^uint(0) >> 1) // max int
 	for _, c := range candidates {
-		if used[c.RouteID] {
+		if used[c.Key()] {
 			continue
 		}
 		if c.ConversionBucket < minBucket {
@@ -251,7 +273,7 @@ func activeBucketTier(candidates []*domain.RouteCandidate, used map[string]bool)
 	}
 	var tier []*domain.RouteCandidate
 	for _, c := range candidates {
-		if !used[c.RouteID] && c.ConversionBucket == minBucket {
+		if !used[c.Key()] && c.ConversionBucket == minBucket {
 			tier = append(tier, c)
 		}
 	}

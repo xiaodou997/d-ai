@@ -2,15 +2,16 @@ package serving
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
+	"strings"
 	"time"
 	"xiaodou/dai/internal/ai/domain"
 )
 
-// ResultStatus is the coarse category of an upstream call outcome. Used by
-// both the retry classifier and the HealthTracker (P2) to decide whether the
-// failure should count against a circuit breaker.
+// ResultStatus is shared by retry policy, availability and attempt statistics.
 type ResultStatus int
 
 const (
@@ -25,11 +26,14 @@ const (
 	ResultCanceled     // caller context ended; never retry or penalize upstream health
 	ResultCircuitOpen  // candidate skipped: circuit breaker open, never reached transport
 	ResultRejected     // candidate skipped by planner/binder verdict, never reached transport
+	ResultModelError   // upstream model or operation is unavailable
 )
 
 // String returns a short human-readable label for the status.
 func (s ResultStatus) String() string {
 	switch s {
+	case ResultModelError:
+		return "model_error"
 	case ResultSuccess:
 		return "success"
 	case ResultClientError:
@@ -56,11 +60,16 @@ func (s ResultStatus) String() string {
 }
 
 // Outcome is the structured result of one upstream attempt.
-type Outcome struct {
+type AttemptOutcome struct {
+	ErrorCode  string
 	Status     ResultStatus
+	RetryAt    int64
 	HTTPStatus int // 0 if no response was received
 	Err        error
 }
+
+// Outcome retains the concise name used by the executor.
+type Outcome = AttemptOutcome
 
 // Decision is what the retry loop should do next.
 type Decision int
@@ -76,12 +85,13 @@ const (
 // structured Outcome. Callers then read Outcome.Decision() to drive the loop.
 func ClassifyOutcome(httpStatus int, err error) Outcome {
 	if err != nil {
+		var timeout net.Error
 		switch {
 		case errors.Is(err, context.Canceled):
 			return Outcome{Status: ResultCanceled, Err: err}
 		case errors.Is(err, ErrResponseHeaderTimeout), errors.Is(err, ErrFirstByteTimeout),
 			errors.Is(err, ErrIdleTimeout), errors.Is(err, ErrMaxDuration),
-			errors.Is(err, context.DeadlineExceeded):
+			errors.Is(err, context.DeadlineExceeded), errors.As(err, &timeout) && timeout.Timeout():
 			return Outcome{Status: ResultTimeout, Err: err}
 		}
 		return Outcome{Status: ResultNetwork, Err: err}
@@ -117,7 +127,7 @@ func (o Outcome) Decision(hasCredential bool) Decision {
 			return DecisionRetryNewCred
 		}
 		return DecisionRetry
-	case ResultRateLimited, ResultServerError, ResultTimeout, ResultNetwork:
+	case ResultModelError, ResultRateLimited, ResultServerError, ResultTimeout, ResultNetwork:
 		return DecisionRetry
 	case ResultClientError:
 		return DecisionGiveUp
@@ -150,6 +160,19 @@ func (o Outcome) CountsAsHealthFailure() bool {
 // CredentialID/ErrorMsg must never reach the client — they identify internal
 // upstream accounts and may contain raw transport error text.
 type AttemptRecord struct {
+	OutcomeFinal        bool
+	FirstOutputMs       int
+	CandidateID         string
+	AccountID           string
+	ModelCode           string
+	Operation           string
+	Stream              bool
+	AvailabilityOutcome string
+	FailureScope        string
+	CooldownEntered     bool
+	RetryAt             int64
+	UpstreamErrorCode   string
+
 	UsageEvidence         domain.UsageEvidence         `json:"usage_evidence"`
 	ProviderTerminalState domain.ProviderTerminalState `json:"provider_terminal_state"`
 	PricingSnapshot       domain.BillingSnapshot       `json:"pricing_snapshot"`
@@ -177,5 +200,43 @@ type AttemptRecord struct {
 	FirstByteMs           int       // request sent → first committed byte (0 when not committed)
 	TotalMs               int
 	ErrorMsg              string
-	Score                 float64 // scorer probability from softmax (0 when scorer unavailable)
+	Score                 float64 // policy utility (0 when no comparison was needed)
+}
+
+// ClassifyResponse uses provider error facts before applying retry policy.
+func ClassifyResponse(status int, headers http.Header, body string, err error) Outcome {
+	out := ClassifyOutcome(status, err)
+	out.RetryAt = retryAfter(headers)
+	if err != nil {
+		return out
+	}
+	var envelope struct {
+		Error struct {
+			Code    json.RawMessage `json:"code"`
+			Status  string          `json:"status"`
+			Type    string          `json:"type"`
+			Message string          `json:"message"`
+		} `json:"error"`
+	}
+	_ = json.Unmarshal([]byte(body), &envelope)
+	out.ErrorCode = strings.Trim(string(envelope.Error.Code), "\"")
+	if out.ErrorCode == "" || out.ErrorCode == "null" {
+		out.ErrorCode = envelope.Error.Type
+	}
+	if out.ErrorCode == "" {
+		out.ErrorCode = envelope.Error.Status
+	}
+	code := strings.ToLower(out.ErrorCode + " " + envelope.Error.Type + " " + envelope.Error.Status)
+	if status == http.StatusTooManyRequests {
+		return out
+	}
+	modelError := strings.Contains(code, "model_not_found") || strings.Contains(code, "model_not_available") || strings.Contains(code, "model_access") || strings.Contains(code, "unsupported_model") || strings.Contains(code, "insufficient_quota")
+	authError := strings.Contains(code, "invalid_api_key") || strings.Contains(code, "invalid_token") || strings.Contains(code, "authentication_error") || strings.Contains(code, "invalid_grant") || strings.Contains(code, "unauthenticated")
+	if status == http.StatusForbidden && !authError || status == http.StatusNotFound || modelError {
+		out.Status = ResultModelError
+	}
+	if authError {
+		out.Status = ResultUnauthorized
+	}
+	return out
 }

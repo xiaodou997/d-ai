@@ -419,7 +419,7 @@ func TestRuntimeTurnsRetryAfterIntoCredentialCooldown(t *testing.T) {
 	}
 }
 
-func TestRuntimeRefreshesOnceAndReplaysUnauthorizedCredential(t *testing.T) {
+func TestRuntimeRefreshesWithoutHiddenModelReplay(t *testing.T) {
 	var calls atomic.Int32
 	runtime := New(transportFunc(func(_ context.Context, req *WireRequest) (*WireResponse, error) {
 		calls.Add(1)
@@ -443,10 +443,10 @@ func TestRuntimeRefreshesOnceAndReplaysUnauthorizedCredential(t *testing.T) {
 		t.Fatalf("Invoke() error = %v", err)
 	}
 	defer exchange.Response.Body.Close()
-	if exchange.Response.StatusCode != http.StatusOK {
+	if exchange.Response.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("status = %d", exchange.Response.StatusCode)
 	}
-	if calls.Load() != 2 || exchange.Trace.ProviderCalls != 2 || exchange.Trace.RefreshCalls != 1 {
+	if calls.Load() != 1 || exchange.Trace.ProviderCalls != 1 || exchange.Trace.RefreshCalls != 1 {
 		t.Fatalf("trace = %#v, calls = %d", exchange.Trace, calls.Load())
 	}
 	if exchange.Trace.CredentialEffect != CredentialEffectRefreshed {

@@ -92,6 +92,13 @@ func TestRequestCutoverPreservesAssetsAndReleasesHistory(t *testing.T) {
 	if err != nil || got != hash {
 		t.Fatalf("asset equality failed: %s / %s, %v", hash, got, err)
 	}
+	migration43, err := os.ReadFile(filepath.Join(string(bytesTrimSpace(root)), "internal/db/changes/0043_20260914_upstream_availability.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = pool.Exec(ctx, string(migration43)); err != nil {
+		t.Fatal(err)
+	}
 	if err = db.VerifySchema(ctx, pool); err != nil {
 		t.Fatal(err)
 	}

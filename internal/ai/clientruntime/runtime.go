@@ -212,7 +212,7 @@ func (r *Runtime) Invoke(ctx context.Context, in Invocation) (*Exchange, error) 
 	}
 
 	originalBody := snapshotAndClose(response.Body, authResponseSnapshotLimit)
-	refreshed, refreshErr := r.refreshCredential(ctx, in.Credential)
+	_, refreshErr := r.refreshCredential(ctx, in.Credential)
 	exchange.Trace.RefreshCalls++
 	if refreshErr != nil {
 		response.Body = io.NopCloser(bytes.NewReader(originalBody))
@@ -220,42 +220,8 @@ func (r *Runtime) Invoke(ctx context.Context, in Invocation) (*Exchange, error) 
 		return exchange, nil
 	}
 
-	in.Credential = refreshed
-	retryRequest, err := profile.prepare(in)
-	if err != nil {
-		return exchange, &Error{
-			Code:            ErrorRequestContract,
-			ProfileRevision: profile.revision(),
-			SafeDetail:      "refreshed credential could not satisfy the client profile",
-			Cause:           err,
-		}
-	}
-	retryResponse, err := r.do(ctx, retryRequest, &exchange.Trace)
-	if err != nil {
-		return exchange, &Error{
-			Code:            ErrorTransport,
-			ProfileRevision: profile.revision(),
-			SafeDetail:      "fixed-provider retry after credential refresh failed",
-			Cause:           err,
-		}
-	}
-	if retryResponse == nil {
-		return exchange, &Error{
-			Code:            ErrorTransport,
-			ProfileRevision: profile.revision(),
-			SafeDetail:      "fixed-provider retry returned no response",
-		}
-	}
-	exchange.Response = retryResponse
-	if retryResponse.StatusCode == http.StatusUnauthorized {
-		exchange.Trace.CredentialEffect = CredentialEffectInvalidate
-	} else if retryResponse.StatusCode == http.StatusForbidden ||
-		retryResponse.StatusCode == http.StatusTooManyRequests {
-		exchange.Trace.CredentialEffect = CredentialEffectCooldown
-		exchange.Trace.CooldownUntil = responseCooldownUntil(retryResponse.Headers, now())
-	} else {
-		exchange.Trace.CredentialEffect = CredentialEffectRefreshed
-	}
+	response.Body = io.NopCloser(bytes.NewReader(originalBody))
+	exchange.Trace.CredentialEffect = CredentialEffectRefreshed
 	return exchange, nil
 }
 

@@ -14,7 +14,7 @@ type SystemHTTPDeps struct {
 	Auth           HTTPAuthDeps
 	DatabaseHealth ComponentHealthProbe
 	RedisHealth    ComponentHealthProbe
-	Health         routing.HealthTracker
+	Health         routing.Availability
 }
 
 // ComponentHealthProbe is the minimal infrastructure check needed by the

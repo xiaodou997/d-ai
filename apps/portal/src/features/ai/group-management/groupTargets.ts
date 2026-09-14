@@ -6,7 +6,6 @@ import type {
 export type GroupTargetChange = "add" | "update" | "remove";
 export type GroupTargetStatus = "active" | "disabled";
 export type GroupTargetKind = "direct_upstream" | "oauth_pool";
-export type GroupTargetHealthState = "closed" | "open" | "half_open" | "unknown";
 
 export interface GroupTargetDraft {
   status: GroupTargetStatus;
@@ -30,8 +29,6 @@ export interface GroupTargetRow extends GroupTargetDraft {
   resourceState: "available" | "unpriced" | "missing";
   // priority 展示用：未设置时回退到 100（默认平级）。
   priority: number;
-  // healthState 是该目标关联的运行时熔断器快照。unknown 表示暂无健康记录。
-  healthState: GroupTargetHealthState;
   // 已绑定 target 的当前可用性（仅 linked 行有意义）：绑定后资源被停用/转 restricted/
   // 撤销授权，绑定仍在但请求会被网关 fail-closed 拒。available=false 时以 reason 说明。
   bindingUnavailableReason: "inactive" | "access_revoked" | "missing" | null;

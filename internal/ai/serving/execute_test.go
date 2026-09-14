@@ -422,7 +422,7 @@ func TestExecuteFailsOverAfterEmptySuccessfulResponse(t *testing.T) {
 	})
 	health := &recordingHealth{}
 
-	if err := (&ExecuteStep{Transport: transport, Bridge: testProtocolBridge{}, Health: health}).Execute(context.Background(), req); err != nil {
+	if err := (&ExecuteStep{Transport: transport, Bridge: testProtocolBridge{}, Availability: health}).Execute(context.Background(), req); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 	if got, want := attemptRouteIDs(req.Attempts), []string{"empty-route", "good-route"}; !slices.Equal(got, want) {
@@ -473,7 +473,7 @@ func TestExecuteKeepsGroupFailoverBoundary(t *testing.T) {
 	}
 }
 
-func TestPickCandidateHonorsStickyBeforeStructuralTiers(t *testing.T) {
+func TestPickCandidateHonorsStructuralTiersBeforeSticky(t *testing.T) {
 	sticky := &domain.RouteCandidate{RouteID: "sticky", GroupRank: 2, ModelCode: "model"}
 	req := &Request{
 		Candidate: sticky,
@@ -485,8 +485,8 @@ func TestPickCandidateHonorsStickyBeforeStructuralTiers(t *testing.T) {
 		StickyHit:      true,
 	}
 	got, _ := (&ExecuteStep{}).pickCandidate(context.Background(), req)
-	if got != sticky {
-		t.Fatalf("picked %q, want sticky route", got.RouteID)
+	if got == nil || got.RouteID != "primary" {
+		t.Fatalf("picked %q, want primary route", got.RouteID)
 	}
 }
 
@@ -496,24 +496,20 @@ func TestExecuteDirect401FailsOverToNextRoute(t *testing.T) {
 		jsonResp(`{"id":"ok","choices":[{"message":{"role":"assistant","content":"done"}}]}`),
 	}}
 	health := &recordingHealth{}
-	accountState := &recordingDirectAccountState{}
 	req := executeTestRequest(httptest.NewRecorder(), []*domain.RouteCandidate{
 		{RouteID: "bad-key", GroupRank: 0, EndpointID: "account-bad", ModelCode: "public-model", UpstreamModel: "upstream-model", Protocol: domain.ProtocolOpenAIChat, Timeouts: domain.DefaultRouteTimeouts(domain.CapabilityChat)},
 		{RouteID: "good-key", GroupRank: 0, EndpointID: "account-good", ModelCode: "public-model", UpstreamModel: "upstream-model", Protocol: domain.ProtocolOpenAIChat, Timeouts: domain.DefaultRouteTimeouts(domain.CapabilityChat)},
 	})
-	step := &ExecuteStep{Transport: transport, Bridge: testProtocolBridge{}, Health: health, AccountState: accountState}
+	step := &ExecuteStep{Transport: transport, Bridge: testProtocolBridge{}, Availability: health}
 	if err := step.Execute(context.Background(), req); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 	if got, want := attemptRouteIDs(req.Attempts), []string{"bad-key", "good-key"}; !slices.Equal(got, want) {
 		t.Fatalf("attempt routes = %v, want %v", got, want)
 	}
-	// 401 不再计入熔断计数（去双重惩罚），仅走 MarkAccountInvalid 单一惩罚路径
+	// Authentication uses timed recovery without disabling account configuration.
 	if len(health.failures) != 0 {
-		t.Fatalf("health failures = %v, want empty (401 is single-punishment via MarkAccountInvalid only)", health.failures)
-	}
-	if got, want := accountState.invalidIDs, []string{"account-bad"}; !slices.Equal(got, want) {
-		t.Fatalf("invalid accounts = %v, want %v", got, want)
+		t.Fatalf("health failures = %v, want empty (authentication uses separate cooldown)", health.failures)
 	}
 }
 
@@ -523,24 +519,20 @@ func TestExecuteDirect403FailsOverToNextRoute(t *testing.T) {
 		jsonResp(`{"id":"ok","choices":[{"message":{"role":"assistant","content":"done"}}]}`),
 	}}
 	health := &recordingHealth{}
-	accountState := &recordingDirectAccountState{}
 	req := executeTestRequest(httptest.NewRecorder(), []*domain.RouteCandidate{
 		{RouteID: "forbidden", EndpointID: "account-forbidden", ModelCode: "public-model", UpstreamModel: "upstream-model", Protocol: domain.ProtocolOpenAIChat, Timeouts: domain.DefaultRouteTimeouts(domain.CapabilityChat)},
 		{RouteID: "fallback", EndpointID: "account-good", ModelCode: "public-model", UpstreamModel: "upstream-model", Protocol: domain.ProtocolOpenAIChat, Timeouts: domain.DefaultRouteTimeouts(domain.CapabilityChat)},
 	})
 
-	if err := (&ExecuteStep{Transport: transport, Bridge: testProtocolBridge{}, Health: health, AccountState: accountState}).Execute(context.Background(), req); err != nil {
+	if err := (&ExecuteStep{Transport: transport, Bridge: testProtocolBridge{}, Availability: health}).Execute(context.Background(), req); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 	if got, want := attemptRouteIDs(req.Attempts), []string{"forbidden", "fallback"}; !slices.Equal(got, want) {
 		t.Fatalf("attempt routes = %v, want %v", got, want)
 	}
-	// 403 与 401 一致，不再计入熔断计数，仅走 MarkAccountInvalid 单一惩罚路径
+	// Ambiguous 403 is model-scoped, not a permanent account rejection.
 	if len(health.failures) != 0 {
-		t.Fatalf("health failures = %v, want empty (403 is single-punishment via MarkAccountInvalid only)", health.failures)
-	}
-	if got, want := accountState.invalidIDs, []string{"account-forbidden"}; !slices.Equal(got, want) {
-		t.Fatalf("invalid accounts = %v, want %v", got, want)
+		t.Fatalf("health failures = %v, want empty (model permission uses separate cooldown)", health.failures)
 	}
 }
 
@@ -562,7 +554,7 @@ func TestExecuteOAuth401SwapsOnceThenFailsOverRoute(t *testing.T) {
 	if got, want := attemptRouteIDs(req.Attempts), []string{"pool-route", "pool-route", "direct-route"}; !slices.Equal(got, want) {
 		t.Fatalf("attempt routes = %v, want %v", got, want)
 	}
-	if got, want := pool.invalid, []string{"cred-1", "cred-2"}; !slices.Equal(got, want) {
+	if got, want := pool.invalid, []string{}; !slices.Equal(got, want) {
 		t.Fatalf("invalid credentials = %v, want %v", got, want)
 	}
 }
@@ -578,7 +570,7 @@ func TestExecutePool502TripsPoolWithoutPoisoningCredential(t *testing.T) {
 		{RouteID: "pool-route", GroupRank: 0, PoolID: "pool-1", ModelCode: "public-model", PoolUpstreamModel: "upstream-model", UpstreamModel: "upstream-model", Protocol: domain.ProtocolOpenAIChat, Timeouts: domain.DefaultRouteTimeouts(domain.CapabilityChat)},
 		{RouteID: "direct-route", GroupRank: 1, EndpointID: "account-good", ModelCode: "public-model", UpstreamModel: "upstream-model", Protocol: domain.ProtocolOpenAIChat, Timeouts: domain.DefaultRouteTimeouts(domain.CapabilityChat)},
 	})
-	step := &ExecuteStep{Transport: transport, Bridge: testProtocolBridge{}, OAuthPool: pool, Health: health}
+	step := &ExecuteStep{Transport: transport, Bridge: testProtocolBridge{}, OAuthPool: pool, Availability: health}
 	if err := step.Execute(context.Background(), req); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -600,7 +592,7 @@ func TestExecuteReturnsNoHealthyRouteWithoutCallingTransport(t *testing.T) {
 		{RouteID: "route-1", EndpointID: "account-1", ModelCode: "public-model", Protocol: domain.ProtocolOpenAIChat, Timeouts: domain.DefaultRouteTimeouts(domain.CapabilityChat)},
 		{RouteID: "route-2", EndpointID: "account-2", ModelCode: "public-model", Protocol: domain.ProtocolOpenAIChat, Timeouts: domain.DefaultRouteTimeouts(domain.CapabilityChat)},
 	})
-	step := &ExecuteStep{Transport: transport, Bridge: testProtocolBridge{}, Health: health}
+	step := &ExecuteStep{Transport: transport, Bridge: testProtocolBridge{}, Availability: health}
 	err := step.Execute(context.Background(), req)
 	var apiErr *APIError
 	if !errors.As(err, &apiErr) || apiErr.Status != http.StatusServiceUnavailable || apiErr.Code != "no_healthy_route" {
@@ -642,7 +634,7 @@ func TestExecuteSkipsBeyondAttemptCapToHealthyRoute(t *testing.T) {
 			}
 			transport := &sequenceTransport{responses: []*UpstreamResponse{jsonResp(`{"choices":[{"message":{"content":"ok"}}]}`)}}
 			req := executeTestRequest(httptest.NewRecorder(), candidates)
-			err := (&ExecuteStep{Transport: transport, Bridge: testProtocolBridge{}, Health: health}).Execute(context.Background(), req)
+			err := (&ExecuteStep{Transport: transport, Bridge: testProtocolBridge{}, Availability: health}).Execute(context.Background(), req)
 			if fallbackHealthy {
 				if err != nil || transport.calls != 1 || len(req.SkippedAttempts) != maxUpstreamAttempts {
 					t.Fatalf("healthy fallback: calls=%d skips=%d err=%v", transport.calls, len(req.SkippedAttempts), err)
@@ -678,7 +670,7 @@ func TestExecutePersistsInterleavedAttemptOrder(t *testing.T) {
 	}}
 	req := executeTestRequest(httptest.NewRecorder(), candidates)
 	req.PlanningSkipped = []AttemptRecord{{RouteID: "rejected", Outcome: ResultRejected}}
-	if err := (&ExecuteStep{Transport: transport, Bridge: testProtocolBridge{}, Health: health}).Execute(context.Background(), req); err != nil {
+	if err := (&ExecuteStep{Transport: transport, Bridge: testProtocolBridge{}, Availability: health}).Execute(context.Background(), req); err != nil {
 		t.Fatal(err)
 	}
 	var rows []attemptDetailDTO
@@ -688,11 +680,13 @@ func TestExecutePersistsInterleavedAttemptOrder(t *testing.T) {
 	if len(rows) != 6 || rows[0].RouteID != "rejected" || !rows[0].Skipped {
 		t.Fatalf("planning rejection must precede execution: %+v", rows)
 	}
-	for i, candidate := range candidates {
-		if rows[i+1].RouteID != candidate.RouteID || rows[i+1].Skipped != health.blocked[candidate.EndpointID] {
-			t.Fatalf("event %d out of order: %+v", i, rows)
+	order := []string{"route-1", "route-3", "route-0", "route-2", "route-4"}
+	for i, id := range order {
+		if rows[i+1].RouteID != id {
+			t.Fatalf("availability filtering must precede actual sends: %+v", rows)
 		}
 	}
+
 	if len(req.Attempts) != 3 || req.Attempts[2].Outcome != ResultSuccess {
 		t.Fatalf("transport attempts = %+v", req.Attempts)
 	}
@@ -710,7 +704,7 @@ func TestExecuteSkipsOpenCircuitButReportsRealFailures(t *testing.T) {
 		{RouteID: "route-1", EndpointID: "account-1", TargetPriority: 10, GroupID: "g1", GroupRank: 0, ModelCode: "public-model", UpstreamModel: "upstream-model", Protocol: domain.ProtocolOpenAIChat, Timeouts: domain.DefaultRouteTimeouts(domain.CapabilityChat)},
 		{RouteID: "route-2", EndpointID: "account-2", TargetPriority: 50, GroupID: "g1", GroupRank: 0, ModelCode: "public-model", Protocol: domain.ProtocolOpenAIChat, Timeouts: domain.DefaultRouteTimeouts(domain.CapabilityChat)},
 	})
-	err := (&ExecuteStep{Transport: transport, Bridge: testProtocolBridge{}, Health: health}).Execute(context.Background(), req)
+	err := (&ExecuteStep{Transport: transport, Bridge: testProtocolBridge{}, Availability: health}).Execute(context.Background(), req)
 	var apiErr *APIError
 	if !errors.As(err, &apiErr) || apiErr.Code != "all_routes_failed" {
 		t.Fatalf("Execute error = %v, want all_routes_failed", err)
@@ -772,8 +766,8 @@ func TestExecuteReportsRetryBudgetOnlyWhenAttemptCapLeavesCandidates(t *testing.
 	if !errors.As(err, &apiErr) || apiErr.Code != "retry_budget_exhausted" {
 		t.Fatalf("Execute error = %v, want retry_budget_exhausted", err)
 	}
-	if transport.calls != maxUpstreamAttempts {
-		t.Fatalf("transport calls = %d, want %d", transport.calls, maxUpstreamAttempts)
+	if transport.calls != 3 {
+		t.Fatalf("transport calls = %d, want %d", transport.calls, 3)
 	}
 }
 
@@ -785,7 +779,7 @@ func TestExecuteClientCancellationDoesNotRetryOrTripHealth(t *testing.T) {
 		{RouteID: "route-1", EndpointID: "account-1", ModelCode: "public-model", UpstreamModel: "upstream-model", Protocol: domain.ProtocolOpenAIChat, Timeouts: domain.DefaultRouteTimeouts(domain.CapabilityChat)},
 		{RouteID: "route-2", EndpointID: "account-2", ModelCode: "public-model", UpstreamModel: "upstream-model", Protocol: domain.ProtocolOpenAIChat, Timeouts: domain.DefaultRouteTimeouts(domain.CapabilityChat)},
 	})
-	err := (&ExecuteStep{Transport: transport, Bridge: testProtocolBridge{}, Health: health}).Execute(ctx, req)
+	err := (&ExecuteStep{Transport: transport, Bridge: testProtocolBridge{}, Availability: health}).Execute(ctx, req)
 	var apiErr *APIError
 	if !errors.As(err, &apiErr) || apiErr.Code != "client_disconnected" {
 		t.Fatalf("Execute error = %v, want client_disconnected", err)
@@ -807,16 +801,16 @@ func TestExecuteDoesNotClaimProbeBeforeCredentialPreparation(t *testing.T) {
 		{RouteID: "pool-route", PoolID: "pool-1", ModelCode: "public-model", PoolUpstreamModel: "upstream-model", UpstreamModel: "upstream-model", Protocol: domain.ProtocolOpenAIChat, Timeouts: domain.DefaultRouteTimeouts(domain.CapabilityChat)},
 	})
 	step := &ExecuteStep{
-		Transport: &sequenceTransport{},
-		Bridge:    testProtocolBridge{},
-		Health:    health,
-		OAuthPool: &recordingOAuthPool{},
+		Transport:    &sequenceTransport{},
+		Bridge:       testProtocolBridge{},
+		Availability: health,
+		OAuthPool:    &recordingOAuthPool{},
 	}
 
 	err := step.Execute(context.Background(), req)
 	var apiErr *APIError
-	if !errors.As(err, &apiErr) || apiErr.Code != "no_credential" {
-		t.Fatalf("Execute error = %v, want no_credential", err)
+	if !errors.As(err, &apiErr) || apiErr.Code != "no_healthy_route" {
+		t.Fatalf("Execute error = %v, want no_healthy_route", err)
 	}
 	if len(health.checked) != 0 {
 		t.Fatalf("health probe was claimed before credential preparation: %v", health.checked)
@@ -833,10 +827,10 @@ func TestExecuteStopsAtTotalRetryDeadline(t *testing.T) {
 		{RouteID: "route-2", EndpointID: "account-2", ModelCode: "public-model", UpstreamModel: "upstream-model", Protocol: domain.ProtocolOpenAIChat, Timeouts: domain.DefaultRouteTimeouts(domain.CapabilityChat)},
 	})
 	step := &ExecuteStep{
-		Transport: waitForCancellationTransport{},
-		Bridge:    testProtocolBridge{},
-		Health:    health,
-		Budget:    RetryBudget{MaxAttempts: 2, MaxElapsed: 20 * time.Millisecond},
+		Transport:    waitForCancellationTransport{},
+		Bridge:       testProtocolBridge{},
+		Availability: health,
+		Budget:       RetryBudget{MaxAttempts: 2, MaxElapsed: 20 * time.Millisecond},
 	}
 
 	err := step.Execute(context.Background(), req)
@@ -898,36 +892,48 @@ type recordingHealth struct {
 	blocked  map[string]bool
 }
 
-func TestHealthTargetUsesEndpointIdentityForDirectRoutes(t *testing.T) {
-	targetID, kind := healthTarget(&domain.RouteCandidate{AccountID: "account-1", EndpointID: "endpoint-1"})
-	if targetID != "endpoint-1" || kind != routing.TargetEndpoint {
-		t.Fatalf("health target = %q/%v, want endpoint-1/TargetEndpoint", targetID, kind)
+func TestHealthTargetUsesEndpointAndModelIdentityForDirectRoutes(t *testing.T) {
+	scopes := candidateScopes(&domain.RouteCandidate{AccountID: "account-1", EndpointID: "endpoint-1", UpstreamModel: "model"}, nil)
+	if len(scopes) != 4 || scopes[2].EndpointID != "endpoint-1" || scopes[2].Model != "model" {
+		t.Fatal(scopes)
 	}
 }
-
-func (h *recordingHealth) RecordSuccess(targetID string, _ routing.TargetKind) {
-	h.success = append(h.success, targetID)
-}
-func (h *recordingHealth) RecordFailure(targetID string, _ routing.TargetKind) {
-	h.failures = append(h.failures, targetID)
-}
-func (h *recordingHealth) IsBlocked(targetID string, _ time.Duration) bool {
-	h.checked = append(h.checked, targetID)
-	return h.blocked[targetID]
-}
-func (h *recordingHealth) ReleaseProbe(targetID string) {
-	h.released = append(h.released, targetID)
-}
-func (h *recordingHealth) Forget(string)                    {}
-func (*recordingHealth) StateOf(string) routing.HealthState { return routing.StateClosed }
-func (*recordingHealth) StatesOf(targetIDs []string) map[string]routing.HealthState {
-	out := make(map[string]routing.HealthState, len(targetIDs))
-	for _, targetID := range targetIDs {
-		out[targetID] = routing.StateClosed
+func (h *recordingHealth) Read(_ context.Context, scopes []routing.FaultScope) (map[string]routing.AvailabilitySnapshot, error) {
+	out := map[string]routing.AvailabilitySnapshot{}
+	for _, s := range scopes {
+		phase := routing.Available
+		if h.blocked[s.EndpointID] || h.blocked[s.ResourceID] {
+			phase = routing.Cooling
+		}
+		out[s.Key] = routing.AvailabilitySnapshot{Scope: s, Phase: phase, RetryAt: time.Now().Add(time.Hour).UnixMilli()}
 	}
-	return out
+	return out, nil
 }
-func (*recordingHealth) Snapshot() []routing.HealthRecord { return nil }
+func (h *recordingHealth) Acquire(_ context.Context, scopes []routing.FaultScope, _ time.Duration) (*routing.AdmissionPermit, error) {
+	id := scopes[0].ResourceID
+	if scopes[0].EndpointID != "" {
+		id = scopes[0].EndpointID
+	}
+	h.checked = append(h.checked, id)
+	return &routing.AdmissionPermit{Token: id}, nil
+}
+func (h *recordingHealth) Complete(_ context.Context, p *routing.AdmissionPermit, out routing.AvailabilityOutcome) ([]routing.AvailabilitySnapshot, error) {
+	if out.Success {
+		h.success = append(h.success, p.Token)
+	} else if out.HealthFailure {
+		h.failures = append(h.failures, p.Token)
+	} else {
+		h.released = append(h.released, p.Token)
+	}
+	return nil, nil
+}
+func (*recordingHealth) List(context.Context, string, string) ([]routing.AvailabilitySnapshot, error) {
+	return nil, nil
+}
+func (*recordingHealth) Resume(context.Context, string, string) error { return nil }
+func (*recordingHealth) RecoveryTurn(context.Context, string, []string, bool) (string, error) {
+	return "", nil
+}
 
 type recordingOAuthPool struct {
 	credentials []*domain.OAuthCredential
@@ -935,11 +941,6 @@ type recordingOAuthPool struct {
 	invalid     []string
 	cooldowns   []string
 	cooldownAt  []time.Time
-}
-
-type recordingDirectAccountState struct {
-	invalidIDs []string
-	reasons    []string
 }
 
 type recordingUpstreamLimiter struct {
@@ -963,12 +964,6 @@ type recordingUpstreamSlot struct {
 
 func (s *recordingUpstreamSlot) Release(context.Context) {
 	s.limiter.released = append(s.limiter.released, s.accountID)
-}
-
-func (s *recordingDirectAccountState) MarkAccountInvalid(_ context.Context, accountID, reason string) (domain.UpstreamAccount, error) {
-	s.invalidIDs = append(s.invalidIDs, accountID)
-	s.reasons = append(s.reasons, reason)
-	return domain.UpstreamAccount{ID: accountID, Status: domain.UpstreamAccountStatusInvalid}, nil
 }
 
 func (p *recordingOAuthPool) SelectCredentialFromPool(context.Context, string, string) (*domain.OAuthCredential, error) {

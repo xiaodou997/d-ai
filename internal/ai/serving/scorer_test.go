@@ -135,3 +135,28 @@ func TestFindStickyCandidate_PoolHit(t *testing.T) {
 		t.Errorf("expected index 0, got %d", idx)
 	}
 }
+
+func TestPolicyScoresUseFrozenCostSuccessLatencyLoadAndSampleCorrection(t *testing.T) {
+	s := &MultiDimScorer{}
+	a := runtimeCandidate("a")
+	b := runtimeCandidate("b")
+	a.EstimatedCostMicro = 10
+	b.EstimatedCostMicro = 20
+	cs := []*domain.RouteCandidate{a, b}
+	stats := map[string]routing.RouteStats{
+		a.StatisticsKey(false): {EWMATotalMs: 100, InflightCount: 10, Successes: 1}, b.StatisticsKey(false): {EWMATotalMs: 200, Successes: 990, Failures: 10},
+		a.StatisticsKey(true): {EWMAFirstByteMs: 400, EWMATotalMs: 10}, b.StatisticsKey(true): {EWMAFirstByteMs: 100, EWMATotalMs: 900},
+	}
+	for _, tt := range []struct {
+		policy string
+		stream bool
+		winner int
+	}{{"cost", false, 0}, {"latency", false, 0}, {"latency", true, 1}, {"balanced", false, 1}, {"stability", false, 1}} {
+		a.RoutePolicy = tt.policy
+		b.RoutePolicy = tt.policy
+		score := s.normalizedCandidateScores(context.Background(), RouteScoringContext{Stream: tt.stream}, cs, stats)
+		if score[tt.winner] <= score[1-tt.winner] {
+			t.Fatalf("%s stream=%v scores=%v", tt.policy, tt.stream, score)
+		}
+	}
+}

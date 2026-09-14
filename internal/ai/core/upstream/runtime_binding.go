@@ -54,6 +54,8 @@ func RuntimeBindingRejectionFromError(err error) (RuntimeBindingRejection, bool)
 // RuntimeBindingRequest is the runtime-kernel side input for selecting one
 // concrete upstream target + model binding from a commercial dispatch target.
 type RuntimeBindingRequest struct {
+	EndpointID string // internal expansion constraint
+
 	TenantID                string
 	Capability              catalog.Capability
 	ClientSurface           surface.ID
@@ -68,6 +70,8 @@ type RuntimeBindingRequest struct {
 // RuntimeBinding is the upstream-layer result returned to the runtime kernel
 // before actual bridge execution starts.
 type RuntimeBinding struct {
+	Alternatives []RuntimeBinding // all additional compatible endpoints
+
 	Upstream           Upstream
 	ModelBinding       ModelBinding
 	EndpointID         string

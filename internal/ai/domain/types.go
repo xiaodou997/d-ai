@@ -212,12 +212,17 @@ type Model struct {
 // RouteID = ai_group_targets.id（绑定行，用于日志/统计/sticky 校验）。
 // 目标身份（健康/sticky）：直连取具体 EndpointID，池取 PoolID。
 type RouteCandidate struct {
-RouteID                      string
-GroupRank                    int
-// TargetPriority 是同组内的人工优先级（越小越优先，100 = 默认平级）。
-// 选路顺序：分组序（GroupRank）→ 人工优先级 → 协议转换桶 → 分组路由策略。
-TargetPriority               int
-SupportsStream               bool
+	CandidateID        string // one concrete executable endpoint/credential/model path
+	CredentialID       string
+	Operation          string
+	EstimatedCostMicro int64
+
+	RouteID   string
+	GroupRank int
+	// TargetPriority 是同组内的人工优先级（越小越优先，100 = 默认平级）。
+	// 选路顺序：分组序（GroupRank）→ 人工优先级 → 协议转换桶 → 分组路由策略。
+	TargetPriority               int
+	SupportsStream               bool
 	ModelCode                    string // 映射后的逻辑模型，用于售价价格表查找
 	CapabilityType               CapabilityType
 	RequestedModel               string

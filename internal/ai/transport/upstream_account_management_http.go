@@ -19,7 +19,8 @@ type UpstreamAccountManagementHTTPDeps struct {
 	ModelBindings   UpstreamModelBindingStore
 	PriceBooks      PriceBookReader
 	AdminAudit      AdminAuditRecorder
-	RuntimeHealth   routing.HealthTracker
+	RuntimeHealth   routing.Availability
+	Stability       UpstreamStabilityReader
 }
 
 // RegisterUpstreamAccountManagement owns the platform-admin authenticated
@@ -28,4 +29,5 @@ func RegisterUpstreamAccountManagement(api huma.API, d UpstreamAccountManagement
 	management := huma.NewGroup(api)
 	management.UseMiddleware(platformUserAuth(api, d.Auth))
 	registerUpstreamAccounts(management, d)
+	registerUpstreamStability(management, d)
 }

@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/google/uuid"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -15,6 +17,7 @@ import (
 	"xiaodou/dai/internal/ai/clientruntime"
 	corebridge "xiaodou/dai/internal/ai/core/bridge"
 	"xiaodou/dai/internal/ai/domain"
+	"xiaodou/dai/internal/ai/routing"
 )
 
 func (s *ExecuteStep) usesClientRuntime(candidate *domain.RouteCandidate) bool {
@@ -70,7 +73,7 @@ func (s *ExecuteStep) acquireUpstreamSlot(ctx context.Context, req *Request, can
 	}
 	requestID := ""
 	if req != nil {
-		requestID = req.RequestID
+		requestID = req.RequestID + ":" + uuid.NewString()
 	}
 	return s.UpstreamLimiter.Acquire(ctx, candidate.EffectiveAccountID(), requestID, *candidate.UpstreamConcurrencyLimit, upstreamSlotLeaseTTL(candidate))
 }
@@ -123,7 +126,7 @@ func hasUnusedCandidate(req *Request) bool {
 		return false
 	}
 	for _, candidate := range req.Candidates {
-		if candidate != nil && !req.UsedCandidates[candidate.RouteID] {
+		if candidate != nil && !req.UsedCandidates[candidate.Key()] {
 			return true
 		}
 	}
@@ -143,6 +146,7 @@ type attemptResult struct {
 // Because nothing was written downstream, the execute loop can still fail over
 // to another route.
 type precommitError struct {
+	local      bool
 	cause      error
 	httpStatus int // upstream HTTP status (usually 200)
 	message    string
@@ -179,12 +183,17 @@ func (s *ExecuteStep) runAttempt(parentCtx context.Context, req *Request, cand *
 	dc := newDeadlineController(parentCtx, cand.Timeouts)
 	defer dc.stop()
 	attemptStartedAt := time.Now()
+	req.FirstTokenMs = 0
 	req.MarkFirstAttemptStarted(attemptStartedAt)
 
 	// P3: track inflight count; always decrement even on error.
-	if s.Stats != nil {
-		s.Stats.IncrInflight(parentCtx, cand.RouteID)
-		defer s.Stats.DecrInflight(parentCtx, cand.RouteID)
+	if stats, ok := s.Stats.(routing.InflightLeaseStats); ok {
+		token := uuid.NewString()
+		stats.BeginInflight(parentCtx, cand.CapacityKey(), token, candidateProbeLease(cand))
+		defer stats.EndInflight(parentCtx, cand.CapacityKey(), token)
+	} else if s.Stats != nil {
+		s.Stats.IncrInflight(parentCtx, cand.CapacityKey())
+		defer s.Stats.DecrInflight(parentCtx, cand.CapacityKey())
 	}
 
 	upstreamURL := cand.BaseURL
@@ -210,6 +219,11 @@ func (s *ExecuteStep) runAttempt(parentCtx context.Context, req *Request, cand *
 	zap.L().Debug("upstream request body",
 		requestLogFields(req, zap.String("body", upstreamRequestSummary))...,
 	)
+	if req.SelectedCredential != nil {
+		if usage, ok := s.OAuthPool.(interface{ RecordUsed(context.Context, string) }); ok {
+			usage.RecordUsed(parentCtx, req.SelectedCredential.ID)
+		}
+	}
 	transportStartedAt := time.Now()
 	var (
 		upResp       *UpstreamResponse
@@ -236,6 +250,12 @@ func (s *ExecuteStep) runAttempt(parentCtx context.Context, req *Request, cand *
 	} else {
 		upResp, callErr = s.Transport.Do(dc.ctx, upReq)
 	}
+	var localRuntime *clientruntime.Error
+	if errors.As(callErr, &localRuntime) && localRuntime.Code != clientruntime.ErrorTransport && (runtimeTrace == nil || runtimeTrace.ProviderCalls == 0) {
+		req.recordSkippedCandidate(cand, "local_request_error")
+		s.releaseAvailability(req)
+		return attemptResult{decision: DecisionRetry, finalErr: apiError(502, "upstream_request_build_failed", "upstream request could not be prepared")}
+	}
 	defer drainAndClose(upResp)
 	latencyMs := int(time.Since(transportStartedAt).Milliseconds())
 	phaseCause := dc.cause()
@@ -245,11 +265,6 @@ func (s *ExecuteStep) runAttempt(parentCtx context.Context, req *Request, cand *
 		// A phase timeout cancelled the request — surface the precise cause so
 		// the classifier logs "timeout" rather than a generic transport error.
 		callErr = phaseCause
-	}
-
-	// P3: record latency for EWMA update (only on completed calls).
-	if s.Stats != nil && callErr == nil {
-		s.Stats.RecordLatency(parentCtx, cand.RouteID, latencyMs)
 	}
 
 	status := 0
@@ -272,12 +287,14 @@ func (s *ExecuteStep) runAttempt(parentCtx context.Context, req *Request, cand *
 	}
 	defer func() {
 		req.CompleteAttempt(attemptIndex, time.Now())
+		s.finishAvailability(req)
 		if req.InternalErrorDetail != "" {
 			req.Attempts[attemptIndex].ErrorMsg = req.InternalErrorDetail
 		}
+		s.recordCompletedAttempt(parentCtx, req, cand, attemptIndex)
 	}()
 	if outcome.Status == ResultCanceled {
-		s.releaseHealthProbe(cand)
+		s.releaseAvailability(req)
 		if errors.Is(context.Cause(parentCtx), ErrRetryDeadlineExceeded) {
 			req.RequestStatus = domain.RequestFailed
 			req.CancellationOrigin = domain.CancellationGateway
@@ -324,9 +341,14 @@ func (s *ExecuteStep) runAttempt(parentCtx context.Context, req *Request, cand *
 			}
 		}
 		logUpstreamFailure(parentCtx, req, cand, upstreamURL, status, latencyMs, callErr, errBody, upstreamContentType, upstreamRequestSummary)
-		s.notifyHealth(parentCtx, req, cand, outcome)
+		outcome = ClassifyResponse(status, upstreamHeaders(upResp), errBody, callErr)
+		if errBody != "" {
+			req.Attempts[attemptIndex].ErrorMsg = RedactInternalErrorDetail(errBody)
+		}
+		req.Attempts[attemptIndex].Outcome = outcome.Status
+		s.recordOutcome(parentCtx, req, cand, outcome)
 	}
-	if req.CapabilityType == domain.CapabilityImage && outcome.Status == ResultTimeout {
+	if req.CapabilityType == domain.CapabilityImage && ambiguousImageTransport(outcome) {
 		// A timed-out image request may already be queued and running upstream.
 		// Retrying another route can create duplicate billable generations.
 		drainAndClose(upResp)
@@ -336,7 +358,7 @@ func (s *ExecuteStep) runAttempt(parentCtx context.Context, req *Request, cand *
 	decision := outcome.Decision(req.SelectedCredential != nil)
 
 	if runtimeTrace != nil &&
-		runtimeTrace.CredentialEffect == clientruntime.CredentialEffectCooldown &&
+		(runtimeTrace.CredentialEffect == clientruntime.CredentialEffectCooldown || runtimeTrace.CredentialEffect == clientruntime.CredentialEffectRefreshed) &&
 		req.SelectedCredential != nil {
 		decision = DecisionRetryNewCred
 	}
@@ -344,7 +366,7 @@ func (s *ExecuteStep) runAttempt(parentCtx context.Context, req *Request, cand *
 	case DecisionAccept:
 		err := s.relay(dc, req, upResp, transportStartedAt)
 		if err != nil && errors.Is(context.Cause(parentCtx), ErrRetryDeadlineExceeded) {
-			s.releaseHealthProbe(cand)
+			s.releaseAvailability(req)
 			markAttemptFailed(req, "total upstream retry deadline exceeded")
 			if req.ResponseCommitted {
 				return attemptResult{finished: true, finalErr: nil}
@@ -356,25 +378,28 @@ func (s *ExecuteStep) runAttempt(parentCtx context.Context, req *Request, cand *
 		}
 		var pre *precommitError
 		switch {
+		case req.ErrorCode == "completion_storage_unavailable":
+			s.recordOutcome(parentCtx, req, cand, Outcome{Status: ResultRejected})
+			return attemptResult{finished: true, finalErr: err}
 		case err == nil:
 			// Downstream write failures are terminal for this request but are
 			// not upstream successes; do not reward the route or persist sticky.
 			if (req.RequestStatus == domain.RequestFailed || req.RequestStatus == domain.RequestCancelled) &&
 				(req.ErrorCode == "stream_write_error" || req.ErrorCode == "client_disconnected") {
-				s.releaseHealthProbe(cand)
+				s.releaseAvailability(req)
 				return attemptResult{finished: true, finalErr: nil}
 			}
 			if req.RequestStatus != domain.RequestSuccess {
 				if req.ProviderTerminalState == domain.ProviderTerminalFailed {
 					markAttemptFailed(req, req.BillingReason)
-					s.notifyHealth(parentCtx, req, cand, Outcome{Status: ResultServerError, HTTPStatus: http.StatusOK})
+					s.recordOutcome(parentCtx, req, cand, Outcome{Status: ResultServerError, HTTPStatus: http.StatusOK})
 				} else {
-					s.releaseHealthProbe(cand)
+					s.releaseAvailability(req)
 				}
 				return attemptResult{finished: true, finalErr: nil}
 			}
 			// Upstream succeeded AND the response committed cleanly.
-			s.notifyHealth(parentCtx, req, cand, outcome)
+			s.recordOutcome(parentCtx, req, cand, outcome)
 			s.writeSticky(parentCtx, req, cand)
 			return attemptResult{finished: true, finalErr: nil}
 
@@ -383,14 +408,25 @@ func (s *ExecuteStep) runAttempt(parentCtx context.Context, req *Request, cand *
 			// non-image requests can fail over because nothing was committed.
 			drainAndClose(upResp)
 			markAttemptFailed(req, pre.message)
-			s.notifyHealth(parentCtx, req, cand, Outcome{Status: ResultServerError, HTTPStatus: pre.httpStatus})
+			v := Outcome{Status: ResultServerError, HTTPStatus: pre.httpStatus}
+			if pre.local {
+				v.Status = ResultRejected
+			} else if cause := dc.cause(); cause != nil {
+				v = ClassifyOutcome(pre.httpStatus, cause)
+			} else if payloadIsError(req.UpstreamResponseBody) {
+				classified := ClassifyResponse(pre.httpStatus, upstreamHeaders(upResp), string(req.UpstreamResponseBody), nil)
+				if classified.Status != ResultSuccess {
+					v = classified
+				}
+			}
+			s.recordOutcome(parentCtx, req, cand, v)
 			logUpstreamFailure(parentCtx, req, cand, upstreamURL, pre.httpStatus, latencyMs, pre.cause, pre.message, upstreamContentType, upstreamRequestSummary)
 			if req.ResponseCommitted {
 				req.RequestStatus = domain.RequestFailed
 				req.ErrorCode, req.ErrorMessage = "upstream_error", pre.message
 				return attemptResult{finished: true, finalErr: apiError(http.StatusBadGateway, req.ErrorCode, req.ErrorMessage)}
 			}
-			if req.CapabilityType == domain.CapabilityImage && isAmbiguousImageTimeout(pre.cause) {
+			if req.CapabilityType == domain.CapabilityImage && !payloadIsError(req.UpstreamResponseBody) {
 				return finishAmbiguousImageTimeout(req, "image generation timed out while the upstream may still be processing it")
 			}
 			exhaustPhysicalTarget(req, cand)
@@ -405,56 +441,44 @@ func (s *ExecuteStep) runAttempt(parentCtx context.Context, req *Request, cand *
 			markAttemptFailed(req, err.Error())
 			if req.ClientDeliveryState != domain.ClientDeliveryDisconnected &&
 				req.ClientDeliveryState != domain.ClientDeliveryWriteFailed {
-				s.notifyHealth(parentCtx, req, cand, Outcome{Status: ResultServerError, HTTPStatus: http.StatusOK})
+				v := Outcome{Status: ResultServerError, HTTPStatus: http.StatusOK}
+				if cause := dc.cause(); cause != nil {
+					v = ClassifyOutcome(http.StatusOK, cause)
+				}
+				s.recordOutcome(parentCtx, req, cand, v)
 			}
 			return attemptResult{finished: true, finalErr: nil}
 		}
 
 	case DecisionRetryNewCred:
 		drainAndClose(upResp)
-		if s.OAuthPool != nil && req.SelectedCredential != nil {
-			oldCredID := req.SelectedCredential.ID
-			zap.L().Warn("upstream rejected credential, swapping credential",
-				requestLogFields(req, zap.String("old_cred_id", oldCredID))...,
-			)
-			shouldInvalidate := runtimeTrace == nil ||
-				runtimeTrace.CredentialEffect == clientruntime.CredentialEffectInvalidate
-			if shouldInvalidate {
-				_ = s.OAuthPool.MarkInvalid(parentCtx, oldCredID,
-					fmt.Sprintf("upstream %d rejected credential", status))
-			} else if runtimeTrace.CredentialEffect == clientruntime.CredentialEffectCooldown {
-				until := runtimeTrace.CooldownUntil
-				if until.IsZero() {
-					until = time.Now().Add(5 * time.Minute)
+		if s.Availability != nil {
+			if runtimeTrace != nil && runtimeTrace.CredentialEffect == clientruntime.CredentialEffectRefreshed {
+				req.AvailabilityResult = routing.AvailabilityOutcome{}
+			} else if req.SelectedCredential != nil {
+				key := credentialUseKey(cand, req.SelectedCredential.ID)
+				if outcome.Status == ResultUnauthorized {
+					key = req.SelectedCredential.ID
 				}
-				if recorder, ok := s.OAuthPool.(OAuthCredentialCooldownRecorder); ok {
-					if err := recorder.MarkCooldown(parentCtx, oldCredID, until); err != nil {
-						zap.L().Warn("failed to cool down oauth credential",
-							requestLogFields(req, zap.String("credential_id", oldCredID), zap.Error(err))...,
-						)
-					}
-				}
+				req.UsedCredentials[key] = true
 			}
+			delete(req.PreparedCredentials, cand.Key())
 		}
-		decision := DecisionRetryNewCred
-		if unauthorizedAttemptsForRoute(req, cand.RouteID) >= 2 {
-			decision = DecisionRetry
-		}
-		return attemptResult{
-			decision: decision,
-			finalErr: apiError(http.StatusBadGateway, "upstream_error", "credential rejected"),
-		}
+
+		return attemptResult{decision: DecisionRetryNewCred, finalErr: apiError(http.StatusBadGateway, "upstream_error", "credential rejected")}
 
 	case DecisionRetry:
 		drainAndClose(upResp)
-		if outcome.Status == ResultUnauthorized && !cand.IsPoolRoute() && cand.EffectiveAccountID() != "" && s.AccountState != nil {
-			reason := fmt.Sprintf("runtime request: upstream returned HTTP %d", status)
-			if _, err := s.AccountState.MarkAccountInvalid(parentCtx, cand.EffectiveAccountID(), reason); err != nil {
-				zap.L().Warn("failed to mark upstream account invalid",
-					requestLogFields(req, zap.String("account_id", cand.EffectiveAccountID()), zap.Error(err))...,
-				)
+		if s.Availability != nil && cand.IsPoolRoute() && req.SelectedCredential != nil && outcome.Status != ResultNetwork {
+			key := credentialUseKey(cand, req.SelectedCredential.ID)
+			if outcome.Status == ResultUnauthorized {
+				key = req.SelectedCredential.ID
 			}
+			req.UsedCredentials[key] = true
+			delete(req.PreparedCredentials, cand.Key())
+			return attemptResult{decision: DecisionRetryNewCred, finalErr: apiError(502, "upstream_error", "upstream credential failed")}
 		}
+
 		return attemptResult{
 			decision: DecisionRetry,
 			finalErr: apiError(upstreamStatusToGateway(status), "upstream_error",
@@ -519,4 +543,30 @@ func markAttemptFailed(req *Request, msg string) {
 		}
 		req.Attempts[n-1].ErrorMsg = msg
 	}
+}
+
+func upstreamHeaders(r *UpstreamResponse) http.Header {
+	if r == nil {
+		return nil
+	}
+	return r.Headers
+}
+
+// Only failures known to occur before HTTP transmission permit image replay.
+func ambiguousImageTransport(out Outcome) bool {
+	if out.Status == ResultTimeout {
+		return true
+	}
+	if out.Status != ResultNetwork {
+		return false
+	}
+	var dns *net.DNSError
+	if errors.As(out.Err, &dns) {
+		return false
+	}
+	var op *net.OpError
+	if errors.As(out.Err, &op) && op.Op == "dial" {
+		return false
+	}
+	return true
 }

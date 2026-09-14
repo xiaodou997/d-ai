@@ -37,6 +37,7 @@ type Config struct {
 // RuntimeConfig holds admission limits that apply when no explicit per-scope
 // policy is configured.
 type RuntimeConfig struct {
+	UpstreamMaxAttempts int `mapstructure:"upstream_max_attempts"`
 	// DefaultInFlightPerAccount caps concurrent billed requests for one tenant
 	// or one end user. It is what makes billing overshoot a finite number:
 	// settlement is post-paid, so an account can overdraw by at most this many
@@ -199,6 +200,7 @@ func Load() (*Config, error) {
 	v.SetDefault("audit.store_image_blobs", false)
 	v.SetDefault("image_assets.retention", "24h")
 	v.SetDefault("runtime.default_in_flight_per_account", 32)
+	v.SetDefault("runtime.upstream_max_attempts", 3)
 
 	v.SetDefault("async_tasks.workers", 2)
 	v.SetDefault("async_tasks.poll_interval", "2s")

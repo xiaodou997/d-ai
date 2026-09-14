@@ -556,13 +556,13 @@ func (s *ExecuteStep) executeSyncConvert(dc *deadlineController, req *Request, r
 
 	// Translate provider → client.
 	if s.Bridge == nil {
-		return &precommitError{cause: errUpstreamErrorBody, httpStatus: resp.StatusCode,
+		return &precommitError{local: true, cause: errUpstreamErrorBody, httpStatus: resp.StatusCode,
 			message: "runtime bridge is not configured for sync response conversion"}
 	}
 	converted, cerr := s.Bridge.BridgeResponse(req, provBody)
 	if cerr != nil {
 		// 2xx but untranslatable — nothing written downstream, so fail over.
-		return &precommitError{cause: cerr, httpStatus: resp.StatusCode, message: "convert response: " + cerr.Error()}
+		return &precommitError{local: true, cause: cerr, httpStatus: resp.StatusCode, message: "convert response: " + cerr.Error()}
 	}
 
 	observeMediaOutput(req, provBody)
@@ -602,7 +602,7 @@ func (s *ExecuteStep) executeStreamConvert(dc *deadlineController, req *Request,
 		return &precommitError{cause: errStreamNoFlusher, message: errStreamNoFlusher.Error()}
 	}
 	if s.Bridge == nil {
-		return &precommitError{cause: errUpstreamErrorBody, httpStatus: resp.StatusCode,
+		return &precommitError{local: true, cause: errUpstreamErrorBody, httpStatus: resp.StatusCode,
 			message: "runtime bridge is not configured for stream conversion"}
 	}
 	provider, perr := s.Bridge.NewProvider(req)
@@ -704,6 +704,9 @@ awaitLoop:
 			}
 			switch fr.Event {
 			case corebridge.EvTextDelta, corebridge.EvReasoningDelta:
+				if fr.Text != "" && req.FirstTokenMs == 0 {
+					req.FirstTokenMs = max(1, int(time.Since(startTime).Milliseconds()))
+				}
 				auditBuf.WriteString(fr.Text)
 				accumulatedOutputBytes += len(fr.Text)
 			}

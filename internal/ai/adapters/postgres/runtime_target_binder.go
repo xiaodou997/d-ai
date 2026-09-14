@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -55,7 +56,38 @@ func (b *RuntimeTargetBinder) ResolveRuntimeBinding(
 ) (coreupstream.RuntimeBinding, error) {
 	switch req.TargetMode {
 	case coreupstream.AccessModeDirect:
-		return b.bindDirectUpstream(ctx, req)
+		if req.EndpointID != "" {
+			return b.bindDirectUpstream(ctx, req)
+		}
+		endpoints, err := loadActiveDirectEndpoints(ctx, b.pool, req.TargetID)
+		if err != nil {
+			return coreupstream.RuntimeBinding{}, err
+		}
+		var alternatives []coreupstream.RuntimeBinding
+		var rejected error
+		for _, endpoint := range endpoints {
+			one := req
+			one.EndpointID = endpoint.ID
+			binding, err := b.bindDirectUpstream(ctx, one)
+			if err != nil {
+				if _, ok := coreupstream.RuntimeBindingRejectionFromError(err); !ok {
+					return coreupstream.RuntimeBinding{}, err
+				}
+				rejected = err
+				continue
+			}
+			alternatives = append(alternatives, binding)
+		}
+		if len(alternatives) == 0 {
+			if rejected != nil {
+				return coreupstream.RuntimeBinding{}, rejected
+			}
+			return b.bindDirectUpstream(ctx, req)
+		}
+		sort.SliceStable(alternatives, func(i, j int) bool { return alternatives[i].ConversionBucket < alternatives[j].ConversionBucket })
+		first := alternatives[0]
+		first.Alternatives = alternatives[1:]
+		return first, nil
 	case coreupstream.AccessModeOAuthPool:
 		return b.bindOAuthPool(ctx, req)
 	default:
@@ -97,6 +129,15 @@ func (b *RuntimeTargetBinder) bindDirectUpstream(
 	endpoints, err := loadActiveDirectEndpoints(ctx, b.pool, uuidToString(row.ID))
 	if err != nil {
 		return coreupstream.RuntimeBinding{}, err
+	}
+	if req.EndpointID != "" {
+		selected := endpoints[:0]
+		for _, ep := range endpoints {
+			if ep.ID == req.EndpointID {
+				selected = append(selected, ep)
+			}
+		}
+		endpoints = selected
 	}
 	supported := make([]domain.UpstreamProtocol, 0, len(endpoints))
 	for _, endpoint := range endpoints {

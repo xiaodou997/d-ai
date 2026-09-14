@@ -3,9 +3,9 @@
 
 Source: `contracts/openapi.yaml`
 
-Contract SHA-256: `4b6640a86f6a02b50bc8e82abe21e1ace35641722b92c8bf932a4b255cd6bb1c`
+Contract SHA-256: `03876292b7257bcd87641f108794df4cf0a6280d1d8f80312e74ac60bcc251e5`
 
-Coverage: **338/338 operations (100%)**
+Coverage: **341/341 operations (100%)**
 
 The matrix is a review artifact and a generation gate. Middleware and application services remain the enforcement points; `ownership` describes the second authorization check required after capability admission.
 
@@ -16,7 +16,7 @@ The matrix is a review artifact and a generation gate. Middleware and applicatio
 | `api_key_or_session` | 4 | `api_key_or_session` | `resource` |
 | `authenticated` | 19 | `authenticated` | `actor.user` |
 | `customer_self` | 27 | `customer_self` | `actor.user` |
-| `platform_admin` | 165 | `platform_admin` | `actor.user` |
+| `platform_admin` | 168 | `platform_admin` | `actor.user` |
 | `platform_or_tenant` | 8 | `platform_or_tenant` | `actor.tenant/resource` |
 | `public` | 9 | `public` | `none` |
 | `super_admin` | 2 | `super_admin` | `global` |
@@ -315,6 +315,9 @@ The matrix is a review artifact and a generation gate. Middleware and applicatio
 | `PATCH` | `/api/v1/upstream-accounts/{accountID}/status` | `ai-update-upstream-account-status` | `platform_admin` | `global/resource` |
 | `POST` | `/api/v1/upstream-accounts/{accountID}/test` | `ai-test-account-upstream` | `platform_admin` | `global/resource` |
 | `GET` | `/api/v1/upstream-accounts/{accountID}/upstream-models` | `ai-fetch-account-upstream-models` | `platform_admin` | `global/resource` |
+| `GET` | `/api/v1/upstream-stability` | `ai-list-upstream-stability` | `platform_admin` | `global/resource` |
+| `GET` | `/api/v1/upstream-stability/{kind}/{id}` | `ai-get-upstream-stability` | `platform_admin` | `global/resource` |
+| `POST` | `/api/v1/upstream-stability/{kind}/{id}/resume` | `ai-resume-upstream` | `platform_admin` | `global/resource` |
 | `GET` | `/api/v1/usage-ranking/users` | `ai-list-usage-user-ranking` | `platform_admin` | `global/resource` |
 | `GET` | `/api/v1/usage-summary` | `ai-list-usage-summary` | `platform_admin` | `global/resource` |
 | `GET` | `/api/v1/usage-unit-summary` | `ai-list-usage-unit-summary` | `platform_admin` | `global/resource` |

@@ -1511,6 +1511,58 @@ components:
         - expiresIn
         - refreshExpiresIn
       type: object
+    AvailabilitySnapshot:
+      additionalProperties: false
+      properties:
+        busy:
+          type: boolean
+        consecutive_failures:
+          format: int64
+          type: integer
+        epoch:
+          format: int64
+          type: integer
+        last_failure_at:
+          format: int64
+          type: integer
+        lease_until:
+          format: int64
+          type: integer
+        phase:
+          type: string
+        reason:
+          type: string
+        recent_trips:
+          items:
+            format: int64
+            type: integer
+          type:
+            - array
+            - "null"
+        recovery_successes:
+          format: int64
+          type: integer
+        retry_at:
+          format: int64
+          type: integer
+        scope:
+          $ref: "#/components/schemas/FaultScope"
+        trips:
+          format: int64
+          type: integer
+        verified_at:
+          format: int64
+          type: integer
+      required:
+        - busy
+        - scope
+        - phase
+        - epoch
+        - consecutive_failures
+        - recovery_successes
+        - trips
+        - recent_trips
+      type: object
     BalanceResponse:
       additionalProperties: false
       properties:
@@ -3336,6 +3388,31 @@ components:
         - status
         - createdTime
       type: object
+    FaultScope:
+      additionalProperties: false
+      properties:
+        credential_id:
+          type: string
+        endpoint_id:
+          type: string
+        key:
+          type: string
+        kind:
+          type: string
+        model:
+          type: string
+        operation:
+          type: string
+        resource_id:
+          type: string
+        resource_kind:
+          type: string
+      required:
+        - key
+        - kind
+        - resource_kind
+        - resource_id
+      type: object
     FetchEndpointUpstreamModelsOutputBody:
       additionalProperties: false
       properties:
@@ -4103,14 +4180,6 @@ components:
           type: string
         group_id:
           type: string
-        health_state:
-          description: 运行时熔断器状态；unknown 表示该目标暂无健康记录
-          enum:
-            - closed
-            - open
-            - half_open
-            - unknown
-          type: string
         id:
           type: string
         pool_name:
@@ -4135,7 +4204,6 @@ components:
         - group_id
         - status
         - priority
-        - health_state
         - available
       type: object
     GroupTargetUpdateRequest:
@@ -4444,9 +4512,10 @@ components:
         kind:
           description: 目标类型
           enum:
-            - account
-            - endpoint
-            - pool
+            - authentication
+            - transport
+            - model
+            - rate_limit
             - unknown
           type: string
         next_probe_at:
@@ -4460,9 +4529,9 @@ components:
         state:
           description: 健康状态
           enum:
-            - closed
-            - open
-            - half_open
+            - available
+            - cooling
+            - recovering
             - unknown
           type: string
         target_id:
@@ -4492,6 +4561,8 @@ components:
           type:
             - array
             - "null"
+        state_error:
+          type: string
         total_tracked:
           description: 被跟踪目标数
           format: int64
@@ -8557,6 +8628,25 @@ components:
         - prompt_length
         - message_count
       type: object
+    StabilityListOutputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/StabilityListOutputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        items:
+          items:
+            $ref: "#/components/schemas/UpstreamStabilityDTO"
+          type:
+            - array
+            - "null"
+      required:
+        - items
+      type: object
     Status:
       additionalProperties: false
       properties:
@@ -11461,6 +11551,164 @@ components:
       required:
         - items
         - total
+      type: object
+    UpstreamModelStability:
+      additionalProperties: false
+      properties:
+        count:
+          format: int64
+          type: integer
+        credential_id:
+          type: string
+        endpoint_id:
+          type: string
+        last_error:
+          type: string
+        model:
+          type: string
+        operation:
+          type: string
+        outcome:
+          type: string
+        p50_ms:
+          format: double
+          type: number
+        p95_ms:
+          format: double
+          type: number
+        stream:
+          type: boolean
+      required:
+        - endpoint_id
+        - credential_id
+        - model
+        - operation
+        - stream
+        - outcome
+        - count
+        - p50_ms
+        - p95_ms
+        - last_error
+      type: object
+    UpstreamRuntimePath:
+      additionalProperties: false
+      properties:
+        credential_id:
+          type: string
+        endpoint_id:
+          type: string
+        model:
+          type: string
+        operation:
+          type: string
+      required:
+        - endpoint_id
+        - credential_id
+        - model
+        - operation
+      type: object
+    UpstreamStabilityDTO:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/UpstreamStabilityDTO.json
+          format: uri
+          readOnly: true
+          type: string
+        availability:
+          enum:
+            - available
+            - partial
+            - unavailable
+            - unknown
+          type: string
+        config_status:
+          type: string
+        cooldowns_last_hour:
+          format: int64
+          type: integer
+        coverage_started_at:
+          format: int64
+          type: integer
+        credential_count:
+          format: int64
+          type: integer
+        endpoint_count:
+          format: int64
+          type: integer
+        excluded:
+          format: int64
+          type: integer
+        failures:
+          format: int64
+          type: integer
+        model_count:
+          format: int64
+          type: integer
+        models:
+          items:
+            $ref: "#/components/schemas/UpstreamModelStability"
+          type:
+            - array
+            - "null"
+        paths:
+          items:
+            $ref: "#/components/schemas/UpstreamRuntimePath"
+          type:
+            - array
+            - "null"
+        repeated_failure:
+          type: boolean
+        resource_id:
+          type: string
+        resource_kind:
+          type: string
+        samples:
+          format: int64
+          type: integer
+        stability_declining:
+          type: boolean
+        state_error:
+          type: string
+        states:
+          items:
+            $ref: "#/components/schemas/AvailabilitySnapshot"
+          type:
+            - array
+            - "null"
+        success_rate:
+          format: double
+          type:
+            - number
+            - "null"
+        successes:
+          format: int64
+          type: integer
+        window:
+          type: string
+      required:
+        - availability
+        - states
+        - paths
+        - endpoint_count
+        - credential_count
+        - model_count
+        - resource_kind
+        - config_status
+        - resource_id
+        - window
+        - coverage_started_at
+        - successes
+        - failures
+        - excluded
+        - samples
+        - success_rate
+        - cooldowns_last_hour
+        - repeated_failure
+        - stability_declining
+        - models
       type: object
     UsageRefundInputBody:
       additionalProperties: false
@@ -21665,6 +21913,130 @@ paths:
                 $ref: "#/components/schemas/AppError"
           description: Error
       summary: 拉取上游账号模型列表
+      tags:
+        - upstream-accounts
+  /api/v1/upstream-stability:
+    get:
+      operationId: ai-list-upstream-stability
+      parameters:
+        - explode: false
+          in: query
+          name: kind
+          schema:
+            enum:
+              - direct_upstream
+              - oauth_pool
+            type: string
+        - explode: false
+          in: query
+          name: window
+          schema:
+            default: 24h
+            enum:
+              - 1h
+              - 24h
+              - 7d
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StabilityListOutputBody"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 管理员上游稳定性
+      tags:
+        - upstream-accounts
+  /api/v1/upstream-stability/{kind}/{id}:
+    get:
+      operationId: ai-get-upstream-stability
+      parameters:
+        - in: path
+          name: kind
+          required: true
+          schema:
+            enum:
+              - direct_upstream
+              - oauth_pool
+            type: string
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: window
+          schema:
+            default: 24h
+            enum:
+              - 1h
+              - 24h
+              - 7d
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpstreamStabilityDTO"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 上游运行状态及模型调用结果
+      tags:
+        - upstream-accounts
+  /api/v1/upstream-stability/{kind}/{id}/resume:
+    post:
+      operationId: ai-resume-upstream
+      parameters:
+        - in: path
+          name: kind
+          required: true
+          schema:
+            enum:
+              - direct_upstream
+              - oauth_pool
+            type: string
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: window
+          schema:
+            default: 24h
+            enum:
+              - 1h
+              - 24h
+              - 7d
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpstreamStabilityDTO"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 立即恢复业务试用（不发送探测请求）
       tags:
         - upstream-accounts
   /api/v1/usage-ranking/users:

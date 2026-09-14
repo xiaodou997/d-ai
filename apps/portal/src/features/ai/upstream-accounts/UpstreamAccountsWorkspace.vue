@@ -39,6 +39,24 @@ import {
   upstreamAccountStatusTagType
 } from './components/status'
 
+import StabilityBadge from '@/features/ai/upstream-stability/StabilityBadge.vue'
+import UpstreamStabilityPanel from '@/features/ai/upstream-stability/UpstreamStabilityPanel.vue'
+import { useUpstreamStability } from '@/features/ai/upstream-stability/useUpstreamStability'
+const stability = useUpstreamStability('direct_upstream')
+const stabilityById = computed(() => new Map(stability.items.value.map(item => [item.resource_id, item])))
+const stabilityFilter = shallowRef('all')
+const stabilitySort = shallowRef('default')
+const sortedAccounts = computed(() => {
+  const rows = accounts.value.filter(account => {
+    const metric = stabilityById.value.get(account.id)
+    if (stabilityFilter.value === 'low_rate') return metric?.success_rate != null && metric.success_rate < 95
+    if (stabilityFilter.value === 'repeated') return metric?.repeated_failure
+    if (stabilityFilter.value === 'no_data') return !metric?.samples
+    return stabilityFilter.value === 'all' || metric?.repeated_failure || metric?.stability_declining || metric?.availability === 'unavailable' || metric?.availability === 'partial'
+  })
+  if (stabilitySort.value === 'success') rows.sort((a, b) => (stabilityById.value.get(a.id)?.success_rate ?? 101) - (stabilityById.value.get(b.id)?.success_rate ?? 101))
+  return rows
+})
 const loading = shallowRef(false)
 const accounts = shallowRef<AccountDTO[]>([])
 const priceBooks = shallowRef<PriceBookRecord[]>([])
@@ -591,8 +609,8 @@ const LIST_PAGE_SIZE = 20
 const visibleCount = shallowRef(LIST_PAGE_SIZE)
 const accountListEl = ref<HTMLElement | null>(null)
 const listSentinelEl = ref<HTMLElement | null>(null)
-const visibleAccounts = computed(() => accounts.value.slice(0, visibleCount.value))
-const hasMoreAccounts = computed(() => visibleCount.value < accounts.value.length)
+const visibleAccounts = computed(() => sortedAccounts.value.slice(0, visibleCount.value))
+const hasMoreAccounts = computed(() => visibleCount.value < sortedAccounts.value.length)
 
 let listObserver: IntersectionObserver | null = null
 
@@ -779,6 +797,12 @@ onBeforeUnmount(() => {
       <!-- 账号列表 -->
       <el-col :span="7" class="accounts-list-col">
         <PortalContentCard title="上游账号" body-padding="none" class="accounts-list-card">
+          <div class="runtime-filters">
+ <el-select v-model="stability.window.value" aria-label="账号成功率统计范围"><el-option label="最近 1 小时" value="1h" /><el-option label="最近 24 小时" value="24h" /><el-option label="最近 7 天" value="7d" /></el-select>
+            <el-select v-model="stabilityFilter" aria-label="账号异常筛选"><el-option label="全部账号" value="all" /><el-option label="需要关注" value="abnormal" /><el-option label="成功率低于 95%" value="low_rate" /><el-option label="反复异常" value="repeated" /><el-option label="暂无样本" value="no_data" /></el-select>
+            <el-select v-model="stabilitySort" aria-label="账号稳定性排序"><el-option label="默认排序" value="default" /><el-option label="成功率从低到高" value="success" /></el-select>
+          </div>
+          <el-alert v-if="stability.error.value" :title="stability.error.value" type="warning" :closable="false" />
           <div v-loading="loading" ref="accountListEl" class="account-list">
             <div
               v-for="a in visibleAccounts"
@@ -813,6 +837,7 @@ onBeforeUnmount(() => {
                 <span class="account-item-description-text">{{ a.description }}</span>
               </div>
               <div class="account-item-host truncate">{{ accountEndpointHosts(a) }}</div>
+              <StabilityBadge :value="stabilityById.get(a.id)" />
             </div>
             <div ref="listSentinelEl" class="account-list-sentinel" aria-hidden="true">
               <span v-if="hasMoreAccounts">加载中…</span>
@@ -835,6 +860,7 @@ onBeforeUnmount(() => {
       <el-col :span="17" class="account-content-column">
         <div ref="accountContentScroll" class="account-content-scroll">
           <div v-if="selectedAccount" class="account-content-stack">
+            <UpstreamStabilityPanel kind="direct_upstream" :resource-id="selectedAccount.id" />
             <PortalContentCard title="账号概览" :description="`当前账号:${selectedAccount.name}`">
               <template #actions>
                 <el-button
@@ -853,7 +879,7 @@ onBeforeUnmount(() => {
                   {{ accountAPIFormats(selectedAccount) }}
                 </el-descriptions-item>
                 <el-descriptions-item label="最大并发">{{ selectedAccount.concurrency_limit ? `${selectedAccount.concurrency_limit} 并发` : '不限制' }}</el-descriptions-item>
-                <el-descriptions-item label="运行状态">
+                <el-descriptions-item label="配置状态">
                   <DsTag :tone="statusTone(selectedAccount.status)">
                     {{ upstreamAccountStatusLabel(selectedAccount.status) }}
                   </DsTag>
@@ -1294,6 +1320,8 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.runtime-filters { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px; }
+.runtime-filters :deep(.el-select) { min-width: 0; }
 .accounts-view {
   flex: 0 1 auto;
   min-height: 0;

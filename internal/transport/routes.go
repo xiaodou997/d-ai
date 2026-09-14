@@ -115,7 +115,7 @@ type AIUpstreamDiagnosticsHTTPDeps struct {
 	HTTPClient        aitransport.HTTPDoer
 	AccountHealth     aitransport.UpstreamAccountHealthWriter
 	ModelCapabilities aitransport.ModelCapabilityResolver
-	RuntimeHealth     routing.HealthTracker
+	RuntimeHealth     routing.Availability
 	BanChecker        aitransport.HumaBanChecker
 }
 
@@ -131,8 +131,9 @@ type AIUpstreamAccountManagementHTTPDeps struct {
 	ModelBindings   aitransport.UpstreamModelBindingStore
 	PriceBooks      aitransport.PriceBookReader
 	AdminAudit      aitransport.AdminAuditRecorder
-	RuntimeHealth   routing.HealthTracker
+	RuntimeHealth   routing.Availability
 	BanChecker      aitransport.HumaBanChecker
+	Stability       aitransport.UpstreamStabilityReader
 }
 
 // AIUpstreamAccessManagementHTTPDeps contains the collaborators owned by the
@@ -175,7 +176,6 @@ type AITenantGroupManagementHTTPDeps struct {
 	TenantPriceBooks aitransport.TenantPriceBookManager
 	GroupTransfer    aitransport.GroupTransferManager
 	AdminAudit       aitransport.AdminAuditRecorder
-	RuntimeHealth    routing.HealthTracker
 	BanChecker       aitransport.HumaBanChecker
 }
 
@@ -239,7 +239,7 @@ type AIUserSelfReadHTTPDeps struct {
 type AISystemHTTPDeps struct {
 	DatabaseHealth aitransport.ComponentHealthProbe
 	RedisHealth    aitransport.ComponentHealthProbe
-	Health         routing.HealthTracker
+	Health         routing.Availability
 	BanChecker     aitransport.HumaBanChecker
 }
 
@@ -590,6 +590,7 @@ func buildUpstreamAccountManagementHTTPDeps(platform aiPlatformDeps, d AIUpstrea
 		PriceBooks:      d.PriceBooks,
 		AdminAudit:      d.AdminAudit,
 		RuntimeHealth:   d.RuntimeHealth,
+		Stability:       d.Stability,
 	}
 }
 
@@ -635,7 +636,6 @@ func buildTenantGroupManagementHTTPDeps(platform aiPlatformDeps, d AITenantGroup
 		TenantPriceBooks: d.TenantPriceBooks,
 		GroupTransfer:    d.GroupTransfer,
 		AdminAudit:       d.AdminAudit,
-		RuntimeHealth:    d.RuntimeHealth,
 	}
 }
 

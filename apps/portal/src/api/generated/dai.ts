@@ -4029,6 +4029,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/upstream-stability": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 管理员上游稳定性 */
+        get: operations["ai-list-upstream-stability"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/upstream-stability/{kind}/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 上游运行状态及模型调用结果 */
+        get: operations["ai-get-upstream-stability"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/upstream-stability/{kind}/{id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 立即恢复业务试用（不发送探测请求） */
+        post: operations["ai-resume-upstream"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/usage-ranking/users": {
         parameters: {
             query?: never;
@@ -5661,6 +5712,29 @@ export interface components {
             /** Format: int64 */
             refreshExpiresIn: number;
         };
+        AvailabilitySnapshot: {
+            busy: boolean;
+            /** Format: int64 */
+            consecutive_failures: number;
+            /** Format: int64 */
+            epoch: number;
+            /** Format: int64 */
+            last_failure_at?: number;
+            /** Format: int64 */
+            lease_until?: number;
+            phase: string;
+            reason?: string;
+            recent_trips: number[] | null;
+            /** Format: int64 */
+            recovery_successes: number;
+            /** Format: int64 */
+            retry_at?: number;
+            scope: components["schemas"]["FaultScope"];
+            /** Format: int64 */
+            trips: number;
+            /** Format: int64 */
+            verified_at?: number;
+        };
         BalanceResponse: {
             /**
              * Format: uri
@@ -6738,6 +6812,16 @@ export interface components {
             settlementError: string;
             status: string;
         };
+        FaultScope: {
+            credential_id?: string;
+            endpoint_id?: string;
+            key: string;
+            kind: string;
+            model?: string;
+            operation?: string;
+            resource_id: string;
+            resource_kind: string;
+        };
         FetchEndpointUpstreamModelsOutputBody: {
             /**
              * Format: uri
@@ -7065,11 +7149,6 @@ export interface components {
             credential_pool_id?: string;
             fixed_provider_type?: string;
             group_id: string;
-            /**
-             * @description 运行时熔断器状态；unknown 表示该目标暂无健康记录
-             * @enum {string}
-             */
-            health_state: "closed" | "open" | "half_open" | "unknown";
             id: string;
             pool_name?: string;
             /**
@@ -7241,7 +7320,7 @@ export interface components {
              * @description 目标类型
              * @enum {string}
              */
-            kind: "account" | "endpoint" | "pool" | "unknown";
+            kind: "authentication" | "transport" | "model" | "rate_limit" | "unknown";
             /**
              * Format: int64
              * @description 下次探测时间，Unix 毫秒
@@ -7256,7 +7335,7 @@ export interface components {
              * @description 健康状态
              * @enum {string}
              */
-            state: "closed" | "open" | "half_open" | "unknown";
+            state: "available" | "cooling" | "recovering" | "unknown";
             /** @description 目标 ID */
             target_id: string;
         };
@@ -7273,6 +7352,7 @@ export interface components {
             open_count: number;
             /** @description 健康状态记录 */
             records: components["schemas"]["HealthRecordDTO"][] | null;
+            state_error?: string;
             /**
              * Format: int64
              * @description 被跟踪目标数
@@ -9341,6 +9421,15 @@ export interface components {
             tenant_id: string;
             user_id: string;
         };
+        StabilityListOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/StabilityListOutputBody.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["UpstreamStabilityDTO"][] | null;
+        };
         Status: {
             /**
              * Format: uri
@@ -10913,6 +11002,67 @@ export interface components {
             items: components["schemas"]["UpstreamModelBindingDTO"][] | null;
             /** Format: int64 */
             total: number;
+        };
+        UpstreamModelStability: {
+            /** Format: int64 */
+            count: number;
+            credential_id: string;
+            endpoint_id: string;
+            last_error: string;
+            model: string;
+            operation: string;
+            outcome: string;
+            /** Format: double */
+            p50_ms: number;
+            /** Format: double */
+            p95_ms: number;
+            stream: boolean;
+        };
+        UpstreamRuntimePath: {
+            credential_id: string;
+            endpoint_id: string;
+            model: string;
+            operation: string;
+        };
+        UpstreamStabilityDTO: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/UpstreamStabilityDTO.json
+             */
+            readonly $schema?: string;
+            /** @enum {string} */
+            availability: "available" | "partial" | "unavailable" | "unknown";
+            config_status: string;
+            /** Format: int64 */
+            cooldowns_last_hour: number;
+            /** Format: int64 */
+            coverage_started_at: number;
+            /** Format: int64 */
+            credential_count: number;
+            /** Format: int64 */
+            endpoint_count: number;
+            /** Format: int64 */
+            excluded: number;
+            /** Format: int64 */
+            failures: number;
+            /** Format: int64 */
+            model_count: number;
+            models: components["schemas"]["UpstreamModelStability"][] | null;
+            paths: components["schemas"]["UpstreamRuntimePath"][] | null;
+            repeated_failure: boolean;
+            resource_id: string;
+            resource_kind: string;
+            /** Format: int64 */
+            samples: number;
+            stability_declining: boolean;
+            state_error?: string;
+            states: components["schemas"]["AvailabilitySnapshot"][] | null;
+            /** Format: double */
+            success_rate: number | null;
+            /** Format: int64 */
+            successes: number;
+            window: string;
         };
         UsageRefundInputBody: {
             /**
@@ -21317,6 +21467,106 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FetchEndpointUpstreamModelsOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "ai-list-upstream-stability": {
+        parameters: {
+            query?: {
+                kind?: "direct_upstream" | "oauth_pool";
+                window?: "1h" | "24h" | "7d";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StabilityListOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "ai-get-upstream-stability": {
+        parameters: {
+            query?: {
+                window?: "1h" | "24h" | "7d";
+            };
+            header?: never;
+            path: {
+                kind: "direct_upstream" | "oauth_pool";
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpstreamStabilityDTO"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "ai-resume-upstream": {
+        parameters: {
+            query?: {
+                window?: "1h" | "24h" | "7d";
+            };
+            header?: never;
+            path: {
+                kind: "direct_upstream" | "oauth_pool";
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpstreamStabilityDTO"];
                 };
             };
             /** @description Error */

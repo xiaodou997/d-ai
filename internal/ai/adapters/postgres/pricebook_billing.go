@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"math/big"
 
 	"github.com/jackc/pgx/v5"
@@ -140,6 +141,7 @@ func (b *PriceBookBiller) PrepareBilling(ctx context.Context, req *serving.Reque
 		}
 		snapshot.EffectiveUserMultiplier = userMultiplier
 	}
+	cand.EstimatedCostMicro = estimateRouteCost(req, cand, snapshot)
 	return snapshot, nil
 }
 
@@ -156,7 +158,7 @@ func (b *PriceBookBiller) Calculate(_ context.Context, req *serving.Request) (do
 	if req == nil || req.Candidate == nil {
 		return domain.BillingResult{}, errors.New("billing candidate is required")
 	}
-	snapshot, ok := req.BillingSnapshots[req.Candidate.RouteID]
+	snapshot, ok := req.BillingSnapshots[req.Candidate.Key()]
 	if !ok {
 		return domain.BillingResult{}, errors.New("billing snapshot is missing for winning route")
 	}
@@ -532,4 +534,45 @@ func lookupResolutionUSD(prices []domain.ResolutionUSDPrice, defaultPrice float6
 		}
 	}
 	return defaultPrice
+}
+
+// estimateRouteCost compares candidates using one consistent synthetic usage.
+// Actual charging still uses provider-reported usage and the immutable snapshot.
+func estimateRouteCost(req *serving.Request, cand *domain.RouteCandidate, snapshot domain.BillingSnapshot) int64 {
+	body := []byte(nil)
+	if req.Envelope != nil {
+		body = req.Envelope.ClientBody
+	}
+	var input struct {
+		MaxTokens           int    `json:"max_tokens"`
+		MaxOutputTokens     int    `json:"max_output_tokens"`
+		MaxCompletionTokens int    `json:"max_completion_tokens"`
+		N                   int    `json:"n"`
+		Size                string `json:"size"`
+	}
+	_ = json.Unmarshal(body, &input)
+	output := 1024
+	if input.MaxTokens > 0 {
+		output = input.MaxTokens
+	}
+	if input.MaxOutputTokens > 0 {
+		output = input.MaxOutputTokens
+	}
+	if input.MaxCompletionTokens > 0 {
+		output = input.MaxCompletionTokens
+	}
+	usage := domain.TokenUsage{PromptTokens: (len(body) + 2) / 3, CompletionTokens: output}
+	if cand.CapabilityType == domain.CapabilityEmbedding || cand.CapabilityType == domain.CapabilityRerank {
+		usage.CompletionTokens = 0
+	}
+	usage.ImageCount = input.N
+	if usage.ImageCount < 1 {
+		usage.ImageCount = 1
+	}
+	usage.ImageResolution = input.Size
+	breakdown, err := priceBreakdownForCapability(usage, snapshot.AccountEntry, cand.CapabilityType)
+	if err != nil {
+		return math.MaxInt64
+	}
+	return costLineFromBreakdown(breakdown, cand.TenantMultiplier).CostMicro
 }

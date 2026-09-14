@@ -167,7 +167,7 @@ func registerUpstreamAccountTest(api huma.API, d UpstreamDiagnosticsHTTPDeps) {
 	})
 }
 
-func reconcileUpstreamAccountTestStatus(ctx context.Context, health UpstreamAccountHealthWriter, endpoints UpstreamAccountEndpointManager, runtimeHealth routing.HealthTracker, accountID, endpointID, currentStatus string, result upstreamTestResult) error {
+func reconcileUpstreamAccountTestStatus(ctx context.Context, health UpstreamAccountHealthWriter, endpoints UpstreamAccountEndpointManager, runtimeHealth routing.Availability, accountID, endpointID, currentStatus string, result upstreamTestResult) error {
 	if endpoints != nil {
 		status, lastError := domain.HealthHealthy, ""
 		if !result.OK {
@@ -177,9 +177,7 @@ func reconcileUpstreamAccountTestStatus(ctx context.Context, health UpstreamAcco
 			return err
 		}
 	}
-	if result.OK && runtimeHealth != nil {
-		runtimeHealth.RecordSuccess(endpointID, routing.TargetEndpoint)
-	}
+	// A manual test is diagnostic only; it cannot clear faults in untested models.
 	if health == nil || currentStatus == domain.UpstreamAccountStatusDisabled {
 		return nil
 	}
@@ -187,7 +185,14 @@ func reconcileUpstreamAccountTestStatus(ctx context.Context, health UpstreamAcco
 		_, err := health.UpdateAccountStatus(ctx, accountID, domain.UpstreamAccountStatusActive)
 		return err
 	}
-	if result.HTTPStatus == http.StatusUnauthorized || result.HTTPStatus == http.StatusForbidden {
+	if result.HTTPStatus == http.StatusUnauthorized {
+		if suspend, ok := runtimeHealth.(interface {
+			Suspend(context.Context, routing.FaultScope, time.Time, string) error
+		}); ok {
+			if err := suspend.Suspend(ctx, routing.NewFaultScope("authentication", "direct_upstream", accountID, "", "", "", ""), time.Now().Add(30*time.Minute), "unauthorized"); err != nil {
+				return err
+			}
+		}
 		_, err := health.MarkAccountInvalid(ctx, accountID, fmt.Sprintf("connectivity test: upstream returned HTTP %d", result.HTTPStatus))
 		return err
 	}

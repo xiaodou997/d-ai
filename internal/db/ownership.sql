@@ -248,4 +248,5 @@ BEGIN
  END LOOP;
 END $$;
 
+GRANT SELECT ON TABLE ai_upstream_runtime_metadata TO :"runtime_role", :"billing_role";
 COMMIT;

@@ -9,7 +9,6 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 
 	"xiaodou/dai/internal/auth"
 	authports "xiaodou/dai/internal/auth/ports"
@@ -160,7 +159,7 @@ func (h *adminHandlers) enterTenantOperations(ctx context.Context, in *tenantIDI
 	}
 	details, err := h.tenantReader.GetTenantDetails(ctx, strings.TrimSpace(in.ID))
 	if err != nil {
-		if errors.Is(err, tenantports.ErrTenantNotFound) || errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, tenantports.ErrTenantNotFound) {
 			return nil, httpx.ErrNotFound.WithDetail("租户不存在")
 		}
 		return nil, httpx.ErrInternal.WithCause(err)

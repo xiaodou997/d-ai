@@ -423,15 +423,14 @@ func (r *AccountRepo) UpdateAccountStatus(ctx context.Context, id, status string
 }
 
 func (r *AccountRepo) MarkAccountInvalid(ctx context.Context, id, reason string) (domain.UpstreamAccount, error) {
-	aid, err := akUUID(id)
+	if _, err := akUUID(id); err != nil {
+		return domain.UpstreamAccount{}, err
+	}
+	_, err := r.pool.Exec(ctx, `UPDATE ai_upstream_accounts SET invalid_reason=$2,invalid_at=now(),updated_at=now() WHERE id=$1::uuid AND status<>'disabled'`, id, reason)
 	if err != nil {
 		return domain.UpstreamAccount{}, err
 	}
-	row, err := r.q.MarkUpstreamAccountInvalid(ctx, dbgen.MarkUpstreamAccountInvalidParams{ID: aid, InvalidReason: reason})
-	if err != nil {
-		return domain.UpstreamAccount{}, err
-	}
-	return r.GetAccount(ctx, uuidToString(row.ID))
+	return r.GetAccount(ctx, id)
 }
 
 func (r *AccountRepo) PriceBookExists(ctx context.Context, id string) (bool, error) {

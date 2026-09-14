@@ -3,6 +3,8 @@ package transport
 import (
 	"context"
 	"encoding/json"
+	miniredis "github.com/alicebob/miniredis/v2"
+	"github.com/redis/go-redis/v9"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -270,30 +272,24 @@ func TestReconcileUpstreamAccountStatusUsesHealthWriter(t *testing.T) {
 	}
 }
 
-func TestSuccessfulConnectivityTestClosesEndpointCircuit(t *testing.T) {
-	tracker := routing.NewInMemoryTracker(1, time.Hour)
-	tracker.RecordFailure("endpoint-1", routing.TargetEndpoint)
-	if tracker.StateOf("endpoint-1") != routing.StateOpen {
-		t.Fatal("endpoint circuit should start open")
+func TestEndpointConfigResetStartsUnverifiedRecovery(t *testing.T) {
+	server := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: server.Addr()})
+	defer client.Close()
+	tracker := routing.NewRedisAvailability(client)
+	scope := routing.NewFaultScope("model", "direct_upstream", "account-1", "endpoint-1", "", "model", "responses")
+	permit, err := tracker.Acquire(t.Context(), []routing.FaultScope{scope}, time.Minute)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if err := reconcileUpstreamAccountTestStatus(t.Context(), nil, nil, tracker, "account-1", "endpoint-1", domain.UpstreamAccountStatusDisabled, upstreamTestResult{OK: true}); err != nil {
-		t.Fatalf("reconcile successful test: %v", err)
+	_, err = tracker.Complete(t.Context(), permit, routing.AvailabilityOutcome{FailureScope: scope.Key, Authentication: true})
+	if err != nil {
+		t.Fatal(err)
 	}
-	if tracker.StateOf("endpoint-1") != routing.StateClosed {
-		t.Fatal("successful connectivity test did not close endpoint circuit")
-	}
-}
-
-func TestEndpointConfigSyncResetsOrForgetsRuntimeCircuit(t *testing.T) {
-	tracker := routing.NewInMemoryTracker(1, time.Hour)
-	tracker.RecordFailure("endpoint-1", routing.TargetEndpoint)
-	syncEndpointRuntimeHealth(tracker, domain.UpstreamAccountEndpoint{ID: "endpoint-1", Status: domain.EndpointStatusActive})
-	if tracker.StateOf("endpoint-1") != routing.StateClosed {
-		t.Fatal("active endpoint update did not reset runtime circuit")
-	}
-	syncEndpointRuntimeHealth(tracker, domain.UpstreamAccountEndpoint{ID: "endpoint-1", Status: domain.EndpointStatusDisabled})
-	if records := tracker.Snapshot(); len(records) != 0 {
-		t.Fatalf("disabled endpoint remained in runtime health snapshot: %+v", records)
+	syncEndpointRuntimeHealth(tracker, domain.UpstreamAccountEndpoint{ID: "endpoint-1", AccountID: "account-1", Status: domain.EndpointStatusActive})
+	states, err := tracker.Read(t.Context(), []routing.FaultScope{scope})
+	if err != nil || states[scope.Key].Phase != routing.Recovering || states[scope.Key].VerifiedAt != 0 {
+		t.Fatalf("states=%+v err=%v", states, err)
 	}
 }
 

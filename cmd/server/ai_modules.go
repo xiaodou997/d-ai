@@ -198,9 +198,17 @@ func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisCl
 	routeInspector := aiadapters.NewRouteInspector(pool)
 	routeInspector.WithBridgeSupport(bridgeRuntime)
 
-	innerTracker := routing.DefaultInMemoryTracker()
-	rht := routing.NewRedisHealthTracker(innerTracker, redisClient)
-	healthTracker := routing.HealthTracker(rht)
+	availabilityService := routing.NewRedisAvailability(redisClient)
+	oauthCreds.WithAvailability(availabilityService)
+	if err := aiadapters.ImportUpstreamAvailability(context.Background(), pool, redisClient, availabilityService); err != nil {
+		return nil, fmt.Errorf("availability migration: %w", err)
+	}
+	if cfg.Runtime.UpstreamMaxAttempts == 0 {
+		cfg.Runtime.UpstreamMaxAttempts = 3
+	}
+	if cfg.Runtime.UpstreamMaxAttempts < 1 || cfg.Runtime.UpstreamMaxAttempts > 8 {
+		return nil, fmt.Errorf("runtime.upstream_max_attempts must be between 1 and 8")
+	}
 	metricsGW := aimetrics.NewGateway()
 
 	rateLimiter := redisadapter.NewRateLimiter(redisClient, q).
@@ -210,8 +218,7 @@ func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisCl
 	routeStats := redisadapter.NewRedisRouteStats(redisClient)
 	stickyStore := routing.StickyStore(redisadapter.NewRedisSticky(redisClient))
 	scorer := &serving.MultiDimScorer{
-		Health: healthTracker,
-		Stats:  routeStats,
+		Stats: routeStats,
 	}
 
 	runtimeBinder := coreruntime.NewCachedBindingResolver(
@@ -253,10 +260,9 @@ func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisCl
 		ClientRuntime:      fixedClientRuntime,
 		UpstreamLimiter:    upstreamConcurrencyLimiter,
 		Bridge:             bridgeRuntime,
-		Health:             healthTracker,
+		Availability:       availabilityService,
 		OAuthPool:          oauthCreds,
-		AccountState:       accountSvc,
-		Budget:             serving.DefaultRetryBudget(),
+		Budget:             serving.RetryBudget{MaxAttempts: cfg.Runtime.UpstreamMaxAttempts},
 		Scorer:             scorer,
 		Stats:              routeStats,
 		Sticky:             stickyStore,
@@ -393,7 +399,7 @@ func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisCl
 			System: transport.AISystemHTTPDeps{
 				DatabaseHealth: databaseHealth,
 				RedisHealth:    redisHealth,
-				Health:         healthTracker,
+				Health:         availabilityService,
 				BanChecker:     banChecker,
 			},
 			Dashboard: transport.AIDashboardHTTPDeps{
@@ -439,7 +445,7 @@ func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisCl
 				HTTPClient:        managementHTTPClient,
 				AccountHealth:     accountSvc,
 				ModelCapabilities: modelCapabilities,
-				RuntimeHealth:     healthTracker,
+				RuntimeHealth:     availabilityService,
 				BanChecker:        banChecker,
 			},
 			UpstreamAccounts: transport.AIUpstreamAccountManagementHTTPDeps{
@@ -451,7 +457,8 @@ func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisCl
 				ModelBindings:   modelBindings,
 				PriceBooks:      priceBookSvc,
 				AdminAudit:      auditSvc,
-				RuntimeHealth:   healthTracker,
+				RuntimeHealth:   availabilityService,
+				Stability:       usageLogger,
 				BanChecker:      banChecker,
 			},
 			UpstreamAccess: transport.AIUpstreamAccessManagementHTTPDeps{
@@ -483,7 +490,6 @@ func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisCl
 				TenantPriceBooks: priceBookSvc,
 				GroupTransfer:    groupTransferSvc,
 				AdminAudit:       auditSvc,
-				RuntimeHealth:    healthTracker,
 				BanChecker:       banChecker,
 			},
 			APIKeyManagement: transport.AIAPIKeyManagementHTTPDeps{

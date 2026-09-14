@@ -125,8 +125,8 @@ func TestExecuteDoesNotPermanentlyInvalidateCodexForbidden(t *testing.T) {
 	if len(pool.invalid) != 0 {
 		t.Fatalf("invalid credentials = %v, want none", pool.invalid)
 	}
-	if len(pool.cooldowns) != 1 || pool.cooldowns[0] != "credential-1" {
-		t.Fatalf("cooled down credentials = %v", pool.cooldowns)
+	if len(request.Attempts) == 0 || (request.Attempts[0].AvailabilityOutcome != "rate_limited" && request.Attempts[0].AvailabilityOutcome != "model_error") {
+		t.Fatalf("missing normalized cooldown outcome: %+v", request.Attempts)
 	}
 }
 
@@ -154,15 +154,15 @@ func TestExecuteRetriesRateLimitedRuntimeCredentialWithinPool(t *testing.T) {
 	if pool.selected != 2 || len(runtime.invocations) != 2 {
 		t.Fatalf("selected = %d, invocations = %d", pool.selected, len(runtime.invocations))
 	}
-	if len(pool.cooldowns) != 1 || pool.cooldowns[0] != "credential-1" {
-		t.Fatalf("cooled down credentials = %v", pool.cooldowns)
+	if len(request.Attempts) == 0 || (request.Attempts[0].AvailabilityOutcome != "rate_limited" && request.Attempts[0].AvailabilityOutcome != "model_error") {
+		t.Fatalf("missing normalized cooldown outcome: %+v", request.Attempts)
 	}
 	if runtime.invocations[1].Credential.ID != "credential-2" {
 		t.Fatalf("second invocation credential = %q", runtime.invocations[1].Credential.ID)
 	}
 }
 
-func TestExecuteInvalidatesCodexOnlyAfterRuntimeConfirms(t *testing.T) {
+func TestExecuteNeverPermanentlyInvalidatesRuntimeRejection(t *testing.T) {
 	request := codexPoolRequest(httptest.NewRecorder())
 	pool := &recordingOAuthPool{credentials: []*domain.OAuthCredential{codexCredential("credential-1")}}
 	runtime := &recordingClientRuntime{exchanges: []*clientruntime.Exchange{
@@ -179,7 +179,7 @@ func TestExecuteInvalidatesCodexOnlyAfterRuntimeConfirms(t *testing.T) {
 	if err := step.Execute(context.Background(), request); err == nil {
 		t.Fatal("Execute() error = nil, want upstream failure")
 	}
-	if len(pool.invalid) != 1 || pool.invalid[0] != "credential-1" {
+	if len(pool.invalid) != 0 {
 		t.Fatalf("invalid credentials = %v", pool.invalid)
 	}
 }
@@ -238,5 +238,23 @@ func clientExchange(status int, effect clientruntime.CredentialEffect, body stri
 			ProviderCalls:    1,
 			CredentialEffect: effect,
 		},
+	}
+}
+
+func TestOAuthRefreshReplaysConsumeTheSameSendBudget(t *testing.T) {
+	request := codexPoolRequest(httptest.NewRecorder())
+	pool := &recordingOAuthPool{credentials: []*domain.OAuthCredential{codexCredential("c"), codexCredential("c"), codexCredential("c"), codexCredential("c")}}
+	runtime := &recordingClientRuntime{exchanges: []*clientruntime.Exchange{
+		clientExchange(401, clientruntime.CredentialEffectRefreshed, `{"error":{"code":"invalid_token"}}`),
+		clientExchange(401, clientruntime.CredentialEffectRefreshed, `{"error":{"code":"invalid_token"}}`),
+		clientExchange(401, clientruntime.CredentialEffectRefreshed, `{"error":{"code":"invalid_token"}}`),
+		clientExchange(200, clientruntime.CredentialEffectNone, `{"id":"must-not-send","output":[]}`),
+	}}
+	step := &ExecuteStep{Transport: &sequenceTransport{}, ClientRuntime: runtime, Bridge: testProtocolBridge{}, OAuthPool: pool}
+	if err := step.Execute(context.Background(), request); err == nil {
+		t.Fatal("refresh replay escaped send budget")
+	}
+	if len(runtime.invocations) != 3 || len(request.Attempts) != 3 {
+		t.Fatalf("invocations=%d attempts=%d", len(runtime.invocations), len(request.Attempts))
 	}
 }

@@ -194,7 +194,7 @@ func (s *RequestStore) Log(ctx context.Context, req *serving.Request) error {
 	var selectedPricing any
 	tenantMultiplier := 0.0
 	if req.Candidate != nil {
-		selectedPricing = req.BillingSnapshots[req.Candidate.RouteID]
+		selectedPricing = req.BillingSnapshots[req.Candidate.Key()]
 		tenantMultiplier = req.Candidate.TenantMultiplier
 	}
 	pricing, err := json.Marshal(map[string]any{"snapshot": selectedPricing, "tenant_multiplier": tenantMultiplier, "subscription_group_multipliers": req.SubscriptionGroupQuotaDebitMultipliers, "calculation": json.RawMessage(bill.BillingBreakdownJSON)})
@@ -239,6 +239,17 @@ func (s *RequestStore) Log(ctx context.Context, req *serving.Request) error {
 	if err != nil {
 		return err
 	}
+	for i, attempt := range req.Attempts {
+		if err := insertUpstreamAttempt(ctx, tx, at, req.RequestID, i+1, attempt); err != nil {
+			return err
+		}
+	}
+	for i, attempt := range req.SkippedAttempts {
+		if err := insertUpstreamAttempt(ctx, tx, at, req.RequestID, -i-1, attempt); err != nil {
+			return err
+		}
+	}
+
 	interrupted := req.CancellationOrigin == domain.CancellationClient || req.ClientDeliveryState == domain.ClientDeliveryDisconnected || req.ClientDeliveryState == domain.ClientDeliveryWriteFailed
 	if sealed != nil {
 		_, err = tx.Exec(ctx, `UPDATE ai_requests SET delivery_state=$3,end_reason=CASE WHEN NOT is_error AND $3 IN ('disconnected','write_failed') THEN 'client_interrupted' ELSE end_reason END WHERE created_at=$1 AND request_id=$2`, at, req.RequestID, string(req.ClientDeliveryState))
@@ -268,16 +279,7 @@ func (s *RequestStore) Log(ctx context.Context, req *serving.Request) error {
 			return err
 		}
 	}
-	for i, attempt := range req.Attempts {
-		attempt.ErrorMsg = serving.RedactInternalErrorDetail(attempt.ErrorMsg)
-		raw, e := json.Marshal(attempt)
-		if e != nil {
-			return e
-		}
-		if _, e = tx.Exec(ctx, `INSERT INTO ai_request_attempts(created_at,request_id,ordinal,facts) VALUES($1,$2,$3,$4)`, at, req.RequestID, i+1, raw); e != nil {
-			return e
-		}
-	}
+
 	billingSource := req.BillingSource
 	if billingSource == "" {
 		billingSource = "payg"

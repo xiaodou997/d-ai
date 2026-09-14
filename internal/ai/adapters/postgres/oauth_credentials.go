@@ -13,14 +13,16 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"xiaodou/dai/internal/ai/domain"
+	"xiaodou/dai/internal/ai/routing"
 	"xiaodou/dai/internal/ai/secret"
 	"xiaodou/dai/internal/clientsecret"
 )
 
 // OAuthCredentialStore handles credential pool operations.
 type OAuthCredentialStore struct {
-	pool      *translatingPool
-	masterKey string
+	availability *routing.RedisAvailability
+	pool         *translatingPool
+	masterKey    string
 }
 
 func NewOAuthCredentialStore(pool *pgxpool.Pool, masterKey string) *OAuthCredentialStore {
@@ -366,7 +368,7 @@ func (s *OAuthCredentialStore) SelectPinnedCredential(
 		UPDATE ai_provider_oauth_credentials
 		SET last_used_at = now(), updated_at = now()
 		WHERE id = $1 AND pool_id = $2 AND status = 'active'
-		  AND (cooldown_until IS NULL OR cooldown_until <= now())
+		  AND ($3 OR cooldown_until IS NULL OR cooldown_until <= now())
 		RETURNING id, pool_id, name, provider_type, email,
 		          access_token_ciphertext, refresh_token_ciphertext,
 		          token_type, scope, expires_at, token_version, auth_metadata,
@@ -374,7 +376,7 @@ func (s *OAuthCredentialStore) SelectPinnedCredential(
 		          last_used_at, last_refreshed_at, last_failed_at,
 		          consecutive_fail_count, success_count, fail_count,
 		          created_at, updated_at`
-	rows, err := s.scanRows(ctx, q, credID, poolID)
+	rows, err := s.scanRows(ctx, q, credID, poolID, s.availability != nil)
 	if err != nil {
 		return nil, fmt.Errorf("select pinned credential: %w", err)
 	}
@@ -453,7 +455,6 @@ func (s *OAuthCredentialStore) RecordSuccess(ctx context.Context, credID string)
 		UPDATE ai_provider_oauth_credentials
 		SET success_count = success_count + 1,
 		    consecutive_fail_count = 0,
-		    cooldown_until = NULL,
 		    updated_at = now()
 		WHERE id = $1`, credID)
 }
@@ -461,8 +462,15 @@ func (s *OAuthCredentialStore) RecordSuccess(ctx context.Context, credID string)
 func (s *OAuthCredentialStore) MarkInvalid(ctx context.Context, credID string, reason string) error {
 	_, err := s.pool.Exec(ctx, `
 		UPDATE ai_provider_oauth_credentials
-		SET status = 'invalid', invalid_reason = $2, updated_at = now()
-		WHERE id = $1`, credID, reason)
+		SET invalid_reason = $2, cooldown_until=now()+interval '30 minutes', last_failed_at=now(), updated_at = now()
+		WHERE id = $1 AND status<>'disabled'`, credID, reason)
+	if err == nil && s.availability != nil {
+		var poolID string
+		if e := s.pool.QueryRow(ctx, `SELECT pool_id::text FROM ai_provider_oauth_credentials WHERE id=$1 AND status<>'disabled'`, credID).Scan(&poolID); e == nil {
+			scope := routing.NewFaultScope("authentication", "oauth_pool", poolID, "", credID, "", "")
+			err = s.availability.Suspend(ctx, scope, time.Now().Add(30*time.Minute), "unauthorized")
+		}
+	}
 	return err
 }
 
@@ -528,7 +536,7 @@ func (s *OAuthCredentialStore) UpdateTokens(
 		    cooldown_until           = NULL,
 		    consecutive_fail_count   = 0,
 		    updated_at               = now()
-		WHERE id = $1 AND token_version = $5
+		WHERE id = $1 AND token_version = $5 AND status<>'disabled'
 		RETURNING token_version`,
 		credID, atCipher, rtCipher, pgExpiry, expectedVersion,
 	).Scan(&nextVersion)
@@ -537,6 +545,9 @@ func (s *OAuthCredentialStore) UpdateTokens(
 	}
 	if err != nil {
 		return 0, err
+	}
+	if err = s.resetCredentialAvailability(ctx, credID, true); err != nil {
+		return nextVersion, err
 	}
 	return nextVersion, nil
 }
@@ -553,6 +564,7 @@ func (s *OAuthCredentialStore) ListExpiring(ctx context.Context, within time.Dur
 		       created_at, updated_at
 		FROM ai_provider_oauth_credentials
 		WHERE status = 'active'
+          AND (cooldown_until IS NULL OR cooldown_until<=now())
 		  AND refresh_token_ciphertext IS NOT NULL
 		  AND (expires_at IS NULL OR expires_at < now() + $1::interval)
 		ORDER BY expires_at ASC NULLS FIRST`
@@ -724,7 +736,7 @@ func oauthCredentialSummary(row OAuthCredentialRow) domain.OAuthCredentialSummar
 func (s *OAuthCredentialStore) UpdateStatus(ctx context.Context, credID string, status string) error {
 	tag, err := s.pool.Exec(ctx,
 		`UPDATE ai_provider_oauth_credentials
-		 SET status = $2,
+		 SET status = $2,token_version=token_version+1,
 		     cooldown_until = CASE WHEN $2 = 'active' THEN NULL ELSE cooldown_until END,
 		     updated_at = now()
 		 WHERE id = $1`,
@@ -734,6 +746,9 @@ func (s *OAuthCredentialStore) UpdateStatus(ctx context.Context, credID string, 
 	}
 	if tag.RowsAffected() == 0 {
 		return domain.ErrNotFound
+	}
+	if status == "active" {
+		return s.resetCredentialAvailability(ctx, credID, false)
 	}
 	return nil
 }
@@ -936,4 +951,90 @@ func (s *OAuthCredentialStore) scanRows(ctx context.Context, query string, args 
 		out = append(out, r)
 	}
 	return out, pgRows.Err()
+}
+
+func (s *OAuthCredentialStore) SelectCredentialExcluding(ctx context.Context, poolID, strategy string, excluded []string) (*domain.OAuthCredential, error) {
+	rows, err := s.listActiveWeighted(ctx, poolID)
+	if err != nil {
+		return nil, err
+	}
+	blocked := map[string]bool{}
+	for _, id := range excluded {
+		blocked[id] = true
+	}
+	candidates := make([]OAuthCredentialRow, 0, len(rows))
+	for _, r := range rows {
+		if !blocked[r.ID] {
+			candidates = append(candidates, r)
+		}
+	}
+	if len(candidates) == 0 {
+		return nil, fmt.Errorf("no available credentials")
+	}
+	row := candidates[0]
+	if strategy == "weighted" {
+		row = weightedSelectOAuth(candidates)
+	} else {
+		for _, r := range candidates {
+			if r.LastUsedAt == nil || row.LastUsedAt != nil && r.LastUsedAt.Before(*row.LastUsedAt) {
+				row = r
+			}
+		}
+	}
+	cred, err := s.decryptRow(ctx, row)
+	if err == nil {
+		s.RecordUsed(ctx, cred.ID)
+	}
+	return cred, err
+}
+
+func (s *OAuthCredentialStore) WithAvailability(a *routing.RedisAvailability) *OAuthCredentialStore {
+	s.availability = a
+	return s
+}
+
+func (s *OAuthCredentialStore) resetCredentialAvailability(ctx context.Context, id string, authOnly bool) error {
+	if s.availability == nil {
+		return nil
+	}
+	var pool string
+	if err := s.pool.QueryRow(ctx, `SELECT pool_id::text FROM ai_provider_oauth_credentials WHERE id=$1`, id).Scan(&pool); err != nil {
+		return err
+	}
+	states, err := s.availability.List(ctx, "oauth_pool", pool)
+	if err != nil {
+		return err
+	}
+	scopes := []routing.FaultScope{routing.NewFaultScope("authentication", "oauth_pool", pool, "", id, "", "")}
+	for _, state := range states {
+		if state.Scope.CredentialID == id && (!authOnly || state.Scope.Kind == "authentication") {
+			scopes = append(scopes, state.Scope)
+		}
+	}
+	return s.availability.Reset(ctx, scopes)
+}
+
+// ListCredentialCandidates exposes only configuration-eligible identities. Redis
+// fault scopes and atomic admission are applied by the common executor.
+func (s *OAuthCredentialStore) ListCredentialCandidates(ctx context.Context, poolID string) ([]string, int64, error) {
+	rows, err := s.listForPoolRows(ctx, poolID)
+	if err != nil {
+		return nil, 0, err
+	}
+	ids := []string{}
+	var earliest int64
+	for _, row := range rows {
+		if row.Status != "active" || row.AccessTokenCiphertext == "" {
+			continue
+		}
+		if s.availability == nil && row.CooldownUntil != nil && row.CooldownUntil.After(time.Now()) {
+			at := row.CooldownUntil.UnixMilli()
+			if earliest == 0 || at < earliest {
+				earliest = at
+			}
+			continue
+		}
+		ids = append(ids, row.ID)
+	}
+	return ids, earliest, nil
 }

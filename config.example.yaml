@@ -46,6 +46,7 @@ storage:
   data_dir: data
 
 runtime:
+  upstream_max_attempts: 3 # Actual model HTTP sends, including OAuth replays; 1..8
   # 单账户（租户 / 终端用户）在途计费请求上限。结算是后付费的，准入只能拦下一个
   # 请求，所以最坏透支 ≈ 这个值 × 单请求最高成本 —— 它的作用是让这个乘积有限。
   # ai_runtime_limit_policies 里显式配置的 scope 用配置值，不叠加此默认值。

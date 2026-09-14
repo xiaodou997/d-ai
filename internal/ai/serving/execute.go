@@ -31,12 +31,6 @@ type stickyWriter interface {
 // OAuthCredentialPool handles credential lifecycle for OAuth upstreams.
 type OAuthCredentialPool interface {
 	SelectCredentialFromPool(ctx context.Context, endpointID, strategy string) (*domain.OAuthCredential, error)
-	MarkInvalid(ctx context.Context, credID, reason string) error
-	RecordSuccess(ctx context.Context, credID string)
-}
-
-type OAuthCredentialCooldownRecorder interface {
-	MarkCooldown(ctx context.Context, credID string, until time.Time) error
 }
 
 // PinnedCredentialSelector is the optional half of OAuthCredentialPool that
@@ -48,12 +42,6 @@ type PinnedCredentialSelector interface {
 	// the pool and is active; any other case must return an error so the
 	// caller can fall back to normal selection.
 	SelectPinnedCredential(ctx context.Context, poolID, credID string) (*domain.OAuthCredential, error)
-}
-
-// DirectAccountState records permanent credential rejection for API-key based
-// upstream accounts. It is intentionally separate from transient health state.
-type DirectAccountState interface {
-	MarkAccountInvalid(ctx context.Context, accountID, reason string) (domain.UpstreamAccount, error)
 }
 
 // ProtocolBridge encapsulates execute-path cross-surface conversion so
@@ -107,18 +95,17 @@ type ExecuteStep struct {
 	ClientRuntime      clientruntime.Invoker      // fixed OAuth providers; nil keeps the legacy path
 	UpstreamLimiter    UpstreamConcurrencyLimiter // optional unless a direct account caps concurrency
 	Bridge             ProtocolBridge             // required for cross-surface request/response conversion
-	Health             routing.HealthTracker      // optional; nil = no circuit breaking
-	OAuthPool          OAuthCredentialPool        // optional; enables rejected-credential swaps
-	AccountState       DirectAccountState         // optional; persists direct-account credential rejection
-	Budget             RetryBudget                // zero value falls back to DefaultRetryBudget
-	Scorer             RouteScorer                // optional; nil = first unused candidate (P1 behaviour)
-	Stats              routing.RouteStatsStore    // optional; used for inflight tracking alongside scorer
-	Sticky             stickyWriter               // optional; writes/deletes sticky binding on success/failure
-	ImageNormalizer    ImageResponseNormalizer    // optional; normalizes image URL/Base64 response mismatches
-	ModuleGate         ModuleGate                 // optional; controls feature module activation
-	ContentModeration  *ContentModerationStep     // optional; runs after each candidate is selected
-	PromptAudit        *PromptAuditStep           // optional; runs after each candidate is selected
-	Privacy            *privacy.Protector         // optional; protects upstream request content
+	Availability       routing.Availability
+	OAuthPool          OAuthCredentialPool     // optional; enables rejected-credential swaps
+	Budget             RetryBudget             // zero value falls back to DefaultRetryBudget
+	Scorer             RouteScorer             // optional; nil = first unused candidate (P1 behaviour)
+	Stats              routing.RouteStatsStore // optional; used for inflight tracking alongside scorer
+	Sticky             stickyWriter            // optional; writes/deletes sticky binding on success/failure
+	ImageNormalizer    ImageResponseNormalizer // optional; normalizes image URL/Base64 response mismatches
+	ModuleGate         ModuleGate              // optional; controls feature module activation
+	ContentModeration  *ContentModerationStep  // optional; runs after each candidate is selected
+	PromptAudit        *PromptAuditStep        // optional; runs after each candidate is selected
+	Privacy            *privacy.Protector      // optional; protects upstream request content
 }
 
 // Transporter makes the actual HTTP call to an upstream provider.
@@ -179,9 +166,12 @@ func (s *ExecuteStep) Execute(ctx context.Context, req *Request) error {
 		return apiError(http.StatusInternalServerError, "missing_envelope", "request envelope not set")
 	}
 
-	budget := s.Budget.ApplyRequestFloor(req)
+	budget := s.Budget.Normalize(req)
 	executionCtx, cancelExecution := context.WithTimeoutCause(ctx, budget.MaxElapsed, ErrRetryDeadlineExceeded)
 	defer cancelExecution()
+	if err := s.expandCredentialCandidates(executionCtx, req); err != nil {
+		return apiErrorWithCause(503, "credential_state_unavailable", "upstream credentials cannot be verified", err)
+	}
 
 	// The upstream body is (re)built per picked candidate: its bytes embed both
 	// the provider wire format (client→provider conversion) and the upstream
@@ -191,17 +181,22 @@ func (s *ExecuteStep) Execute(ctx context.Context, req *Request) error {
 		prepared     corebridge.PreparedRequest
 		bodyBuiltFor string
 		lastErr      error
-		backoffAfter int
 	)
 	for len(req.Attempts) < budget.MaxAttempts {
 		if err := requestContextError(ctx, executionCtx, req); err != nil {
 			return err
 		}
 		cand, score := s.pickCandidate(executionCtx, req)
+		if req.SelectionError != nil {
+			return apiErrorWithCause(503, "availability_state_unavailable", "upstream availability cannot be verified", req.SelectionError)
+		}
 		if cand == nil {
 			break // exhausted all candidates
 		}
 		req.SetCandidate(cand)
+		if cand.IsPoolRoute() && req.PreparedCredentials != nil {
+			req.SelectedCredential = req.PreparedCredentials[cand.Key()]
+		}
 		if s.PromptAudit != nil {
 			if err := s.PromptAudit.Execute(executionCtx, req); err != nil {
 				return err
@@ -216,7 +211,13 @@ func (s *ExecuteStep) Execute(ctx context.Context, req *Request) error {
 		// Pool routes: select a fresh credential per attempt so auth-swap and
 		// new-route paths both get a clean credential.
 		if cand.IsPoolRoute() && s.OAuthPool != nil && req.SelectedCredential == nil {
-			cred, selErr := s.selectPoolCredential(executionCtx, req, cand)
+			var cred *domain.OAuthCredential
+			var selErr error
+			if cand.CredentialID != "" {
+				cred, selErr = s.OAuthPool.(PinnedCredentialSelector).SelectPinnedCredential(executionCtx, cand.PoolID, cand.CredentialID)
+			} else {
+				cred, selErr = s.selectPoolCredential(executionCtx, req, cand)
+			}
 			if selErr != nil {
 				zap.L().Warn("pool credential selection failed",
 					requestLogFields(req, zap.String("pool_id", cand.PoolID), zap.Error(selErr))...,
@@ -229,24 +230,11 @@ func (s *ExecuteStep) Execute(ctx context.Context, req *Request) error {
 			req.SelectedCredential = cred
 		}
 
-		// 429 backoff: applies on retry only and only when the previous
-		// attempt was rate-limited.
-		if len(req.Attempts) > backoffAfter && lastAttemptWas(req, ResultRateLimited) {
-			backoffAfter = len(req.Attempts)
-			if delay := budget.BackoffFor(len(req.Attempts) + 1); delay > 0 {
-				select {
-				case <-time.After(delay):
-				case <-executionCtx.Done():
-					return requestContextError(ctx, executionCtx, req)
-				}
-			}
-		}
-
 		// Build (or rebuild) the upstream body for the selected route. The body
 		// embeds the provider wire format and upstream model, so any change of
 		// route — including the first pick when it isn't candidates[0] — requires
 		// a fresh build (e.g. openai_chat client → anthropic_messages provider).
-		if len(prepared.Body) == 0 || cand.RouteID != bodyBuiltFor {
+		if len(prepared.Body) == 0 || cand.Key() != bodyBuiltFor {
 			newPrepared, berr := s.prepareBody(req)
 			if berr != nil {
 				zap.L().Warn("upstream request preparation failed", requestLogFields(req, zap.Error(berr))...)
@@ -257,7 +245,7 @@ func (s *ExecuteStep) Execute(ctx context.Context, req *Request) error {
 				continue
 			}
 			prepared = newPrepared
-			bodyBuiltFor = cand.RouteID
+			bodyBuiltFor = cand.Key()
 			req.UpstreamBodySize = len(prepared.Body)
 		}
 
@@ -274,11 +262,13 @@ func (s *ExecuteStep) Execute(ctx context.Context, req *Request) error {
 				continue
 			}
 		}
-		// IsBlocked atomically claims a HALF_OPEN probe. Keep it immediately
-		// before Transport.Do so local preparation failures cannot strand the slot.
-		if s.candidateBlocked(cand) {
-			req.recordSkippedCandidate(cand, "circuit_open")
-			exhaustPhysicalTarget(req, cand)
+		if err := s.acquireAvailability(executionCtx, req, cand); err != nil {
+			var denied *routing.AdmissionDenied
+			if !errors.As(err, &denied) {
+				return apiErrorWithCause(503, "availability_state_unavailable", "upstream availability cannot be verified", err)
+			}
+			req.recordSkippedCandidate(cand, denied.Reason)
+			req.UsedCandidates[cand.Key()] = true
 			req.SelectedCredential = nil
 			continue
 		}
@@ -287,8 +277,9 @@ func (s *ExecuteStep) Execute(ctx context.Context, req *Request) error {
 		// slot is held for exactly as long as the attempt occupies the upstream.
 		slot, err := s.acquireUpstreamSlot(executionCtx, req, cand)
 		if err != nil {
-			s.releaseHealthProbe(cand)
+			s.releaseAvailability(req)
 			if errors.Is(err, ErrUpstreamConcurrencyExceeded) {
+				req.recordSkippedCandidate(cand, "upstream_capacity_exhausted")
 				exhaustPhysicalTarget(req, cand)
 				req.SelectedCredential = nil
 				lastErr = apiErrorWithCause(http.StatusTooManyRequests, "upstream_capacity_exhausted",
@@ -333,6 +324,7 @@ func (s *ExecuteStep) Execute(ctx context.Context, req *Request) error {
 			zap.L().Info("no healthy upstream route: every candidate skipped before reaching transport",
 				requestLogFields(req, zap.Int("skipped_candidates", len(req.SkippedAttempts)))...)
 		}
+		setAvailabilityRetryAfter(req)
 		req.ErrorCode = "no_healthy_route"
 		req.ErrorMessage = "all upstream routes are temporarily unavailable"
 		return apiError(http.StatusServiceUnavailable, req.ErrorCode, req.ErrorMessage)
@@ -399,8 +391,13 @@ func (req *Request) recordSkippedCandidate(cand *domain.RouteCandidate, reason s
 	if cand.IsPoolRoute() {
 		targetID = cand.PoolID
 	}
+	status := ResultCircuitOpen
+	if reason == "no_credential" || reason == "local_request_error" || reason == "upstream_capacity_exhausted" {
+		status = ResultRejected
+	}
 	skipped := AttemptRecord{
-		Sequence:        len(req.Attempts) + len(req.SkippedAttempts) + 1,
+		Sequence:    len(req.Attempts) + len(req.SkippedAttempts) + 1,
+		CandidateID: cand.Key(), AccountID: cand.EffectiveAccountID(), ModelCode: cand.ModelCode, Operation: cand.OperationKey(), Stream: req.IsStream, CompletedAt: time.Now(),
 		RouteID:         cand.RouteID,
 		GroupID:         cand.GroupID,
 		RoutePolicy:     cand.RoutePolicy,
@@ -413,7 +410,7 @@ func (req *Request) recordSkippedCandidate(cand *domain.RouteCandidate, reason s
 		PoolID:          cand.PoolID,
 		UpstreamModel:   cand.EffectiveUpstreamModel(),
 		HTTPStatus:      0,
-		Outcome:         ResultCircuitOpen,
+		Outcome:         status,
 		ErrorMsg:        reason,
 		Score:           0,
 	}
@@ -441,7 +438,8 @@ func (s *ExecuteStep) recordAttempt(req *Request, cand *domain.RouteCandidate, o
 		errMsg = outcome.Err.Error()
 	}
 	req.Attempts = append(req.Attempts, AttemptRecord{
-		PricingSnapshot:    req.BillingSnapshots[cand.RouteID],
+		PricingSnapshot: req.BillingSnapshots[cand.Key()],
+		CandidateID:     cand.Key(), AccountID: cand.EffectiveAccountID(), ModelCode: cand.ModelCode, Operation: cand.OperationKey(), Stream: req.IsStream,
 		Sequence:           len(req.Attempts) + len(req.SkippedAttempts) + 1,
 		RouteID:            cand.RouteID,
 		GroupID:            cand.GroupID,
@@ -465,41 +463,17 @@ func (s *ExecuteStep) recordAttempt(req *Request, cand *domain.RouteCandidate, o
 	})
 }
 
-// notifyHealth records the outcome with the HealthTracker and the OAuth pool.
-// 401/403 不计入熔断计数：单一惩罚路径（execute_attempt.go 的 case DecisionRetry
-// 分支已即时 MarkAccountInvalid）已处理，若再累加到熔断计数会导致凭据失效与
-// 半开恢复语义混淆。429 同样排除（见 CountsAsHealthFailure）。
-func (s *ExecuteStep) notifyHealth(ctx context.Context, req *Request, cand *domain.RouteCandidate, outcome Outcome) {
-	if s.Health != nil {
-		targetID, kind := healthTarget(cand)
-		switch outcome.Status {
-		case ResultSuccess:
-			s.Health.RecordSuccess(targetID, kind)
-		default:
-			if outcome.CountsAsHealthFailure() {
-				s.Health.RecordFailure(targetID, kind)
-			}
-		}
+// recordOutcome derives the single availability verdict for this actual attempt.
+func (s *ExecuteStep) recordOutcome(ctx context.Context, req *Request, cand *domain.RouteCandidate, outcome Outcome) {
+	req.AvailabilityResult = availabilityVerdict(req, cand, outcome)
+	if len(req.Attempts) > 0 {
+		a := &req.Attempts[len(req.Attempts)-1]
+		a.Outcome = outcome.Status
+		a.UpstreamErrorCode = outcome.ErrorCode
+		a.AvailabilityOutcome = outcome.Status.String()
+		a.FailureScope = req.AvailabilityResult.FailureScope
 	}
 
-	// Credential invalidation is explicit: only provider 401/403 responses
-	// invalidate a credential. Route-level 5xx/network failures belong to the
-	// pool circuit breaker and must not poison otherwise valid credentials.
-	if cand.IsPoolRoute() && s.OAuthPool != nil && req.SelectedCredential != nil {
-		credID := req.SelectedCredential.ID
-		switch outcome.Status {
-		case ResultSuccess:
-			s.OAuthPool.RecordSuccess(ctx, credID)
-		}
-	}
-}
-
-// healthTarget resolves the HealthTracker target ID and kind for a candidate.
-func healthTarget(cand *domain.RouteCandidate) (string, routing.TargetKind) {
-	if cand.IsPoolRoute() {
-		return cand.PoolID, routing.TargetPool
-	}
-	return cand.EndpointID, routing.TargetEndpoint
 }
 
 func (s *ExecuteStep) Rollback(_ context.Context, _ *Request) {}

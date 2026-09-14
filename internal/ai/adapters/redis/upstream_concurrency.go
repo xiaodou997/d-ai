@@ -109,3 +109,18 @@ func (l *UpstreamConcurrencyLimiter) Acquire(ctx context.Context, accountID, req
 	}
 	return &upstreamSlot{redis: l.redis, key: key, member: member}, nil
 }
+
+// Available is a read-only capacity filter. Acquire still atomically verifies it.
+func (l *UpstreamConcurrencyLimiter) Available(ctx context.Context, accountID string, limit int) (bool, error) {
+	if limit <= 0 {
+		return true, nil
+	}
+	if l == nil || l.redis == nil {
+		return false, serving.ErrUpstreamConcurrencyLimiterUnavailable
+	}
+	n, err := l.redis.ZCount(ctx, fmt.Sprintf("ratelimit:upstream-account:%s:concurrency", accountID), fmt.Sprint(l.now().UnixMilli()+1), "+inf").Result()
+	if err != nil {
+		return false, fmt.Errorf("%w: %v", serving.ErrUpstreamConcurrencyLimiterUnavailable, err)
+	}
+	return n < int64(limit), nil
+}

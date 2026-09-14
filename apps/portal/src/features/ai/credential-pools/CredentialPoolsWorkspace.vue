@@ -19,6 +19,12 @@ import { formatMultiplier } from '@/platform/ai/utils'
 import { aiAdminApi } from '@/api/aiAdmin'
 import UpstreamModelBindingsPanel from '@/features/ai/upstream-model-bindings/UpstreamModelBindingsPanel.vue'
 
+import StabilityBadge from '@/features/ai/upstream-stability/StabilityBadge.vue'
+import UpstreamStabilityPanel from '@/features/ai/upstream-stability/UpstreamStabilityPanel.vue'
+import { useUpstreamStability } from '@/features/ai/upstream-stability/useUpstreamStability'
+const stability = useUpstreamStability('oauth_pool')
+const stabilityById = computed(() => new Map(stability.items.value.map(item => [item.resource_id, item])))
+
 // ============================================================================
 // Provider type meta
 // ============================================================================
@@ -32,16 +38,13 @@ const PROVIDER_TABS = [
 ]
 
 const statusTone = (s: string) => (({ active: 'positive', disabled: 'info', invalid: 'danger' } as any)[s] || 'info')
-const strategyLabel = (s: string) => (s === 'weighted' ? '加权' : '轮询')
 
 const credColumns: DsTableColumn[] = [
   { key: 'name', title: '名称' },
   { key: 'email', title: '邮箱' },
   { key: 'status', title: '状态', width: 100 },
   { key: 'expires', title: 'Token 到期', width: 120 },
-  { key: 'weight', title: '权重', width: 75, align: 'right' },
-  { key: 'stats', title: '成功/失败', width: 110, align: 'right' },
-  { key: 'invalid_reason', title: '无效原因' },
+  { key: 'invalid_reason', title: '最近认证异常' },
   { key: 'actions', title: '操作', width: 140 }
 ]
 
@@ -423,9 +426,10 @@ const expiryTone = (ms: any) => {
                     {{ pool.tenant_access_mode === 'restricted' ? '专属' : '公开' }}
                   </DsTag>
                 </div>
-                <p class="pool-meta">{{ strategyLabel(pool.oauth_strategy) }} 策略</p>
+                <p class="pool-meta">遵循分组调度策略</p>
                 <p v-if="pool.notes" class="pool-notes">{{ pool.notes }}</p>
               </div>
+              <StabilityBadge :value="stabilityById.get(pool.id)" />
               <div class="pool-item-actions" @click.stop>
                 <el-switch
                   :model-value="pool.status === 'active'"
@@ -456,6 +460,7 @@ const expiryTone = (ms: any) => {
 
         <!-- Right: Credentials workspace -->
         <main v-if="selectedPool" class="pools-workspace">
+          <UpstreamStabilityPanel kind="oauth_pool" :resource-id="selectedPool.id" />
           <!-- Pool header -->
           <section class="workspace-hero">
             <div class="hero-left">
@@ -463,7 +468,7 @@ const expiryTone = (ms: any) => {
               <div class="hero-title-row">
                 <h2>{{ selectedPool.name }}</h2>
                 <DsTag :tone="statusTone(selectedPool.status)">{{ selectedPool.status }}</DsTag>
-                <DsTag tone="info">{{ strategyLabel(selectedPool.oauth_strategy) }}</DsTag>
+                <DsTag tone="info">按分组策略选路</DsTag>
               </div>
               <p v-if="selectedPool.notes" class="pool-hero-notes">{{ selectedPool.notes }}</p>
               <p class="pool-hero-type">
@@ -551,11 +556,6 @@ const expiryTone = (ms: any) => {
                 </DsTag>
                 <span v-else class="text-muted">—</span>
               </template>
-              <template #cell-stats="{ row }">
-                <span class="text-green">{{ row.success_count }}</span>
-                <span class="text-muted"> / </span>
-                <span :class="row.fail_count > 0 ? 'text-red' : 'text-muted'">{{ row.fail_count }}</span>
-              </template>
               <template #cell-invalid_reason="{ row }">
                 <span v-if="row.invalid_reason" class="text-danger">{{ row.invalid_reason }}</span>
                 <span v-else class="text-muted">—</span>
@@ -606,12 +606,6 @@ const expiryTone = (ms: any) => {
           active-text="开启"
           inactive-text="关闭"
         />
-      </el-form-item>
-      <el-form-item label="轮询策略">
-        <el-select v-model="poolForm.oauth_strategy" class="w-full">
-          <el-option value="round_robin" label="轮询（round_robin）" />
-          <el-option value="weighted" label="加权随机（weighted）" />
-        </el-select>
       </el-form-item>
       <el-form-item label="结算价格表" required>
         <el-select v-model="poolForm.price_book_id" class="w-full" filterable>
@@ -711,9 +705,7 @@ const expiryTone = (ms: any) => {
               placeholder="可选"
             />
           </el-form-item>
-          <el-form-item label="权重">
-            <el-input-number v-model="credForm.weight" :min="0" :max="1000" :controls="false" />
-          </el-form-item>
+
         </el-form>
       </el-tab-pane>
     </el-tabs>

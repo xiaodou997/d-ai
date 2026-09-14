@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 
 	"xiaodou/dai/internal/ai/commercial"
-	"xiaodou/dai/internal/ai/routing"
 	"xiaodou/dai/internal/auth"
 	"xiaodou/dai/libs/go/server"
 )
@@ -93,17 +93,13 @@ func TestGroupTargetPriorityHTTPContract(t *testing.T) {
 	}
 }
 
-func TestGroupTargetListReportsRuntimeHealth(t *testing.T) {
+func TestGroupTargetListDoesNotExposeRuntimeHealth(t *testing.T) {
 	manager := &priorityTargetManager{item: commercial.GroupTargetDetail{
 		GroupTarget: commercial.GroupTarget{ID: "binding-1", GroupID: "group-1", TargetKind: commercial.TargetKindDirectUpstream, TargetID: "account-1", Priority: 10, Status: commercial.StatusActive},
 		EndpointIDs: []string{"endpoint-1"},
 	}}
-	health := routing.DefaultInMemoryTracker()
-	for i := 0; i < 5; i++ {
-		health.RecordFailure("endpoint-1", routing.TargetEndpoint)
-	}
 	router, api := server.New(server.Options{Title: "test", Version: "test"})
-	registerGroups(api, TenantGroupManagementHTTPDeps{Groups: &commercialGroupCatalogStub{}, GroupTargets: manager, RuntimeHealth: health})
+	registerGroups(api, TenantGroupManagementHTTPDeps{Groups: &commercialGroupCatalogStub{}, GroupTargets: manager})
 	handler := withCommercialClaims(router, &auth.Claims{TenantID: "tenant-1"})
 	response := performCommercialRequest(handler, http.MethodGet, "/api/v1/tenants/me/groups/group-1/targets", "")
 	requireCommercialStatus(t, response, http.StatusOK)
@@ -111,7 +107,10 @@ func TestGroupTargetListReportsRuntimeHealth(t *testing.T) {
 		Items []groupTargetDTO `json:"items"`
 	}
 	decodeCommercialResponse(t, response, &body)
-	if len(body.Items) != 1 || body.Items[0].HealthState != "open" || body.Items[0].Priority != 10 {
+	if strings.Contains(response.Body.String(), "health_state") {
+		t.Fatal("tenant response leaked runtime health")
+	}
+	if len(body.Items) != 1 || body.Items[0].Priority != 10 {
 		t.Fatalf("target health/priority = %+v", body.Items)
 	}
 }

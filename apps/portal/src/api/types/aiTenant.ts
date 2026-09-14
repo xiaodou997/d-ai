@@ -65,9 +65,6 @@ export interface TenantAiGroupTarget {
   status: "active" | "disabled";
   // priority 是同组内人工路由优先级，越小越优先；100 = 默认平级（后端未传时前端视为 100）。
   priority?: number;
-  // health_state 是该目标关联的运行时熔断器快照：closed|open|half_open|unknown。
-  // unknown 表示暂无健康记录（例如刚绑定尚无请求）。用于在目标表里一眼识别被熔断的候选。
-  health_state?: "closed" | "open" | "half_open" | "unknown";
   // 该绑定的上游资源当前是否仍可被本租户路由。管理员把资源转 restricted、撤销授权或
   // 停用后，绑定不会自动消失，请求会被网关 fail-closed 拒；available=false 时以
   // unavailable_reason 说明原因，用于把这种「已绑定但请求全失败」的哑故障显式化。

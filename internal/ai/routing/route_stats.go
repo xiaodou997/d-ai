@@ -1,9 +1,17 @@
 package routing
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // RouteStats holds real-time scoring signals for one upstream route.
 type RouteStats struct {
+	EWMAFirstByteMs float64
+	EWMATotalMs     float64
+	Successes       int64
+	Failures        int64
+
 	EWMALatencyMs float64
 	InflightCount int64
 }
@@ -32,4 +40,15 @@ func (NoopRouteStats) IncrInflight(_ context.Context, _ string)         {}
 func (NoopRouteStats) DecrInflight(_ context.Context, _ string)         {}
 func (NoopRouteStats) Snapshot(_ context.Context, routeIDs []string) map[string]RouteStats {
 	return make(map[string]RouteStats, len(routeIDs))
+}
+
+// OutcomeStats records only actual provider results; client/local failures are excluded.
+type OutcomeStats interface {
+	Observe(context.Context, string, bool, bool, int, int)
+}
+
+// InflightLeaseStats expires individual in-flight calls after process crashes.
+type InflightLeaseStats interface {
+	BeginInflight(context.Context, string, string, time.Duration)
+	EndInflight(context.Context, string, string)
 }

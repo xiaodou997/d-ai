@@ -312,6 +312,13 @@ func (r *CachedBindingResolver) makeRoomLocked(now time.Time) {
 }
 
 func cloneRuntimeBinding(binding coreupstream.RuntimeBinding) coreupstream.RuntimeBinding {
+	if binding.Alternatives != nil {
+		copy := make([]coreupstream.RuntimeBinding, len(binding.Alternatives))
+		for i, a := range binding.Alternatives {
+			copy[i] = cloneRuntimeBinding(a)
+		}
+		binding.Alternatives = copy
+	}
 	binding.ExtraHeaders = cloneStringMap(binding.ExtraHeaders)
 	binding.ModelBinding.Config = cloneAnyMap(binding.ModelBinding.Config)
 	return binding

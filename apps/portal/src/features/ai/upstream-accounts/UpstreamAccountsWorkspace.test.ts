@@ -18,6 +18,8 @@ const api = vi.hoisted(() => ({
   updateUpstreamAccountStatus: vi.fn()
 }))
 
+vi.mock('@/features/ai/upstream-stability/api', () => ({ stabilityApi: { list: vi.fn().mockResolvedValue({ items: [] }), detail: vi.fn(), resume: vi.fn() } }))
+
 vi.mock('@/api/aiAdmin', () => ({ aiAdminApi: api }))
 vi.mock('@/features/ai/upstream-model-bindings', () => ({
   useModelBindingBatchDelete: vi.fn()

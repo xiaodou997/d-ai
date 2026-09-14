@@ -11,7 +11,6 @@ import (
 	"xiaodou/dai/internal/ai/commercial"
 	"xiaodou/dai/internal/ai/core/surface"
 	"xiaodou/dai/internal/ai/domain"
-	"xiaodou/dai/internal/ai/routing"
 	"xiaodou/dai/libs/go/httpx"
 )
 
@@ -227,7 +226,6 @@ type groupTargetDTO struct {
 	Status            string   `json:"status"`
 	TargetType        string   `json:"target_type,omitempty" doc:"account|pool"`
 	Priority          int      `json:"priority" doc:"同组内人工优先级，越小越优先；100 = 默认平级"`
-	HealthState       string   `json:"health_state" enum:"closed,open,half_open,unknown" doc:"运行时熔断器状态；unknown 表示该目标暂无健康记录"`
 	AccountName       string   `json:"account_name,omitempty"`
 	APIFormats        []string `json:"api_formats,omitempty"`
 	PoolName          string   `json:"pool_name,omitempty"`
@@ -588,11 +586,10 @@ func registerGroups(api huma.API, d TenantGroupManagementHTTPDeps) {
 			if err != nil {
 				return nil, mapServiceError(err)
 			}
-			healthStates := collectGroupTargetHealthStates(d.RuntimeHealth, items)
 			out := &groupTargetsOutput{}
 			out.Body.Items = make([]groupTargetDTO, 0, len(items))
 			for _, item := range items {
-				out.Body.Items = append(out.Body.Items, groupTargetToDTO(item, healthStates))
+				out.Body.Items = append(out.Body.Items, groupTargetToDTO(item))
 			}
 			out.Body.Total = len(out.Body.Items)
 			out.Body.RoutePolicyVersion = group.RoutePolicyVersion
@@ -617,7 +614,7 @@ func registerGroups(api huma.API, d TenantGroupManagementHTTPDeps) {
 			if err != nil {
 				return nil, mapServiceError(err)
 			}
-			return &groupTargetOutput{Body: groupTargetToDTO(detail, collectGroupTargetHealthStates(d.RuntimeHealth, []commercial.GroupTargetDetail{detail}))}, nil
+			return &groupTargetOutput{Body: groupTargetToDTO(detail)}, nil
 		})
 
 	huma.Register(api, huma.Operation{OperationID: "ai-replace-group-targets", Method: http.MethodPut, Path: "/api/v1/tenants/me/groups/{groupID}/targets", Summary: "原子替换分组上游目标配置", Tags: []string{"groups"}},
@@ -645,11 +642,10 @@ func registerGroups(api huma.API, d TenantGroupManagementHTTPDeps) {
 			if err != nil {
 				return nil, mapServiceError(err)
 			}
-			healthStates := collectGroupTargetHealthStates(d.RuntimeHealth, items)
 			out := &groupTargetsOutput{}
 			out.Body.Items = make([]groupTargetDTO, 0, len(items))
 			for _, item := range items {
-				out.Body.Items = append(out.Body.Items, groupTargetToDTO(item, healthStates))
+				out.Body.Items = append(out.Body.Items, groupTargetToDTO(item))
 			}
 			out.Body.Total = len(out.Body.Items)
 			out.Body.RoutePolicyVersion = result.RoutePolicyVersion
@@ -674,7 +670,7 @@ func registerGroups(api huma.API, d TenantGroupManagementHTTPDeps) {
 			if err != nil {
 				return nil, mapServiceError(err)
 			}
-			return &groupTargetOutput{Body: groupTargetToDTO(detail, collectGroupTargetHealthStates(d.RuntimeHealth, []commercial.GroupTargetDetail{detail}))}, nil
+			return &groupTargetOutput{Body: groupTargetToDTO(detail)}, nil
 		})
 
 	huma.Register(api, huma.Operation{OperationID: "ai-delete-group-target", Method: http.MethodDelete, Path: "/api/v1/tenants/me/groups/{groupID}/targets/{bindingID}", Summary: "解除关联", Tags: []string{"groups"}},
@@ -983,24 +979,18 @@ func int64PtrOrDefault(v *int64, fallback int64) int64 {
 	return *v
 }
 
-func groupTargetToDTO(item commercial.GroupTargetDetail, healthStates map[string]routing.HealthState) groupTargetDTO {
+func groupTargetToDTO(item commercial.GroupTargetDetail) groupTargetDTO {
 	accountID := ""
 	credentialPoolID := ""
 	targetType := "account"
-	healthKey := item.TargetID
 	switch {
 	case item.TargetKind == commercial.TargetKindOAuthPool:
 		targetType = "pool"
 		credentialPoolID = item.TargetID
 	case len(item.EndpointIDs) > 0:
-		healthKey = item.EndpointIDs[0]
 		accountID = item.TargetID
 	default:
 		accountID = item.TargetID
-	}
-	healthState := "unknown"
-	if s, ok := healthStates[healthKey]; ok {
-		healthState = s.String()
 	}
 	return groupTargetDTO{
 		ID:                item.ID,
@@ -1010,7 +1000,6 @@ func groupTargetToDTO(item commercial.GroupTargetDetail, healthStates map[string
 		Status:            string(item.Status),
 		TargetType:        targetType,
 		Priority:          int(item.Priority),
-		HealthState:       healthState,
 		AccountName:       item.AccountName,
 		APIFormats:        append([]string(nil), item.APIFormats...),
 		PoolName:          item.PoolName,
@@ -1020,29 +1009,4 @@ func groupTargetToDTO(item commercial.GroupTargetDetail, healthStates map[string
 		CreatedAt:         timeToMillisPtr(item.CreatedAt),
 		UpdatedAt:         timeToMillisPtr(item.UpdatedAt),
 	}
-}
-
-// collectGroupTargetHealthStates 从一批 GroupTargetDetail 提取用于健康查询的
-// key（direct route 取 EndpointIDs[0]、pool route 取 pool 自身 ID），调用
-// HealthTracker.StatesOf 一次批量快照。health 为 nil（未配置运行时健康追踪）
-// 时返回 nil map；调用方会得到 "unknown" 状态。
-func collectGroupTargetHealthStates(health routing.HealthTracker, items []commercial.GroupTargetDetail) map[string]routing.HealthState {
-	if health == nil || len(items) == 0 {
-		return nil
-	}
-	keys := make([]string, 0, len(items))
-	for _, item := range items {
-		switch {
-		case item.TargetKind == commercial.TargetKindOAuthPool:
-			keys = append(keys, item.TargetID)
-		case len(item.EndpointIDs) > 0:
-			keys = append(keys, item.EndpointIDs[0])
-		default:
-			keys = append(keys, item.TargetID)
-		}
-	}
-	if len(keys) == 0 {
-		return nil
-	}
-	return health.StatesOf(keys)
 }

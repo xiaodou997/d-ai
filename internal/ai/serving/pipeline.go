@@ -106,7 +106,13 @@ type Request struct {
 	// SelectedCredential is the OAuth credential chosen for the current
 	// attempt when Candidate is a pool route. Reset between retries that swap
 	// credentials (401) or routes.
-	SelectedCredential *domain.OAuthCredential
+	SelectedCredential  *domain.OAuthCredential
+	AvailabilityPermit  *routing.AdmissionPermit
+	AvailabilityResult  routing.AvailabilityOutcome
+	AvailabilityRetryAt int64
+	SelectionError      error
+	PreparedCredentials map[string]*domain.OAuthCredential
+	UsedCredentials     map[string]bool
 
 	// Attempts records every upstream call made during Execute. Used by
 	// X-Route-Trace observability and to drive 429 backoff decisions.

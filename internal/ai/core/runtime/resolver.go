@@ -139,16 +139,20 @@ func (r *Resolver) inspect(ctx context.Context, subject identity.Subject, req Re
 	for index, item := range pending {
 		bindingResult := bindings[index]
 		if bindingResult.err == nil {
-			inspection.Candidates = append(inspection.Candidates, PlannedTarget{
-				RouteID:        item.target.ID,
-				GroupRank:      item.groupRank,
-				TargetPriority: int(item.target.Priority),
-				Group:          item.option.Group,
-				Target:         item.target,
-				ModelID:        item.option.ResolvedModelID,
-				MatchedRule:    item.option.MatchedRule,
-				Binding:        bindingResult.binding,
-			})
+			all := append([]coreupstream.RuntimeBinding{bindingResult.binding}, bindingResult.binding.Alternatives...)
+			for _, binding := range all {
+				binding.Alternatives = nil
+				inspection.Candidates = append(inspection.Candidates, PlannedTarget{
+					RouteID:        item.target.ID,
+					GroupRank:      item.groupRank,
+					TargetPriority: int(item.target.Priority),
+					Group:          item.option.Group,
+					Target:         item.target,
+					ModelID:        item.option.ResolvedModelID,
+					MatchedRule:    item.option.MatchedRule,
+					Binding:        binding,
+				})
+			}
 			continue
 		}
 		if rejection, ok := coreupstream.RuntimeBindingRejectionFromError(bindingResult.err); ok {

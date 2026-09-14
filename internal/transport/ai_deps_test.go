@@ -31,7 +31,7 @@ func TestBuildAICoreHTTPDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	httpClient := &httpDoerStub{}
 	databaseHealth := &componentHealthProbeStub{}
 	redisHealth := &componentHealthProbeStub{}
-	health := routing.DefaultInMemoryTracker()
+	health := routing.NewRedisAvailability(nil)
 	blacklist := &auth.BlacklistService{}
 	jwt := &auth.JWTService{}
 	recentAuth := &auth.RecentAuthService{}
@@ -322,16 +322,12 @@ func TestBuildAICoreHTTPDepsWiresRuntimeManagementDependencies(t *testing.T) {
 			TenantPriceBooks: priceBookPorts,
 			GroupTransfer:    groupTransfer,
 			AdminAudit:       adminAudit,
-			RuntimeHealth:    health,
 			BanChecker:       banChecker,
 		},
 		identity,
 	)
 	if tenantGroups.Auth.TokenVerifier != jwt || tenantGroups.Auth.TokenRevocations != blacklist || tenantGroups.Auth.BanChecker != banChecker || tenantGroups.Groups != commercialPorts || tenantGroups.GroupManager != commercialPorts || tenantGroups.DispatchRules != commercialPorts || tenantGroups.GroupTargets != commercialPorts || tenantGroups.UserBindings != commercialPorts || tenantGroups.TenantEndUsers != identity || tenantGroups.TenantPriceBooks != priceBookPorts || tenantGroups.GroupTransfer != groupTransfer || tenantGroups.AdminAudit != adminAudit {
 		t.Fatal("tenant group-management dependencies were not preserved")
-	}
-	if tenantGroups.RuntimeHealth != health {
-		t.Fatal("tenant group-management runtime health was not preserved")
 	}
 
 	apiKeyManagement := buildAPIKeyManagementHTTPDeps(

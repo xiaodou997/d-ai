@@ -48,7 +48,7 @@ func (s *BillingGuardStep) Execute(ctx context.Context, req *Request) error {
 			}
 			return apiError(http.StatusServiceUnavailable, "billing_snapshot_failed", "unable to resolve billing snapshot")
 		}
-		req.BillingSnapshots[candidate.RouteID] = snapshot
+		req.BillingSnapshots[candidate.Key()] = snapshot
 		billableCandidates = append(billableCandidates, candidate)
 	}
 	if len(billableCandidates) == 0 && sawCandidate {
@@ -62,7 +62,7 @@ func (s *BillingGuardStep) Execute(ctx context.Context, req *Request) error {
 	req.Candidates = billableCandidates
 	req.UsedCandidates = make(map[string]bool, len(billableCandidates))
 	req.SetCandidate(billableCandidates[0])
-	if previousCandidate != nil && previousCandidate.RouteID != billableCandidates[0].RouteID {
+	if previousCandidate != nil && previousCandidate.Key() != billableCandidates[0].Key() {
 		req.StickyHit = false
 	}
 	return nil

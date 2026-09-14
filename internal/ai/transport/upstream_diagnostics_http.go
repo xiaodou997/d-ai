@@ -19,7 +19,7 @@ type UpstreamDiagnosticsHTTPDeps struct {
 	HTTPClient        HTTPDoer
 	AccountHealth     UpstreamAccountHealthWriter
 	ModelCapabilities ModelCapabilityResolver
-	RuntimeHealth     routing.HealthTracker
+	RuntimeHealth     routing.Availability
 }
 
 // HTTPDoer is the only outbound HTTP capability required by upstream

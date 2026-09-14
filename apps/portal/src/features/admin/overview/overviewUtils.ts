@@ -44,18 +44,18 @@ export function trendLabels(rows: Array<Pick<DailyTrendRowDTO, "date"> | { date:
 }
 
 export function statusLabel(status?: string) {
-  if (status === "ok" || status === "healthy" || status === "closed" || status === "active") return "正常";
+  if (status === "ok" || status === "healthy" || status === "closed" || status === "active" || status === "available") return "正常";
   if (status === "disabled") return "已停用";
-  if (status === "half_open") return "观察中";
+  if (status === "half_open" || status === "recovering") return "观察中";
   if (status === "warning") return "需要关注";
-  if (status === "error" || status === "unhealthy" || status === "open") return "异常";
+  if (status === "error" || status === "unhealthy" || status === "open" || status === "cooling") return "异常";
   return status || "未知";
 }
 
 export function statusTone(status?: string): "positive" | "warning" | "danger" | "neutral" {
-  if (status === "ok" || status === "healthy" || status === "closed" || status === "active") return "positive";
-  if (status === "half_open" || status === "warning") return "warning";
-  if (status === "error" || status === "unhealthy" || status === "open") return "danger";
+  if (status === "ok" || status === "healthy" || status === "closed" || status === "active" || status === "available") return "positive";
+  if (status === "half_open" || status === "recovering" || status === "warning") return "warning";
+  if (status === "error" || status === "unhealthy" || status === "open" || status === "cooling") return "danger";
   return "neutral";
 }
 

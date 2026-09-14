@@ -11,7 +11,7 @@ import { formatMultiplier } from "@/platform/ai/utils";
 import { DsTable, DsTag, type DsTableColumn } from "@/shared/ui";
 
 import { useGroupTargets } from "../composables/useGroupTargets";
-import type { GroupTargetDraft, GroupTargetHealthState, GroupTargetSaveFailure } from "../groupTargets";
+import type { GroupTargetDraft, GroupTargetSaveFailure } from "../groupTargets";
 import { errorMessage } from "../problemPresentation";
 
 const props = defineProps<{ groupId: string }>();
@@ -23,43 +23,6 @@ const UNAVAILABLE_REASON_LABELS: Record<"inactive" | "access_revoked" | "missing
   access_revoked: "已撤销授权",
   missing: "资源已删除"
 };
-
-const HEALTH_LABELS: Record<GroupTargetHealthState, string> = {
-  closed: "正常",
-  half_open: "半开",
-  open: "熔断",
-  unknown: "暂无"
-};
-
-function healthLabel(state: GroupTargetHealthState): string {
-  return HEALTH_LABELS[state];
-}
-
-function healthTone(state: GroupTargetHealthState): "positive" | "warning" | "danger" | "neutral" {
-  switch (state) {
-    case "closed":
-      return "positive";
-    case "half_open":
-      return "warning";
-    case "open":
-      return "danger";
-    default:
-      return "neutral";
-  }
-}
-
-function healthTitle(state: GroupTargetHealthState): string {
-  switch (state) {
-    case "closed":
-      return "上游目标健康，请求正常转发";
-    case "half_open":
-      return "上游目标处于半开探测状态，仅放行探测请求";
-    case "open":
-      return "上游目标已被熔断，请求会跳过该目标（5xx 或网络异常等连续失败触发）";
-    default:
-      return "暂无健康记录（例如新绑定尚未有请求）";
-  }
-}
 
 // DsTable 的 cell 插槽 row 是 any,用一个显式收窄的 helper 查表,避免 any 索引类型。
 function unavailableLabel(reason: string | null | undefined): string {
@@ -76,7 +39,6 @@ const columns: DsTableColumn[] = [
   { key: "description", title: "描述", width: 220 },
   { key: "priceModel", title: "价格模型", width: 104 },
   { key: "priority", title: "优先级", width: 156, align: "right" },
-  { key: "health", title: "熔断", width: 92 },
   { key: "status", title: "状态", width: 104 }
 ];
 
@@ -236,9 +198,6 @@ defineExpose({ confirmDiscardChanges });
           :disabled="state.saving.value || !row.selected"
           @change="changePriority(row, $event)"
         />
-      </template>
-      <template #cell-health="{ row }">
-        <DsTag :tone="healthTone(row.healthState)" :title="healthTitle(row.healthState)">{{ healthLabel(row.healthState) }}</DsTag>
       </template>
       <template #cell-status="{ row }">
         <el-switch :model-value="row.selected && row.status === 'active'" inline-prompt active-text="启用" inactive-text="停用" size="small" :disabled="state.saving.value || !row.selectable" @update:model-value="toggleRow(row, Boolean($event))" />

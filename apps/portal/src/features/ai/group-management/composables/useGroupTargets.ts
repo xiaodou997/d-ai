@@ -86,7 +86,6 @@ export function useGroupTargets(options: UseGroupTargetsOptions) {
         resourceState: availableModels > 0 ? "available" : "unpriced",
         bindingUnavailableReason: bindingUnavailableReason(binding),
         priority: binding?.priority ?? DEFAULT_TARGET_PRIORITY,
-        healthState: binding?.health_state ?? "unknown"
       });
     }
     for (const binding of bindings.value) {
@@ -105,7 +104,6 @@ export function useGroupTargets(options: UseGroupTargetsOptions) {
         resourceState: "missing",
         bindingUnavailableReason: bindingUnavailableReason(binding) ?? "missing",
         priority: binding.priority ?? DEFAULT_TARGET_PRIORITY,
-        healthState: binding.health_state ?? "unknown"
       });
     }
     return [...options.values()].map((option) => {

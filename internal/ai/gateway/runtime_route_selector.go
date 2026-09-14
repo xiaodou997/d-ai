@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"go.uber.org/zap"
 
@@ -88,11 +89,23 @@ func (s *RuntimeRouteSelector) SelectCandidates(ctx context.Context, req *servin
 	}
 
 	candidates := make([]*domain.RouteCandidate, 0, len(plan.Candidates))
+	seen := map[string]bool{}
 	for _, planned := range plan.Candidates {
 		candidate, convertErr := plannedCandidate(planned, planReq)
 		if convertErr != nil {
 			return nil, convertErr
 		}
+		if strings.HasSuffix(req.ClientPath, "/responses/compact") {
+			candidate.Operation += ":compact"
+		}
+		if strings.HasSuffix(req.ClientPath, "/images/edits") {
+			candidate.Operation += ":edit"
+		}
+		candidate.CandidateID = domain.CandidateIdentity(candidate.RouteID, candidate.EndpointID, candidate.ModelCode+"\x00"+candidate.EffectiveUpstreamModel(), candidate.Operation)
+		if seen[candidate.Key()] {
+			continue
+		}
+		seen[candidate.Key()] = true
 		candidates = append(candidates, candidate)
 	}
 	// Persist planner verdicts (resolver rejected these targets before they
@@ -147,6 +160,8 @@ func plannedCandidate(planned coreruntime.PlannedTarget, req coreruntime.Request
 	group := planned.Group.Group
 	cand := &domain.RouteCandidate{
 		RouteID:                      planned.RouteID,
+		CandidateID:                  domain.CandidateIdentity(planned.RouteID, binding.EndpointID, upstreamModel, string(req.ClientSurface)),
+		Operation:                    string(modelBinding.RequestSurface),
 		GroupRank:                    planned.GroupRank,
 		TargetPriority:               planned.TargetPriority,
 		SupportsStream:               true,

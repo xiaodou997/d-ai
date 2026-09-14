@@ -221,6 +221,25 @@ func registerUpstreamAccounts(api huma.API, d UpstreamAccountManagementHTTPDeps)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
+		if in.Body.APIKey != "" && d.RuntimeHealth != nil {
+			states, e := d.RuntimeHealth.List(ctx, "direct_upstream", a.ID)
+			if e != nil {
+				return nil, httpx.ErrUnavailable
+			}
+			scopes := []routing.FaultScope{routing.NewFaultScope("authentication", "direct_upstream", a.ID, "", "", "", "")}
+			for _, state := range states {
+				if state.Scope.Kind == "authentication" {
+					scopes = append(scopes, state.Scope)
+				}
+			}
+			if resetter, ok := d.RuntimeHealth.(interface {
+				Reset(context.Context, []routing.FaultScope) error
+			}); ok {
+				if e = resetter.Reset(ctx, scopes); e != nil {
+					return nil, httpx.ErrUnavailable
+				}
+			}
+		}
 		return &accountOutput{Body: accountToDTO(a)}, nil
 	})
 
@@ -257,24 +276,8 @@ func registerUpstreamAccounts(api huma.API, d UpstreamAccountManagementHTTPDeps)
 		if d.AccountManager == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("account service is not configured")
 		}
-		endpointIDs := make([]string, 0)
-		if d.RuntimeHealth != nil && d.EndpointManager != nil {
-			endpoints, err := d.EndpointManager.ListEndpoints(ctx, in.AccountID)
-			if err != nil {
-				return nil, mapServiceError(err)
-			}
-			for _, endpoint := range endpoints {
-				endpointIDs = append(endpointIDs, endpoint.ID)
-			}
-		}
 		if err := d.AccountManager.DeleteAccount(ctx, in.AccountID); err != nil {
 			return nil, mapServiceError(err)
-		}
-		if d.RuntimeHealth != nil {
-			d.RuntimeHealth.Forget(in.AccountID)
-			for _, endpointID := range endpointIDs {
-				d.RuntimeHealth.Forget(endpointID)
-			}
 		}
 		out := &deleteAccountOutput{}
 		out.Body.Deleted = true
@@ -377,39 +380,47 @@ func registerUpstreamAccountEndpoints(api huma.API, d UpstreamAccountManagementH
 		if err := d.EndpointManager.DeleteEndpoint(ctx, in.AccountID, in.EndpointID); err != nil {
 			return nil, mapServiceError(err)
 		}
-		if d.RuntimeHealth != nil {
-			d.RuntimeHealth.Forget(in.EndpointID)
-		}
 		out := &deleteAccountOutput{}
 		out.Body.Deleted = true
 		return out, nil
 	})
 }
 
-func syncEndpointRuntimeHealth(health routing.HealthTracker, endpoint domain.UpstreamAccountEndpoint) {
-	if health == nil || endpoint.ID == "" {
+func syncEndpointRuntimeHealth(health routing.Availability, endpoint domain.UpstreamAccountEndpoint) {
+	if health == nil || endpoint.Status != domain.EndpointStatusActive {
 		return
 	}
-	if endpoint.Status == domain.EndpointStatusActive {
-		health.RecordSuccess(endpoint.ID, routing.TargetEndpoint)
-		return
-	}
-	health.Forget(endpoint.ID)
-}
-
-// reconcileAccountRuntimeHealth 在 admin 启/停用账号后，把该账号下所有端点的
-// 运行时熔断状态同步到与持久化 status 一致：active → RecordSuccess（清零计数 /
-// 半开回 closed），disabled → Forget（避免残余状态对新绑定产生误判）。
-func reconcileAccountRuntimeHealth(health routing.HealthTracker, endpoints UpstreamAccountEndpointManager, a domain.UpstreamAccount) {
-	if health == nil || endpoints == nil {
-		return
-	}
-	items, err := endpoints.ListEndpoints(context.Background(), a.ID)
+	states, err := health.List(context.Background(), "direct_upstream", endpoint.AccountID)
 	if err != nil {
 		return
 	}
-	for _, ep := range items {
-		syncEndpointRuntimeHealth(health, ep)
+	scopes := []routing.FaultScope{routing.NewFaultScope("transport", "direct_upstream", endpoint.AccountID, endpoint.ID, "", "", "")}
+	for _, state := range states {
+		if state.Scope.EndpointID == endpoint.ID {
+			scopes = append(scopes, state.Scope)
+		}
+	}
+	if resetter, ok := health.(interface {
+		Reset(context.Context, []routing.FaultScope) error
+	}); ok {
+		_ = resetter.Reset(context.Background(), scopes)
+	}
+}
+func reconcileAccountRuntimeHealth(health routing.Availability, _ UpstreamAccountEndpointManager, a domain.UpstreamAccount) {
+	if health != nil && a.Status == domain.UpstreamAccountStatusActive {
+		states, err := health.List(context.Background(), "direct_upstream", a.ID)
+		if err != nil {
+			return
+		}
+		scopes := []routing.FaultScope{}
+		for _, state := range states {
+			scopes = append(scopes, state.Scope)
+		}
+		if resetter, ok := health.(interface {
+			Reset(context.Context, []routing.FaultScope) error
+		}); ok {
+			_ = resetter.Reset(context.Background(), scopes)
+		}
 	}
 }
 

@@ -128,11 +128,35 @@ func TestOAuthCredentialCooldownExcludesAndThenRestoresSelection(t *testing.T) {
 	}
 
 	store.RecordSuccess(ctx, credentialID)
+	if _, err := store.SelectCredentialFromPool(ctx, poolID, "round_robin"); err == nil {
+		t.Fatal("unrelated success cleared cooldown")
+	}
+	if _, err := pool.Exec(ctx, `UPDATE ai_provider_oauth_credentials SET cooldown_until=now()-interval '1 second' WHERE id=$1`, credentialID); err != nil {
+		t.Fatal(err)
+	}
 	selected, err := store.SelectCredentialFromPool(ctx, poolID, "round_robin")
 	if err != nil {
 		t.Fatalf("SelectCredentialFromPool() after success error = %v", err)
 	}
-	if selected.ID != credentialID || selected.CooldownUntil != nil {
+	if selected.ID != credentialID || selected.CooldownUntil == nil || selected.CooldownUntil.After(time.Now()) {
 		t.Fatalf("selected credential = %#v", selected)
+	}
+	if err = store.MarkInvalid(ctx, credentialID, "expired credential"); err != nil {
+		t.Fatal(err)
+	}
+	row, err = store.GetByID(ctx, credentialID)
+	if err != nil || row.Status != "active" || row.CooldownUntil == nil {
+		t.Fatalf("runtime auth must remain recoverable: %+v %v", row, err)
+	}
+	version := row.TokenVersion
+	if err = store.UpdateStatus(ctx, credentialID, "disabled"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.UpdateTokens(ctx, credentialID, "late-refresh", "", nil, version); err == nil {
+		t.Fatal("late refresh overwrote manual disable")
+	}
+	row, err = store.GetByID(ctx, credentialID)
+	if err != nil || row.Status != "disabled" {
+		t.Fatalf("manual disable lost: %+v %v", row, err)
 	}
 }
