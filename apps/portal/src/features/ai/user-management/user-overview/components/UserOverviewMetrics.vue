@@ -44,9 +44,9 @@ const cards = computed<MetricCard[]>(() => {
     {
       key: "ai",
       label: "AI 请求",
-      value: props.aiAvailable ? formatNumber(props.aiUsageStats.total_requests) : "—",
+      value: props.aiAvailable ? formatNumber(props.aiUsageStats.requests) : "—",
       meta: props.aiAvailable
-        ? `${props.activityWindowLabel}，失败 ${formatNumber(props.aiUsageStats.failed_count)}，消耗 $${Number(props.aiUsageStats.total_user_charged_usd ?? 0).toLocaleString("en-US", { maximumFractionDigits: 6 })}`
+        ? `${props.activityWindowLabel}，明确错误 ${formatNumber(props.aiUsageStats.errors)}，消耗 $${Number((props.aiUsageStats.user_charged_micro ?? 0) / 1_000_000).toLocaleString("en-US", { maximumFractionDigits: 6 })}`
         : "当前租户未开通智能服务"
     },
     {

@@ -10,7 +10,6 @@ import (
 
 	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/internal/ai/observabilitycontrol"
-	"xiaodou/dai/internal/auth"
 	"xiaodou/dai/libs/go/server"
 )
 
@@ -81,196 +80,20 @@ func (s *usageQueryReaderStub) UserSummary(_ context.Context, tenantID, userID, 
 	return s.userSummary, nil
 }
 
-func TestUsageRoutesUseQueryReader(t *testing.T) {
-	createdAt := time.Date(2026, time.August, 21, 3, 4, 5, 0, time.UTC)
-	reader := &usageQueryReaderStub{
-		dailyRows: []domain.DailyTrendRow{{Date: "2026-08-20", RequestCount: 2, TenantPayableMicro: 1_250_000}},
-		page: domain.UsageLogPage{
-			Total:   3,
-			Stats:   domain.UsageStats{TotalRequests: 3, TotalTenantPayableMicro: 2_500_000},
-			Records: []domain.UsageLog{{ID: "log-1", RequestID: "request-1", RequestStatus: "success", CreatedAt: createdAt}},
-		},
-		detail:       domain.UsageLogDetail{UsageLog: domain.UsageLog{RequestID: "request-1", RequestStatus: "failed"}},
-		summaryRows:  []domain.UsageSummaryRow{{ModelCode: "gpt-test", RequestCount: 4, TotalTenantPayableMicro: 3_750_000}},
-		unitRows:     []domain.UsageUnitSummaryRow{{BillableUnitType: "token", RequestCount: 5, TotalTenantPayableMicro: 4_500_000}},
-		upstreamRows: []domain.UsageUpstreamSummaryRow{{TargetKind: "direct_upstream", TargetID: "upstream-1", RequestCount: 6, TenantPayableMicro: 5_250_000}},
-		rankingRows:  []domain.UsageUserRankingRow{{TenantID: "tenant-1", UserID: "user-1", RequestCount: 7, TotalUserChargedMicro: 6_500_000, LastRequestedAt: createdAt}},
-		userSummary:  domain.UserUsageSummary{RequestCount: 8, TotalUserChargedMicro: 7_250_000},
-	}
-	router, api := server.New(server.Options{Title: "test", Version: "test"})
-	registerUsage(api, UsageHTTPDeps{UsageQueries: reader})
-	registerUserSelfUsage(api, UserSelfReadHTTPDeps{UsageQueries: reader})
-
-	window := "date_from=2026-08-20T00:00:00Z&date_to=2026-08-21T00:00:00Z"
-	trendRecorder := performUsageRequest(router, "/api/v1/analytics/daily-trend?"+window)
-	requireUsageStatus(t, trendRecorder, http.StatusOK)
-	assertUsageWindow(t, reader.dailyFrom, reader.dailyTo)
-	var trend struct {
-		Items []dailyTrendRowDTO `json:"items"`
-		Total int                `json:"total"`
-	}
-	decodeUsageResponse(t, trendRecorder, &trend)
-	if trend.Total != 1 || trend.Items[0].TenantPayableUSD != 1.25 {
-		t.Fatalf("daily trend response = %#v", trend)
-	}
-
-	filter := "tenant_id=tenant-1&user_id=user-1&model_code=gpt-test&request_status=success&request_source=workspace&" + window
-	logsRecorder := performUsageRequest(router, "/api/v1/usage-logs?"+filter+"&limit=999&offset=3")
-	requireUsageStatus(t, logsRecorder, http.StatusOK)
-	assertUsageFilter(t, reader.listFilter)
-	if reader.listLimit != 100 || reader.listOffset != 3 {
-		t.Fatalf("list page = limit %d offset %d", reader.listLimit, reader.listOffset)
-	}
-	var logs struct {
-		Total   int64         `json:"total"`
-		Stats   usageStatsDTO `json:"stats"`
-		Records []usageLogDTO `json:"records"`
-	}
-	decodeUsageResponse(t, logsRecorder, &logs)
-	if logs.Total != 3 || logs.Stats.TotalTenantPayableUSD != 2.5 || len(logs.Records) != 1 || logs.Records[0].RequestID != "request-1" {
-		t.Fatalf("usage logs response = %#v", logs)
-	}
-
-	detailRecorder := performUsageRequest(router, "/api/v1/usage-logs/request-1")
-	requireUsageStatus(t, detailRecorder, http.StatusOK)
-	if reader.detailRequestID != "request-1" {
-		t.Fatalf("detail request id = %q", reader.detailRequestID)
-	}
-	var detail usageLogDetailDTO
-	decodeUsageResponse(t, detailRecorder, &detail)
-	if detail.RequestID != "request-1" || detail.RequestStatus != "failed" {
-		t.Fatalf("detail response = %#v", detail)
-	}
-
-	summaryRecorder := performUsageRequest(router, "/api/v1/usage-summary?"+filter)
-	requireUsageStatus(t, summaryRecorder, http.StatusOK)
-	assertUsageSummaryFilter(t, reader.summaryFilter)
-	var summary struct {
-		Items []usageSummaryRowDTO `json:"items"`
-		Total int                  `json:"total"`
-	}
-	decodeUsageResponse(t, summaryRecorder, &summary)
-	if summary.Total != 1 || summary.Items[0].ModelCode != "gpt-test" || summary.Items[0].TotalTenantPayableUSD != 3.75 {
-		t.Fatalf("summary response = %#v", summary)
-	}
-
-	unitRecorder := performUsageRequest(router, "/api/v1/usage-unit-summary?"+filter)
-	requireUsageStatus(t, unitRecorder, http.StatusOK)
-	assertUsageSummaryFilter(t, reader.unitFilter)
-	var unit struct {
-		Items []usageUnitSummaryRowDTO `json:"items"`
-		Total int                      `json:"total"`
-	}
-	decodeUsageResponse(t, unitRecorder, &unit)
-	if unit.Total != 1 || unit.Items[0].BillableUnitType != "token" || unit.Items[0].TotalTenantPayableUSD != 4.5 {
-		t.Fatalf("unit summary response = %#v", unit)
-	}
-
-	upstreamRecorder := performUsageRequest(router, "/api/v1/usage-upstream-summary?"+filter)
-	requireUsageStatus(t, upstreamRecorder, http.StatusOK)
-	assertUsageSummaryFilter(t, reader.upstreamFilter)
-	var upstream struct {
-		Items []usageUpstreamSummaryRowDTO `json:"items"`
-		Total int                          `json:"total"`
-	}
-	decodeUsageResponse(t, upstreamRecorder, &upstream)
-	if upstream.Total != 1 || upstream.Items[0].TargetID != "upstream-1" || upstream.Items[0].TenantPayableUSD != 5.25 {
-		t.Fatalf("upstream summary response = %#v", upstream)
-	}
-
-	rankingRecorder := performUsageRequest(router, "/api/v1/usage-ranking/users?"+filter+"&limit=999")
-	requireUsageStatus(t, rankingRecorder, http.StatusOK)
-	assertUsageSummaryFilter(t, reader.rankingFilter)
-	if reader.rankingLimit != 100 {
-		t.Fatalf("ranking limit = %d, want 100", reader.rankingLimit)
-	}
-	var ranking struct {
-		Items []usageUserRankingRowDTO `json:"items"`
-		Total int                      `json:"total"`
-	}
-	decodeUsageResponse(t, rankingRecorder, &ranking)
-	if ranking.Total != 1 || ranking.Items[0].UserID != "user-1" || ranking.Items[0].TotalUserChargedUSD != 6.5 {
-		t.Fatalf("ranking response = %#v", ranking)
-	}
-
-	userHandler := http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
-		ctx := context.WithValue(request.Context(), authClaimsContextKey{}, &auth.Claims{TenantID: "tenant-1", UserID: "user-1"})
-		router.ServeHTTP(w, request.WithContext(ctx))
-	})
-	userRecorder := performUsageRequest(userHandler, "/api/v1/user-usage-summary?request_source=workspace")
-	requireUsageStatus(t, userRecorder, http.StatusOK)
-	if reader.userTenantID != "tenant-1" || reader.userID != "user-1" || reader.userSource != "workspace" {
-		t.Fatalf("user summary scope = tenant %q user %q source %q", reader.userTenantID, reader.userID, reader.userSource)
-	}
-	var userSummary userUsageSummaryDTO
-	decodeUsageResponse(t, userRecorder, &userSummary)
-	if userSummary.RequestCount != 8 || userSummary.TotalUserChargedUSD != 7.25 {
-		t.Fatalf("user summary response = %#v", userSummary)
-	}
-}
-
-func TestUsageDetailIncludesIdentityAndBillingContext(t *testing.T) {
-	reader := &usageQueryReaderStub{
-		detail: domain.UsageLogDetail{UsageLog: domain.UsageLog{
-			ID:                                 "log-1",
-			RequestID:                          "request-identity",
-			TenantID:                           "tenant-1",
-			UserID:                             "user-1",
-			GroupNameSnapshot:                  "pro",
-			GroupDefaultUserMultiplierSnapshot: 0.8,
-			EffectiveUserMultiplierSnapshot:    0.6,
-			TenantPayableMicro:                 1_250_000,
-			UserChargedMicro:                   2_500_000,
-			RequestStatus:                      "success",
-		}, RequestHeaders: []byte(`{"Content-Type":["application/json"]}`), ResponseHeaders: []byte(`{"X-Request-Id":["request-identity"]}`)},
-	}
-	router, api := server.New(server.Options{Title: "test", Version: "test"})
-	registerUsage(api, UsageHTTPDeps{
-		UsageQueries:     reader,
-		IdentityProvider: usageDetailIdentityProvider{},
-	})
-
-	recorder := performUsageRequest(router, "/api/v1/usage-logs/request-identity")
-	requireUsageStatus(t, recorder, http.StatusOK)
-	var detail usageLogDetailDTO
-	decodeUsageResponse(t, recorder, &detail)
-	if detail.TenantName == nil || *detail.TenantName != "Tenant One" {
-		t.Fatalf("tenant name = %v", detail.TenantName)
-	}
-	if detail.Username == nil || *detail.Username != "alice" {
-		t.Fatalf("username = %v", detail.Username)
-	}
-	if detail.TenantPayableUSD != 1.25 || detail.UserChargedUSD != 2.5 {
-		t.Fatalf("billing = tenant %v user %v", detail.TenantPayableUSD, detail.UserChargedUSD)
-	}
-	if string(detail.RequestHeaders) != `{"Content-Type":["application/json"]}` || string(detail.ResponseHeaders) != `{"X-Request-Id":["request-identity"]}` {
-		t.Fatalf("headers = request %s response %s", detail.RequestHeaders, detail.ResponseHeaders)
-	}
-}
-
-type usageDetailIdentityProvider struct{}
-
-func (usageDetailIdentityProvider) BatchGetUsers(context.Context, []string) (map[string]*IdentityUser, error) {
-	return map[string]*IdentityUser{"user-1": {UserID: "user-1", TenantID: "tenant-1", Username: "alice"}}, nil
-}
-
-func (usageDetailIdentityProvider) BatchGetTenants(context.Context, []string) (map[string]*IdentityTenant, error) {
-	return map[string]*IdentityTenant{"tenant-1": {TenantID: "tenant-1", TenantName: "Tenant One"}}, nil
-}
-
 func TestUsageRoutesRequireQueryReader(t *testing.T) {
 	router, api := server.New(server.Options{Title: "test", Version: "test"})
 	registerUsage(api, UsageHTTPDeps{})
 
-	recorder := performUsageRequest(router, "/api/v1/usage-logs")
+	recorder := performUsageRequest(router, "/api/v1/usage-summary")
 	requireUsageStatus(t, recorder, http.StatusServiceUnavailable)
 }
 
 func TestUsageRoutesRegisterIndependentlyFromCoreAI(t *testing.T) {
 	paths := []string{
 		"/api/v1/analytics/daily-trend",
-		"/api/v1/usage-logs",
-		"/api/v1/usage-logs/request-1",
+		"/api/v2/requests",
+		"/api/v2/request-errors",
+		"/api/v2/billing/settlements",
 		"/api/v1/usage-summary",
 		"/api/v1/usage-unit-summary",
 		"/api/v1/usage-upstream-summary",
@@ -338,4 +161,11 @@ func assertUsageSummaryFilter(t *testing.T, filter domain.UsageSummaryFilter) {
 		t.Fatalf("summary filter = %#v", filter)
 	}
 	assertUsageWindow(t, filter.DateFrom, filter.DateTo)
+}
+
+func TestUsageLogsExplicitErrorFilter(t *testing.T) {
+	filter, err := usageLogFilterFromInput(&usageLogsInput{ErrorsOnly: true})
+	if err != nil || !filter.ErrorsOnly || filter.RequestStatus != "" {
+		t.Fatalf("explicit error filter must not impose a lifecycle status: %+v, %v", filter, err)
+	}
 }

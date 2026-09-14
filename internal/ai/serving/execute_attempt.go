@@ -334,12 +334,7 @@ func (s *ExecuteStep) runAttempt(parentCtx context.Context, req *Request, cand *
 	}
 
 	decision := outcome.Decision(req.SelectedCredential != nil)
-	if outcome.Status != ResultSuccess && req.UsageEvidence.HasTokens() {
-		req.RequestStatus = domain.RequestFailed
-		req.ErrorCode, req.ErrorMessage = "upstream_error", "upstream request failed after reporting usage"
-		req.FailedStep = "execute"
-		return attemptResult{finished: true, finalErr: apiError(upstreamStatusToGateway(status), req.ErrorCode, req.ErrorMessage)}
-	}
+
 	if runtimeTrace != nil &&
 		runtimeTrace.CredentialEffect == clientruntime.CredentialEffectCooldown &&
 		req.SelectedCredential != nil {
@@ -390,7 +385,7 @@ func (s *ExecuteStep) runAttempt(parentCtx context.Context, req *Request, cand *
 			markAttemptFailed(req, pre.message)
 			s.notifyHealth(parentCtx, req, cand, Outcome{Status: ResultServerError, HTTPStatus: pre.httpStatus})
 			logUpstreamFailure(parentCtx, req, cand, upstreamURL, pre.httpStatus, latencyMs, pre.cause, pre.message, upstreamContentType, upstreamRequestSummary)
-			if req.UsageEvidence.HasTokens() || req.ResponseCommitted {
+			if req.ResponseCommitted {
 				req.RequestStatus = domain.RequestFailed
 				req.ErrorCode, req.ErrorMessage = "upstream_error", pre.message
 				return attemptResult{finished: true, finalErr: apiError(http.StatusBadGateway, req.ErrorCode, req.ErrorMessage)}

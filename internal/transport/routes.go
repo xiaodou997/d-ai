@@ -20,6 +20,7 @@ import (
 	userports "xiaodou/dai/internal/user/ports"
 
 	// AI 域
+	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/internal/ai/routing"
 	aitransport "xiaodou/dai/internal/ai/transport"
 	"xiaodou/dai/internal/ai/workspace"
@@ -74,6 +75,7 @@ type AIOverviewHTTPDeps struct {
 // AIUsageHTTPDeps contains the collaborators owned by the independently
 // registered management usage HTTP module.
 type AIUsageHTTPDeps struct {
+	Records                    domain.RequestRecordRepository
 	UsageQueries               aitransport.UsageQueryReader
 	BanChecker                 aitransport.HumaBanChecker
 	IdentityEnrichmentFailures aitransport.IdentityEnrichmentFailureObserver
@@ -235,11 +237,10 @@ type AIUserSelfReadHTTPDeps struct {
 // AISystemHTTPDeps contains the collaborators owned by the independently
 // registered system status HTTP module.
 type AISystemHTTPDeps struct {
-	DatabaseHealth    aitransport.ComponentHealthProbe
-	RedisHealth       aitransport.ComponentHealthProbe
-	Health            routing.HealthTracker
-	RecordingSettings aitransport.RecordingSettingsStore
-	BanChecker        aitransport.HumaBanChecker
+	DatabaseHealth aitransport.ComponentHealthProbe
+	RedisHealth    aitransport.ComponentHealthProbe
+	Health         routing.HealthTracker
+	BanChecker     aitransport.HumaBanChecker
 }
 
 // AIRiskControlHTTPDeps contains the collaborators owned by the independently
@@ -736,11 +737,10 @@ func buildAuditLogHTTPDeps(platform aiPlatformDeps, d AIAuditLogHTTPDeps) aitran
 
 func buildSystemHTTPDeps(platform aiPlatformDeps, d AISystemHTTPDeps) aitransport.SystemHTTPDeps {
 	return aitransport.SystemHTTPDeps{
-		Auth:              buildAIHTTPAuthDeps(platform, d.BanChecker),
-		DatabaseHealth:    d.DatabaseHealth,
-		RedisHealth:       d.RedisHealth,
-		Health:            d.Health,
-		RecordingSettings: d.RecordingSettings,
+		Auth:           buildAIHTTPAuthDeps(platform, d.BanChecker),
+		DatabaseHealth: d.DatabaseHealth,
+		RedisHealth:    d.RedisHealth,
+		Health:         d.Health,
 	}
 }
 
@@ -771,6 +771,7 @@ func buildOverviewHTTPDeps(platform aiPlatformDeps, d AIOverviewHTTPDeps, identi
 
 func buildUsageHTTPDeps(platform aiPlatformDeps, d AIUsageHTTPDeps, identity aiIdentityProvider) aitransport.UsageHTTPDeps {
 	deps := aitransport.UsageHTTPDeps{
+		Records:                    d.Records,
 		Auth:                       buildAIHTTPAuthDeps(platform, d.BanChecker),
 		UsageQueries:               d.UsageQueries,
 		IdentityEnrichmentFailures: d.IdentityEnrichmentFailures,

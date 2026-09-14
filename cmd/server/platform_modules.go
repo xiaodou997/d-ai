@@ -12,6 +12,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
+	aiadapters "xiaodou/dai/internal/ai/adapters/postgres"
 	"xiaodou/dai/internal/ai/proxy"
 	announcementpkg "xiaodou/dai/internal/announcement"
 	announcementpg "xiaodou/dai/internal/announcement/pg"
@@ -135,7 +136,7 @@ func buildPlatformModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, r
 	tenantSelfSvc := tenantpkg.NewSelfService(tenantSelfRepo, tenantSelfRepo)
 	accountRepo := billingpg.NewAccountRepository(pool)
 	accountQueries := billingsvc.NewAccountQueryService(accountRepo)
-	deductionSvc := billingsvc.NewDeductionService(billingPool, appLogger)
+	deductionSvc := billingsvc.NewDeductionService(billingPool, appLogger).WithUsageRefunder(aiadapters.NewRequestStore(pool, nil, appLogger).WithFinancialPool(billingPool))
 	rechargeSvc := billingsvc.NewRechargeService(billingPool, tenantRepo)
 	tenantLifecycle := tenantpkg.NewAdminTenantLifecycleService(tenantRepo, security)
 	adminAccountRepo := userpg.NewAdminAccountRepository(pool, activationSvc)

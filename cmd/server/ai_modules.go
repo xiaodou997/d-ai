@@ -21,9 +21,7 @@ import (
 	redisadapter "xiaodou/dai/internal/ai/adapters/redis"
 	"xiaodou/dai/internal/ai/apikey"
 	"xiaodou/dai/internal/ai/asynctask"
-	"xiaodou/dai/internal/ai/audit"
 	"xiaodou/dai/internal/ai/billingcontrol"
-	"xiaodou/dai/internal/ai/blobstore"
 	"xiaodou/dai/internal/ai/clientcatalog"
 	"xiaodou/dai/internal/ai/clientruntime"
 	"xiaodou/dai/internal/ai/commercial"
@@ -51,7 +49,6 @@ import (
 	"xiaodou/dai/internal/ai/upstreamcontrol"
 	workspacesvc "xiaodou/dai/internal/ai/workspace"
 	"xiaodou/dai/internal/auth"
-	billingoutbox "xiaodou/dai/internal/billing/outbox"
 	"xiaodou/dai/internal/config"
 	"xiaodou/dai/internal/system"
 	"xiaodou/dai/internal/transport"
@@ -78,9 +75,8 @@ type aiModules struct {
 	subscriptionSvc    *subscription.Service
 	riskControlWorker  *riskcontrol.Worker
 	promptAuditEngine  *promptaudit.Engine
-	auditWorker        *audit.Worker
 	refresher          *tokenrefresh.Refresher
-	settlementConsumer *billingoutbox.Consumer
+	settlementConsumer *aiadapters.RequestStore
 	logger             *zap.Logger
 	workerCtx          context.Context
 	workerCancel       context.CancelFunc
@@ -147,7 +143,6 @@ func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisCl
 	)
 
 	riskControlRepo := aiadapters.NewRiskControlRepo(q)
-	recordingSettingsSvc := audit.NewRecordingSettingsService(riskControlRepo)
 	riskControlConfigSvc := riskcontrol.NewConfigService(riskControlRepo)
 	riskControlLogSvc := riskcontrol.NewLogService(riskControlRepo)
 	riskControlEventSvc := riskcontrol.NewEventService(riskControlRepo)
@@ -168,12 +163,6 @@ func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisCl
 		providerSecrets.Decrypt,
 		appLogger,
 	)
-
-	auditStore := aiadapters.NewAuditStore(pool)
-	blobStore := blobstore.NewPGStore(pool)
-	auditWorker := audit.NewWorker(auditStore, blobStore, audit.WorkerOptions{
-		StoreImageBlobs: cfg.Audit.StoreImageBlobs,
-	})
 
 	purchaser := subscription.NewBillingPurchaser(billingPool, "dai")
 	subsSvc := subscription.NewService(aiadapters.NewSubscriptionRepo(q, pool), purchaser, appLogger)
@@ -237,10 +226,7 @@ func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisCl
 	runtimeRouteSelector := gateway.NewRuntimeRouteSelector(runtimePlanner, appLogger)
 
 	priceBookBiller := aiadapters.NewPriceBookBiller(priceBookSvc, q, pool)
-	usageLogger := aiadapters.NewUsageLogger(pool, priceBookBiller).
-		WithLogger(appLogger).
-		WithAuditEnqueuer(auditStore)
-	usageLogger.WithAPIKeyCacheInvalidator(apiKeyCache)
+	usageLogger := aiadapters.NewRequestStore(pool, priceBookBiller, appLogger).WithFinancialPool(billingPool).WithAPIKeyCacheInvalidator(apiKeyCache)
 
 	contentModerationStep := &serving.ContentModerationStep{Checker: riskControlChecker, Worker: riskControlWorker}
 	promptAuditStep := &serving.PromptAuditStep{Checker: promptAuditEngine}
@@ -262,25 +248,25 @@ func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisCl
 	modelCapabilities := externalmodels.New(redisClient, managementHTTPClient)
 
 	executeStep := &serving.ExecuteStep{
-		Transport:         upstreamHTTPTransport,
-		ClientRuntime:     fixedClientRuntime,
-		UpstreamLimiter:   upstreamConcurrencyLimiter,
-		Bridge:            bridgeRuntime,
-		Health:            healthTracker,
-		OAuthPool:         oauthCreds,
-		AccountState:      accountSvc,
-		Budget:            serving.DefaultRetryBudget(),
-		Scorer:            scorer,
-		Stats:             routeStats,
-		Sticky:            stickyStore,
-		ImageNormalizer:   fileStore,
-		ModuleGate:        platform.Modules,
-		Privacy:           privacy.NewProtector(),
-		ContentModeration: contentModerationStep,
-		PromptAudit:       promptAuditStep,
+		CompletionRecorder: usageLogger,
+		Transport:          upstreamHTTPTransport,
+		ClientRuntime:      fixedClientRuntime,
+		UpstreamLimiter:    upstreamConcurrencyLimiter,
+		Bridge:             bridgeRuntime,
+		Health:             healthTracker,
+		OAuthPool:          oauthCreds,
+		AccountState:       accountSvc,
+		Budget:             serving.DefaultRetryBudget(),
+		Scorer:             scorer,
+		Stats:              routeStats,
+		Sticky:             stickyStore,
+		ImageNormalizer:    fileStore,
+		ModuleGate:         platform.Modules,
+		Privacy:            privacy.NewProtector(),
+		ContentModeration:  contentModerationStep,
+		PromptAudit:        promptAuditStep,
 	}
 	usageCompletionFinalizer := &serving.UsageLogFinalizer{Logger: usageLogger, Metrics: metricsGW}
-	auditFinalizer := &serving.AuditFinalizer{Worker: auditWorker}
 
 	pipeline := serving.NewPipeline(
 		&serving.AuthNStep{Resolver: aiadapters.NewAPIKeyResolver(q)},
@@ -289,11 +275,11 @@ func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisCl
 		balanceGateStep,
 		routeCandidatesStep,
 		billingGuardStep,
+		usageLogger,
 		rateLimitStep,
 		executeStep,
 	).WithFinalizers(
 		usageCompletionFinalizer,
-		auditFinalizer,
 		serving.RateLimitFinalizer{},
 	)
 
@@ -405,11 +391,10 @@ func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisCl
 				BanChecker: banChecker,
 			},
 			System: transport.AISystemHTTPDeps{
-				DatabaseHealth:    databaseHealth,
-				RedisHealth:       redisHealth,
-				Health:            healthTracker,
-				RecordingSettings: recordingSettingsSvc,
-				BanChecker:        banChecker,
+				DatabaseHealth: databaseHealth,
+				RedisHealth:    redisHealth,
+				Health:         healthTracker,
+				BanChecker:     banChecker,
 			},
 			Dashboard: transport.AIDashboardHTTPDeps{
 				DashboardQueries:           dashboardSvc,
@@ -423,6 +408,7 @@ func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisCl
 				IdentityEnrichmentFailures: identityEnrichmentFailures,
 			},
 			Usage: transport.AIUsageHTTPDeps{
+				Records:                    usageLogger,
 				UsageQueries:               usageSvc,
 				BanChecker:                 banChecker,
 				IdentityEnrichmentFailures: identityEnrichmentFailures,
@@ -554,9 +540,8 @@ func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisCl
 		subscriptionSvc:    subsSvc,
 		riskControlWorker:  riskControlWorker,
 		promptAuditEngine:  promptAuditEngine,
-		auditWorker:        auditWorker,
 		refresher:          refresher,
-		settlementConsumer: billingoutbox.NewConsumer(billingPool, appLogger),
+		settlementConsumer: usageLogger,
 		logger:             appLogger,
 	}
 	if err := validateAIAssembly(modules); err != nil {
@@ -598,9 +583,6 @@ func validateAIAssembly(m *aiModules) error {
 	}
 	if m.promptAuditEngine == nil {
 		missing = append(missing, "prompt_audit_engine")
-	}
-	if m.auditWorker == nil {
-		missing = append(missing, "audit_worker")
 	}
 	if m.refresher == nil {
 		missing = append(missing, "token_refresher")
@@ -657,9 +639,6 @@ func (m *aiModules) Start(ctx context.Context) {
 		if m.promptAuditEngine != nil {
 			m.promptAuditEngine.Start(workerCtx)
 		}
-		if m.auditWorker != nil {
-			m.auditWorker.Start(workerCtx)
-		}
 		if m.refresher != nil {
 			m.refresher.Start(workerCtx)
 			if m.logger != nil {
@@ -670,7 +649,7 @@ func (m *aiModules) Start(ctx context.Context) {
 			m.AsyncTasks.Start(ctx)
 		}
 		if m.settlementConsumer != nil {
-			go m.settlementConsumer.Run(workerCtx)
+			m.settlementConsumer.Start(workerCtx)
 		}
 	})
 }
@@ -750,14 +729,6 @@ func (m *aiModules) Stop(ctx context.Context) error {
 	if m.promptAuditEngine != nil {
 		if err := m.promptAuditEngine.Stop(ctx); err != nil {
 			errs = append(errs, fmt.Errorf("stop prompt audit engine: %w", err))
-		}
-	}
-	if m.auditWorker != nil {
-		if err := m.auditWorker.Stop(ctx); err != nil {
-			if m.logger != nil {
-				m.logger.Warn("audit worker shutdown incomplete", zap.Error(err))
-			}
-			errs = append(errs, fmt.Errorf("stop audit worker: %w", err))
 		}
 	}
 	if m.refresher != nil {

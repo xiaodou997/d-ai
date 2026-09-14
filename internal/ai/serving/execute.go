@@ -102,22 +102,23 @@ type ImageResponseNormalizer interface {
 // credential, gives up (4xx), or relays the successful response to the client
 // via the protocol-appropriate Relay.
 type ExecuteStep struct {
-	Transport         Transporter
-	ClientRuntime     clientruntime.Invoker      // fixed OAuth providers; nil keeps the legacy path
-	UpstreamLimiter   UpstreamConcurrencyLimiter // optional unless a direct account caps concurrency
-	Bridge            ProtocolBridge             // required for cross-surface request/response conversion
-	Health            routing.HealthTracker      // optional; nil = no circuit breaking
-	OAuthPool         OAuthCredentialPool        // optional; enables rejected-credential swaps
-	AccountState      DirectAccountState         // optional; persists direct-account credential rejection
-	Budget            RetryBudget                // zero value falls back to DefaultRetryBudget
-	Scorer            RouteScorer                // optional; nil = first unused candidate (P1 behaviour)
-	Stats             routing.RouteStatsStore    // optional; used for inflight tracking alongside scorer
-	Sticky            stickyWriter               // optional; writes/deletes sticky binding on success/failure
-	ImageNormalizer   ImageResponseNormalizer    // optional; normalizes image URL/Base64 response mismatches
-	ModuleGate        ModuleGate                 // optional; controls feature module activation
-	ContentModeration *ContentModerationStep     // optional; runs after each candidate is selected
-	PromptAudit       *PromptAuditStep           // optional; runs after each candidate is selected
-	Privacy           *privacy.Protector         // optional; protects upstream request content
+	CompletionRecorder UsageLogger
+	Transport          Transporter
+	ClientRuntime      clientruntime.Invoker      // fixed OAuth providers; nil keeps the legacy path
+	UpstreamLimiter    UpstreamConcurrencyLimiter // optional unless a direct account caps concurrency
+	Bridge             ProtocolBridge             // required for cross-surface request/response conversion
+	Health             routing.HealthTracker      // optional; nil = no circuit breaking
+	OAuthPool          OAuthCredentialPool        // optional; enables rejected-credential swaps
+	AccountState       DirectAccountState         // optional; persists direct-account credential rejection
+	Budget             RetryBudget                // zero value falls back to DefaultRetryBudget
+	Scorer             RouteScorer                // optional; nil = first unused candidate (P1 behaviour)
+	Stats              routing.RouteStatsStore    // optional; used for inflight tracking alongside scorer
+	Sticky             stickyWriter               // optional; writes/deletes sticky binding on success/failure
+	ImageNormalizer    ImageResponseNormalizer    // optional; normalizes image URL/Base64 response mismatches
+	ModuleGate         ModuleGate                 // optional; controls feature module activation
+	ContentModeration  *ContentModerationStep     // optional; runs after each candidate is selected
+	PromptAudit        *PromptAuditStep           // optional; runs after each candidate is selected
+	Privacy            *privacy.Protector         // optional; protects upstream request content
 }
 
 // Transporter makes the actual HTTP call to an upstream provider.
@@ -164,6 +165,9 @@ type UpstreamResponse struct {
 func (s *ExecuteStep) Name() string { return "execute" }
 
 func (s *ExecuteStep) Execute(ctx context.Context, req *Request) error {
+	if req.RecordLeaseContext != nil {
+		ctx = req.RecordLeaseContext
+	}
 	initializeSettlementState(req)
 	if s == nil || s.Transport == nil || s.Bridge == nil {
 		return apiError(http.StatusInternalServerError, "runtime_not_configured", "runtime execution is not fully configured")
@@ -437,6 +441,7 @@ func (s *ExecuteStep) recordAttempt(req *Request, cand *domain.RouteCandidate, o
 		errMsg = outcome.Err.Error()
 	}
 	req.Attempts = append(req.Attempts, AttemptRecord{
+		PricingSnapshot:    req.BillingSnapshots[cand.RouteID],
 		Sequence:           len(req.Attempts) + len(req.SkippedAttempts) + 1,
 		RouteID:            cand.RouteID,
 		GroupID:            cand.GroupID,
@@ -822,42 +827,16 @@ func upstreamStatusToGateway(code int) int {
 	}
 }
 
-// fillEstimatedUsage fills only token counters that were absent from the
-// upstream response. outputBytes is the response body size for sync calls, or
-// the accumulated delta-content length for streaming calls.
-//
-// Estimation formula: bytes / 3 (rounded up). Dividing by 3 is conservative —
-// English text is ~4 chars/token but CJK and code are closer to 2–3 bytes/token,
-// so using 3 avoids systematic under-billing.
-func fillEstimatedUsage(req *Request, outputBytes int) {
+// fillEstimatedUsage is kept as an internal call-site name during migration;
+// no capability may synthesize counters from body length.
+func fillEstimatedUsage(req *Request, _ int) {
 	if domain.UsesReportedTokenBilling(req.CapabilityType) {
 		ApplyReportedUsage(req)
 		return
 	}
-	missingPrompt := req.TokenUsage.PromptTokens == 0
-	missingCompletion := req.TokenUsage.CompletionTokens == 0
-	switch {
-	case !missingPrompt && !missingCompletion:
+	req.TokenCountSource = domain.TokenUsageSourceMissing
+	if req.TokenUsage.PromptTokens > 0 || req.TokenUsage.CompletionTokens > 0 {
 		req.TokenCountSource = domain.TokenUsageSourceUpstream
-		return
-	case missingPrompt && missingCompletion:
-		req.TokenCountSource = domain.TokenUsageSourceEstimated
-	default:
-		req.TokenCountSource = domain.TokenUsageSourceMixed
-	}
-	if missingPrompt && req.UpstreamBodySize > 0 {
-		req.TokenUsage.PromptTokens = (req.UpstreamBodySize + 2) / 3
-	}
-	if !missingCompletion {
-		return
-	}
-	if outputBytes > 0 {
-		req.TokenUsage.CompletionTokens = (outputBytes + 2) / 3
-	} else {
-		// A committed stream may fail before any measurable content arrives. Do
-		// not invent a token charge; the settled amount must reflect observed
-		// usage and may legitimately be zero for that request.
-		req.TokenUsage.CompletionTokens = 0
 	}
 }
 

@@ -59,7 +59,6 @@ type tenantSelfDashboardListInput struct {
 type tenantSelfUsageLogsInput struct {
 	UserID        string `query:"user_id" doc:"用户 ID 过滤；为空表示本租户全部用户"`
 	ModelCode     string `query:"model_code" doc:"模型编码过滤"`
-	RequestStatus string `query:"request_status" doc:"请求状态过滤"`
 	RequestSource string `query:"request_source" doc:"请求来源过滤"`
 	DateFrom      string `query:"date_from" doc:"开始时间，RFC3339"`
 	DateTo        string `query:"date_to" doc:"结束时间，RFC3339"`
@@ -70,7 +69,6 @@ type tenantSelfUsageLogsInput struct {
 type tenantSelfUsageSummaryInput struct {
 	UserID        string `query:"user_id" doc:"用户 ID 过滤；为空表示本租户全部用户"`
 	ModelCode     string `query:"model_code" doc:"模型编码过滤"`
-	RequestStatus string `query:"request_status" doc:"请求状态过滤"`
 	RequestSource string `query:"request_source" doc:"请求来源过滤"`
 	DateFrom      string `query:"date_from" doc:"开始时间，RFC3339"`
 	DateTo        string `query:"date_to" doc:"结束时间，RFC3339，按 [start, end) 解释"`
@@ -397,51 +395,6 @@ func registerTenantSelfDashboard(api huma.API, d TenantSelfReadHTTPDeps) {
 // ---------------------------------------------------------------------------
 
 func registerTenantSelfUsage(api huma.API, d TenantSelfReadHTTPDeps) {
-	huma.Register(api, huma.Operation{
-		OperationID: "ai-list-tenant-self-usage-logs",
-		Method:      http.MethodGet,
-		Path:        "/api/v1/tenants/me/usage-logs",
-		Summary:     "租户自助用量日志列表",
-		Description: "按当前租户 token 返回本租户可见的用量日志分页与同过滤条件下的聚合统计；包含用户名称和 API key 的非敏感标识，不含上游/供应商内部字段。",
-		Tags:        []string{"usage"},
-	}, func(ctx context.Context, in *tenantSelfUsageLogsInput) (*tenantUsageLogsOutput, error) {
-		if d.UsageQueries == nil {
-			return nil, httpx.ErrUnavailable.WithDetail("usage service is not configured")
-		}
-		tenantID := tenantIDFromContext(ctx)
-		if tenantID == "" {
-			return nil, httpx.ErrBadRequest.WithDetail("tenant id is required")
-		}
-		dateFrom, dateTo, err := parseOptionalRFC3339Window(in.DateFrom, in.DateTo)
-		if err != nil {
-			return nil, err
-		}
-		filter := domain.UsageFilter{
-			TenantID:      tenantID,
-			UserID:        in.UserID,
-			ModelCode:     in.ModelCode,
-			RequestStatus: in.RequestStatus,
-			RequestSource: in.RequestSource,
-			DateFrom:      dateFrom,
-			DateTo:        dateTo,
-		}
-		limit, offset, err := usagePageFromInput(in.Limit, in.Offset)
-		if err != nil {
-			return nil, err
-		}
-		page, err := d.UsageQueries.ListLogs(ctx, filter, limit, offset)
-		if err != nil {
-			return nil, mapServiceError(err)
-		}
-		out := &tenantUsageLogsOutput{}
-		out.Body.Total = page.Total
-		out.Body.Stats = usageStatsToDTO(page.Stats)
-		out.Body.Records = make([]tenantUsageLogDTO, 0, len(page.Records))
-		for _, record := range page.Records {
-			out.Body.Records = append(out.Body.Records, tenantUsageLogToDTO(record))
-		}
-		return out, nil
-	})
 
 	huma.Register(api, huma.Operation{
 		OperationID: "ai-list-tenant-self-usage-summary",
@@ -466,7 +419,7 @@ func registerTenantSelfUsage(api huma.API, d TenantSelfReadHTTPDeps) {
 			TenantID:      tenantID,
 			UserID:        in.UserID,
 			ModelCode:     in.ModelCode,
-			RequestStatus: in.RequestStatus,
+			RequestStatus: "",
 			RequestSource: in.RequestSource,
 			DateFrom:      dateFrom,
 			DateTo:        dateTo,

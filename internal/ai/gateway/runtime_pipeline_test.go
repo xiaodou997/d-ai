@@ -360,3 +360,28 @@ func TestHandleRuntimeFiltersExternalImageQualityAndStyle(t *testing.T) {
 		})
 	}
 }
+
+func TestReplayPreservesBillingOriginThroughRuntime(t *testing.T) {
+	executor := &runExecutorStub{}
+	gw := &Gateway{runtimeEngine: executor}
+	old := time.Now().AddDate(-2, 0, 0)
+	result := gw.Replay(context.Background(), ReplayInput{
+		Subject:    coreidentity.Subject{AuthMethod: coreidentity.AuthMethodAPIKey, Scope: coreidentity.ScopeTenant, TenantID: "tenant-a"},
+		Capability: domain.CapabilityChat, Protocol: domain.ProtocolOpenAIChat,
+		ClientPath: "/v1/chat/completions", Body: []byte(`{"model":"test","messages":[{"role":"user","content":"hi"}]}`),
+		RequestID: "retired-task", BillingOriginAt: old,
+	})
+	if result.StatusCode != http.StatusCreated {
+		t.Fatalf("replay did not reach runtime: %d %s", result.StatusCode, result.Body)
+	}
+	if executor.input.Request.RequestID != "retired-task" || !executor.input.Request.BillingOriginAt.Equal(old) {
+		t.Fatalf("replay lost immutable identity: %+v", executor.input.Request)
+	}
+	req, err := buildRuntimeServingRequest(executor.input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !req.BillingOriginAt.Equal(old) || req.StartedAt.Before(time.Now().Add(-time.Minute)) {
+		t.Fatalf("billing origin or fresh ingress time lost: origin=%v started=%v", req.BillingOriginAt, req.StartedAt)
+	}
+}

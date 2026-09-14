@@ -36,7 +36,7 @@ vi.mock("@/api/tenant", () => ({
 }));
 
 vi.mock("@/features/ai/usage", () => ({
-  tenantUsageApi: { listRecords: apiMocks.listRecords }
+  listTenantUsageRecords: apiMocks.listRecords
 }));
 
 import { useTenantOperationsDashboard } from "./useTenantOperationsDashboard";

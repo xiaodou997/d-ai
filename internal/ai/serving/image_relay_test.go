@@ -15,7 +15,7 @@ import (
 type imageClientWriteFailure struct{ header http.Header }
 
 func (w *imageClientWriteFailure) Header() http.Header { return w.header }
-func (w *imageClientWriteFailure) WriteHeader(int)      {}
+func (w *imageClientWriteFailure) WriteHeader(int)     {}
 func (w *imageClientWriteFailure) Write([]byte) (int, error) {
 	return 0, syscall.EPIPE
 }
@@ -80,6 +80,7 @@ func TestImageRelayClientDisconnectAfterCompleteUpstreamRemainsBillable(t *testi
 	req := imageRelayReq(true)
 	w := &imageClientWriteFailure{header: make(http.Header)}
 
+	observeMediaOutput(req, []byte(`{"data":[{"url":"ok"}]}`))
 	err := newExecuteStepForTests().commitImageClientStream(dc, req, w, []byte(`{"data":[{"url":"ok"}]}`), http.StatusOK, time.Now())
 	if err != nil {
 		t.Fatalf("commitImageClientStream err = %v", err)

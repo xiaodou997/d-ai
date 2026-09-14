@@ -17,6 +17,8 @@ type PoolOptions struct {
 	// contention test silently becomes a serial one and proves nothing. Set it
 	// to 1 for tests built on TEMP tables, which are session-scoped.
 	MaxConns int32
+	// SchemaSQL pins historical migration fixtures independently of the live baseline.
+	SchemaSQL string
 }
 
 // OpenIsolatedSchemaPool provisions a throwaway PostgreSQL schema loaded from
@@ -36,7 +38,11 @@ func OpenIsolatedSchemaPool(ctx context.Context, opts PoolOptions) (*pgxpool.Poo
 		opts.MaxConns = 4
 	}
 
-	schemaSQL, err := loadCanonicalSchema()
+	schemaSQL := opts.SchemaSQL
+	var err error
+	if schemaSQL == "" {
+		schemaSQL, err = loadCanonicalSchema()
+	}
 	if err != nil {
 		return nil, nil, err
 	}

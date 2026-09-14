@@ -97,6 +97,7 @@ type idempotencyHit struct {
 
 // claimedTask is a row the worker now holds the lease on.
 type claimedTask struct {
+	CreatedAt  time.Time
 	ID         string
 	Type       string
 	ModelCode  string

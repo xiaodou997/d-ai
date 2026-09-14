@@ -231,6 +231,9 @@ func TestClaimPreallocatesRequestID(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("second claim: %v ok=%v", err, ok)
 	}
+	if first.CreatedAt.IsZero() || !second.CreatedAt.Equal(first.CreatedAt) {
+		t.Fatalf("retry changed task financial origin: %v -> %v", first.CreatedAt, second.CreatedAt)
+	}
 	if second.RequestID == first.RequestID {
 		t.Fatalf("attempt 2 reused request_id %q; the usage log unique index would reject it", second.RequestID)
 	}
@@ -704,8 +707,7 @@ func TestReapRefusesToRetryAnAttemptThatReachedBilling(t *testing.T) {
 
 	// The attempt reached billing before the worker died.
 	if _, err := pool.Exec(ctx,
-		`INSERT INTO ai_usage_logs (request_id, key_owner_type, tenant_id, model_code, billing_status, request_status)
-		 VALUES ($1, 'tenant', $2, $3, 'settled', 'success')`,
+		`INSERT INTO ai_request_keys(request_id,epoch,lease_until,tenant_id,user_id) SELECT $1,epoch,now(),$2,$3 FROM bill_record_control WHERE singleton`,
 		claimed.RequestID, "tenant-a", "gpt-image-1"); err != nil {
 		t.Fatalf("seed usage log: %v", err)
 	}

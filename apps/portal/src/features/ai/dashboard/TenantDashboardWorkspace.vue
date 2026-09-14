@@ -51,7 +51,7 @@ const aiStats = reactive({
   modelCount: 0,
   apiKeyCount: 0,
   totalRequests: 0,
-  successRequests: 0,
+  errorRequests: 0,
   totalTokens: 0,
   avgLatency: 0
 });
@@ -59,10 +59,10 @@ const aiStats = reactive({
 const selectedRange = computed(() => getWorkbenchRangeOption(selectedRangeId.value));
 const selectedRangeLabel = computed(() => selectedRange.value.label);
 
-const successRate = computed(() => {
+const errorRate = computed(() => {
   const total = Number(aiStats.totalRequests) || 0;
   if (!total) return "0%";
-  return `${((Number(aiStats.successRequests) || 0) * 100) / total}`.slice(0, 5).replace(/\.?0+$/, "") + "%";
+  return `${((Number(aiStats.errorRequests) || 0) * 100) / total}`.slice(0, 5).replace(/\.?0+$/, "") + "%";
 });
 
 const formatTime = (ts?: number | null) => {
@@ -136,9 +136,9 @@ const signalMetrics = computed(() => [
   },
   {
     key: "success-rate",
-    label: "成功率",
-    value: successRate.value,
-    hint: `${formatMetricNumber(aiStats.successRequests)} 次成功`,
+    label: "明确错误率",
+    value: errorRate.value,
+    hint: `${formatMetricNumber(aiStats.errorRequests)} 次明确错误`,
     loading: signalLoading.value
   },
   {
@@ -168,7 +168,7 @@ const usageInsightSummary = computed(() => {
 const sourceInsights = computed(() => {
   const buckets = new Map<
     string,
-    { key: string; label: string; colorToken: string; requestCount: number; successCount: number; totalAmountUSD: number; totalTokens: number }
+    { key: string; label: string; colorToken: string; requestCount: number; errorCount: number; totalAmountUSD: number; totalTokens: number }
   >(
     sourceDefinitions.map((item) => [
       item.key,
@@ -177,7 +177,7 @@ const sourceInsights = computed(() => {
         label: item.label,
         colorToken: item.colorToken,
         requestCount: 0,
-        successCount: 0,
+        errorCount: 0,
         totalAmountUSD: 0,
         totalTokens: 0
       }
@@ -185,14 +185,14 @@ const sourceInsights = computed(() => {
   );
 
   for (const row of usageInsightLogs.value) {
-    const sourceKey = sourceDefinitions.some((item) => item.key === row.request_source) ? row.request_source : "unknown";
+    const sourceKey = sourceDefinitions.some((item) => item.key === row.source) ? row.source : "unknown";
     if (!buckets.has(sourceKey)) {
       buckets.set(sourceKey, {
         key: sourceKey,
         label: requestSourceLabel(sourceKey),
         colorToken: "--ds-faint",
         requestCount: 0,
-        successCount: 0,
+        errorCount: 0,
         totalAmountUSD: 0,
         totalTokens: 0
       });
@@ -200,18 +200,18 @@ const sourceInsights = computed(() => {
     const bucket = buckets.get(sourceKey);
     if (!bucket) continue;
     bucket.requestCount += 1;
-    if (row.request_status === "success") bucket.successCount += 1;
-    bucket.totalAmountUSD += Number(row.user_charged_usd || 0);
-    bucket.totalTokens += Number(row.total_tokens || 0);
+    if (row.is_error) bucket.errorCount += 1;
+    bucket.totalAmountUSD += Number((row.charge.user_charged_micro || 0) / 1_000_000);
+    bucket.totalTokens += Number((row.tokens.input || 0) + (row.tokens.output || 0));
   }
 
   const sampleTotal = usageInsightLogs.value.length;
   return Array.from(buckets.values()).map((bucket) => {
-    const successRateValue = bucket.requestCount ? (bucket.successCount / bucket.requestCount) * 100 : 0;
+    const errorRateValue = bucket.requestCount ? (bucket.errorCount / bucket.requestCount) * 100 : 0;
     return {
       ...bucket,
       shareText: sampleTotal ? `${((bucket.requestCount / sampleTotal) * 100).toFixed(0)}%` : "0%",
-      successRateText: `${successRateValue.toFixed(0)}%`,
+      errorRateText: `${errorRateValue.toFixed(0)}%`,
       amountText: formatUSD(bucket.totalAmountUSD),
       tokensText: formatMetricNumber(bucket.totalTokens)
     };
@@ -225,29 +225,29 @@ const topUserInsights = computed(() => {
       key: string;
       userLabel: string;
       requestCount: number;
-      successCount: number;
+      errorCount: number;
       totalAmountUSD: number;
       lastActive: number;
     }
   >();
 
   for (const row of usageInsightLogs.value) {
-    const key = row.user_id ? `user:${row.user_id}` : row.external_user_id ? `external:${row.external_user_id}` : "tenant-self";
+    const key = row.user_id ? `user:${row.user_id}` : "tenant-self";
     const fallbackLabel = row.user_id
       ? userMap.value.get(String(row.user_id))?.username || userMap.value.get(String(row.user_id))?.email || row.user_id
-      : row.external_user_id || "租户自身调用";
+      : "租户自身调用";
     const bucket = buckets.get(key) || {
       key,
       userLabel: fallbackLabel,
       requestCount: 0,
-      successCount: 0,
+      errorCount: 0,
       totalAmountUSD: 0,
       lastActive: 0
     };
     bucket.requestCount += 1;
-    if (row.request_status === "success") bucket.successCount += 1;
-    bucket.totalAmountUSD += Number(row.user_charged_usd || 0);
-    bucket.lastActive = Math.max(bucket.lastActive, Number(row.created_at || 0));
+    if (row.is_error) bucket.errorCount += 1;
+    bucket.totalAmountUSD += Number((row.charge.user_charged_micro || 0) / 1_000_000);
+    bucket.lastActive = Math.max(bucket.lastActive, new Date(row.created_at).getTime());
     buckets.set(key, bucket);
   }
 
@@ -257,7 +257,7 @@ const topUserInsights = computed(() => {
     .map((bucket) => ({
       ...bucket,
       amountText: formatUSD(bucket.totalAmountUSD),
-      successRateText: bucket.requestCount ? `${((bucket.successCount / bucket.requestCount) * 100).toFixed(0)}%` : "0%",
+      errorRateText: bucket.requestCount ? `${((bucket.errorCount / bucket.requestCount) * 100).toFixed(0)}%` : "0%",
       lastActiveText: formatTime(bucket.lastActive)
     }));
 });
@@ -314,11 +314,11 @@ const fetchRangeBoundData = async (range: WorkbenchRangeOption, requestEpoch: nu
         }).catch(() => ({
           total: 0,
           stats: {
-            total_requests: 0,
-            success_count: 0,
-            failed_count: 0,
-            total_tokens: 0,
-            total_user_charged_usd: 0,
+            requests: 0,
+            errors: 0,
+            interruptions: 0,
+            input_tokens: 0, output_tokens: 0,
+            user_charged_micro: 0, user_refunded_micro: 0,
             avg_latency_ms: 0
           },
           records: []
@@ -327,10 +327,10 @@ const fetchRangeBoundData = async (range: WorkbenchRangeOption, requestEpoch: nu
 
     if (requestEpoch !== latestRangeRequestEpoch) return;
 
-    aiStats.totalRequests = Number(summaryRes?.total_requests ?? usageRes.stats?.total_requests ?? 0);
-    aiStats.successRequests = Number(summaryRes?.successful_requests ?? usageRes.stats?.success_count ?? 0);
-    aiStats.totalTokens = Number(summaryRes?.total_tokens ?? usageRes.stats?.total_tokens ?? 0);
-    aiStats.avgLatency = Number(summaryRes?.avg_latency_ms ?? usageRes.stats?.avg_latency_ms ?? 0);
+    aiStats.totalRequests = Number(summaryRes?.total_requests ?? usageRes.stats?.requests ?? 0);
+    aiStats.errorRequests = Number(usageRes.stats?.errors ?? 0);
+    aiStats.totalTokens = Number(summaryRes?.total_tokens ?? ((usageRes.stats?.input_tokens || 0) + (usageRes.stats?.output_tokens || 0)));
+    aiStats.avgLatency = Number(summaryRes?.avg_latency_ms ?? 0);
     topModels.value = modelsRes.items || [];
     usageInsightTotal.value = usageRes.total ?? 0;
     usageInsightLogs.value = usageRes.records ?? [];
@@ -338,7 +338,7 @@ const fetchRangeBoundData = async (range: WorkbenchRangeOption, requestEpoch: nu
     console.error("获取调用结构分析失败:", e);
     if (requestEpoch !== latestRangeRequestEpoch) return;
     aiStats.totalRequests = 0;
-    aiStats.successRequests = 0;
+    aiStats.errorRequests = 0;
     aiStats.totalTokens = 0;
     aiStats.avgLatency = 0;
     topModels.value = [];

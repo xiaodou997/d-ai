@@ -13,7 +13,6 @@ func TestTenantSelfReadRoutesRegisterIndependentlyFromCoreAI(t *testing.T) {
 		"/api/v1/tenants/me/dashboard/summary",
 		"/api/v1/tenants/me/dashboard/top-models",
 		"/api/v1/tenants/me/dashboard/recent-errors",
-		"/api/v1/tenants/me/usage-logs",
 		"/api/v1/tenants/me/usage-summary",
 	}
 

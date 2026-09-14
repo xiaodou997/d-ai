@@ -467,38 +467,6 @@ func registerUserSelfModelGrants(api huma.API, d UserSelfReadHTTPDeps) {
 // ---------------------------------------------------------------------------
 
 func registerUserSelfUsage(api huma.API, d UserSelfReadHTTPDeps) {
-	huma.Register(api, huma.Operation{
-		OperationID: "ai-list-user-self-usage-logs",
-		Method:      http.MethodGet,
-		Path:        "/api/v1/user-usage-logs",
-		Summary:     "终端用户自助用量日志列表",
-		Description: "按当前用户 token 返回本用户的用量日志。",
-		Tags:        []string{"usage"},
-	}, func(ctx context.Context, in *userSelfUsageLogsInput) (*userUsageLogsOutput, error) {
-		if d.UserUsageLogs == nil {
-			return nil, httpx.ErrUnavailable.WithDetail("user usage log reader is not configured")
-		}
-		tenantID := tenantIDFromContext(ctx)
-		userID := userIDFromContext(ctx)
-		if tenantID == "" || userID == "" {
-			return nil, httpx.ErrBadRequest.WithDetail("tenant id and user id are required")
-		}
-		limit, err := userUsageLimitFromInput(in.Limit)
-		if err != nil {
-			return nil, err
-		}
-		rows, err := d.UserUsageLogs.ListUserLogs(ctx, tenantID, userID, in.RequestSource, limit)
-		if err != nil {
-			return nil, mapServiceError(err)
-		}
-		out := &userUsageLogsOutput{}
-		out.Body.Items = make([]userUsageLogDTO, 0, len(rows))
-		for _, row := range rows {
-			out.Body.Items = append(out.Body.Items, userUsageLogToDTO(row))
-		}
-		out.Body.Total = len(out.Body.Items)
-		return out, nil
-	})
 
 	huma.Register(api, huma.Operation{
 		OperationID: "ai-get-user-self-usage-summary",

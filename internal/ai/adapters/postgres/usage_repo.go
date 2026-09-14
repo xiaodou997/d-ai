@@ -28,6 +28,7 @@ var _ observabilitycontrol.UsageRepository = (*UsageRepo)(nil)
 
 func (r *UsageRepo) CountLogs(ctx context.Context, f domain.UsageFilter) (int64, error) {
 	return r.q.CountUsageLogs(ctx, dbgen.CountUsageLogsParams{
+		ErrorsOnly:    f.ErrorsOnly,
 		TenantID:      akText(f.TenantID),
 		TenantName:    akText(f.TenantName),
 		UserID:        akText(f.UserID),
@@ -56,16 +57,23 @@ const usageStatsSQL = `
 		COALESCE(AVG(latency_ms) FILTER (WHERE request_status = 'success' AND latency_ms IS NOT NULL), 0)::float8 AS avg_latency_ms,
 		COALESCE(AVG(request_total_ms) FILTER (WHERE request_status = 'success' AND request_total_ms IS NOT NULL), 0)::float8 AS avg_request_total_ms,
 		COALESCE(AVG(first_response_byte_ms) FILTER (WHERE request_status = 'success' AND first_response_byte_ms IS NOT NULL), 0)::float8 AS avg_first_response_byte_ms
-	FROM ai_usage_logs
+	FROM ai_consumption_projection
 	WHERE ($1::text IS NULL OR tenant_id = $1::text)
-	  AND ($2::text IS NULL OR EXISTS (SELECT 1 FROM iam_tenants t WHERE t.tenant_id = ai_usage_logs.tenant_id AND t.tenant_name ILIKE '%' || $2::text || '%'))
+	  AND ($2::text IS NULL OR EXISTS (SELECT 1 FROM iam_tenants t WHERE t.tenant_id = ai_consumption_projection.tenant_id AND t.tenant_name ILIKE '%' || $2::text || '%'))
 	  AND ($3::text IS NULL OR user_id = $3::text)
-	  AND ($4::text IS NULL OR EXISTS (SELECT 1 FROM iam_accounts u WHERE u.user_id = ai_usage_logs.user_id AND u.tenant_id = ai_usage_logs.tenant_id AND u.user_type = 4 AND (u.username ILIKE '%' || $4::text || '%' OR u.nickname ILIKE '%' || $4::text || '%')))
+	  AND ($4::text IS NULL OR EXISTS (SELECT 1 FROM iam_accounts u WHERE u.user_id = ai_consumption_projection.user_id AND u.tenant_id = ai_consumption_projection.tenant_id AND u.user_type = 4 AND (u.username ILIKE '%' || $4::text || '%' OR u.nickname ILIKE '%' || $4::text || '%')))
 	  AND ($5::text IS NULL OR model_code = $5::text)
 	  AND ($6::text IS NULL OR request_status = $6::text)
 	  AND ($7::text IS NULL OR request_source = $7::text)
 	  AND ($8::timestamptz IS NULL OR created_at >= $8::timestamptz)
 	  AND ($9::timestamptz IS NULL OR created_at < $9::timestamptz)
+	  AND (NOT $10::boolean OR (COALESCE(provider_terminal_state, '') = 'failed'
+    OR (COALESCE(http_status, 0) >= 400 AND http_status <> 499)
+    OR (COALESCE(request_status, '') <> 'success'
+      AND COALESCE(cancellation_origin, '') <> 'client'
+      AND COALESCE(error_code, '') NOT IN ('client_disconnected', 'stream_write_error')
+      AND COALESCE(http_status, 0) <> 499
+      AND (COALESCE(error_code, '') <> '' OR COALESCE(error_message, '') <> ''))))
 	`
 
 func (r *UsageRepo) StatsFor(ctx context.Context, f domain.UsageFilter) (domain.UsageStats, error) {
@@ -79,6 +87,7 @@ func (r *UsageRepo) StatsFor(ctx context.Context, f domain.UsageFilter) (domain.
 		akText(f.RequestSource),
 		akTimestamptz(f.DateFrom),
 		akTimestamptz(f.DateTo),
+		f.ErrorsOnly,
 	)
 	var s domain.UsageStats
 	if err := row.Scan(
@@ -104,6 +113,7 @@ func (r *UsageRepo) StatsFor(ctx context.Context, f domain.UsageFilter) (domain.
 
 func (r *UsageRepo) ListLogs(ctx context.Context, f domain.UsageFilter, limit, offset int32) ([]domain.UsageLog, error) {
 	rows, err := r.q.ListUsageLogs(ctx, dbgen.ListUsageLogsParams{
+		ErrorsOnly:    f.ErrorsOnly,
 		TenantID:      akText(f.TenantID),
 		TenantName:    akText(f.TenantName),
 		Limit:         limit,
@@ -154,50 +164,6 @@ func (r *UsageRepo) GetLogDetail(ctx context.Context, requestID string) (domain.
 		detail.SelectedUpstreamTargetType = "pool"
 	} else if detail.UpstreamAccountID != "" {
 		detail.SelectedUpstreamTargetType = "account"
-	}
-	auditRec, err := NewAuditStore(r.pool.Pool).GetByRequestID(ctx, requestID)
-	if err != nil {
-		return domain.UsageLogDetail{}, err
-	}
-	if auditRec != nil {
-		detail.ClientProtocol = auditRec.ClientProtocol
-		detail.RequestPath = auditRec.RequestPath
-		detail.ClientIP = auditRec.ClientIP
-		detail.UserAgent = auditRec.UserAgent
-		detail.AuthMasked = auditRec.AuthMasked
-		detail.RequestMessages = auditRec.RequestMessages
-		detail.RequestParams = auditRec.RequestParams
-		detail.RequestHeaders = auditRec.RequestHeaders
-		detail.ResponseMessage = auditRec.ResponseMessage
-		detail.ResponseHeaders = auditRec.ResponseHeaders
-		detail.MediaRefs = auditRec.MediaRefs
-		if detail.RequestedModel == "" {
-			detail.RequestedModel = auditRec.RequestModel
-		}
-		if detail.MatchedDispatchRuleID == "" {
-			detail.MatchedDispatchRuleID = auditRec.MatchedDispatchRuleID
-		}
-		if detail.MatchedDispatchRuleSummary == "" {
-			detail.MatchedDispatchRuleSummary = auditRec.MatchedDispatchRuleSummary
-		}
-		if detail.ResolvedLogicalModel == "" {
-			detail.ResolvedLogicalModel = auditRec.ResolvedLogicalModel
-		}
-		if detail.ResolvedProviderFamily == "" {
-			detail.ResolvedProviderFamily = auditRec.ResolvedProviderFamily
-		}
-		if detail.SelectedUpstreamProtocol == "" {
-			detail.SelectedUpstreamProtocol = auditRec.SelectedUpstreamProtocol
-		}
-		if detail.SelectedUpstreamModel == "" {
-			detail.SelectedUpstreamModel = auditRec.SelectedUpstreamModel
-		}
-		if detail.PublicResponseModel == "" {
-			detail.PublicResponseModel = auditRec.PublicResponseModel
-		}
-		detail.InternalErrorDetail = auditRec.InternalErrorDetail
-		detail.FailedStep = auditRec.FailedStep
-		detail.AttemptsDetail = auditRec.AttemptsDetail
 	}
 	return detail, nil
 }
@@ -295,7 +261,7 @@ const upstreamUsageSummarySQL = `
 		COALESCE(SUM(l.catalog_base), 0)::bigint AS catalog_base,
 		COALESCE(SUM(l.tenant_payable), 0)::bigint AS tenant_payable,
 		MAX(l.created_at) AS last_requested_at
-	FROM ai_usage_logs l
+	FROM ai_consumption_projection l
 	LEFT JOIN ai_upstream_accounts a ON a.id = l.upstream_account_id
 	LEFT JOIN ai_credential_pools  p ON p.id = l.credential_pool_id
 	WHERE (l.upstream_account_id IS NOT NULL OR l.credential_pool_id IS NOT NULL)
@@ -349,7 +315,7 @@ const userRankingSQL = `
 		COALESCE(SUM(total_tokens), 0)::bigint AS total_tokens,
 		COALESCE(SUM(user_charged), 0)::bigint AS total_user_charged,
 		MAX(created_at) AS last_requested_at
-	FROM ai_usage_logs
+	FROM ai_consumption_projection
 	WHERE COALESCE(user_id, '') <> ''
 	  AND ($1::text IS NULL OR tenant_id = $1::text)
 	  AND ($2::text IS NULL OR user_id = $2::text)
@@ -405,7 +371,7 @@ func (r *UsageRepo) UserRanking(ctx context.Context, f domain.UsageSummaryFilter
 func (r *UsageRepo) UserSummary(ctx context.Context, tenantID, userID, requestSource string) (domain.UserUsageSummary, error) {
 	row, err := r.q.ListUsageSummaryByTenantUser(ctx, dbgen.ListUsageSummaryByTenantUserParams{
 		TenantID:      tenantID,
-		UserID:        userID,
+		UserID:        akText(userID),
 		RequestSource: akText(requestSource),
 	})
 	if err != nil {
@@ -442,7 +408,7 @@ const dailyTrendSQL = `
 	    COALESCE(AVG(latency_ms) FILTER (WHERE request_status = 'success'), 0)::bigint AS avg_latency_ms,
 	    COALESCE(AVG(request_total_ms) FILTER (WHERE request_status = 'success'), 0)::bigint AS avg_request_total_ms,
 	    COALESCE(AVG(first_response_byte_ms) FILTER (WHERE request_status = 'success'), 0)::bigint AS avg_first_response_byte_ms
-	FROM ai_usage_logs
+	FROM ai_consumption_projection
 	WHERE ($1::timestamptz IS NULL OR created_at >= $1::timestamptz)
 	  AND ($2::timestamptz IS NULL OR created_at < $2::timestamptz)
 	GROUP BY 1

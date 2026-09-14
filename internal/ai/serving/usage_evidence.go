@@ -28,7 +28,9 @@ func ApplyReportedUsage(req *Request) {
 
 func resetAttemptUsage(req *Request) {
 	if !domain.UsesReportedTokenBilling(req.CapabilityType) {
-		return
+		req.TokenUsage.ImageCount = 0
+		req.TokenUsage.VideoSeconds = 0
+		req.MediaUsageConfirmed = false
 	}
 	req.UsageEvidence = domain.UsageEvidence{}
 	ApplyReportedUsage(req)

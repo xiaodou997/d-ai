@@ -20,18 +20,7 @@ export interface UserOverviewServiceAvailability {
   ai: boolean;
 }
 
-const EMPTY_AI_USAGE_STATS: TenantUsageStats = {
-  total_requests: 0,
-  success_count: 0,
-  failed_count: 0,
-  total_tokens: 0,
-  total_catalog_base_usd: 0,
-  total_tenant_payable_usd: 0,
-  total_user_charged_usd: 0,
-  avg_latency_ms: 0,
-  avg_request_total_ms: 0,
-  avg_first_response_byte_ms: 0
-};
+const EMPTY_AI_USAGE_STATS: TenantUsageStats = { requests: 0, errors: 0, interruptions: 0, input_tokens: 0, output_tokens: 0, user_charged_micro: 0, user_refunded_micro: 0 };
 
 function buildActivityWindow(days: number) {
   const end = new Date();
@@ -119,13 +108,13 @@ export function useTenantUserOverview(
       });
     }
 
-    if (aiUsageStats.value.failed_count > 0) {
+    if (aiUsageStats.value.errors > 0) {
       signals.push({
         id: "ai-failed",
-        tone: aiUsageStats.value.failed_count >= 10 ? "danger" : "warning",
+        tone: aiUsageStats.value.errors >= 10 ? "danger" : "warning",
         title: "AI 请求失败",
-        value: `${aiUsageStats.value.failed_count} 次`,
-        description: `${activityWindowLabel} 内智能服务调用存在失败请求，可排查模型、限流或上游异常。`
+        value: `${aiUsageStats.value.errors} 次`,
+        description: `${activityWindowLabel} 内智能服务调用存在错误请求，可排查模型、限流或上游异常。`
       });
     }
 

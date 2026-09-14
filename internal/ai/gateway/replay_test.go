@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"testing"
+	"time"
 
 	coreruntime "xiaodou/dai/internal/ai/core/runtime"
 )
@@ -145,10 +146,11 @@ func TestBuildReplayRequestHeaderPrecedence(t *testing.T) {
 	t.Parallel()
 
 	req, err := buildReplayRequest(context.Background(), ReplayInput{
-		ClientPath:  "/v1/images/generations",
-		Body:        []byte(`{"prompt":"a cat"}`),
-		ContentType: "application/json",
-		RequestID:   "atsk_chosen_1",
+		ClientPath:      "/v1/images/generations",
+		Body:            []byte(`{"prompt":"a cat"}`),
+		ContentType:     "application/json",
+		RequestID:       "atsk_chosen_1",
+		BillingOriginAt: time.Now().Add(-time.Hour),
 		// A forwarding caller's inbound headers must not override the body's
 		// real content type, nor the request id we allocated for reconciliation.
 		Header: http.Header{
@@ -195,5 +197,39 @@ func TestBuildReplayRequestDefaultsAndOmissions(t *testing.T) {
 	// newRequestID would then take "" and generate one, but only if absent.
 	if _, ok := req.Header["X-Request-Id"]; ok {
 		t.Fatal("X-Request-Id was set despite no RequestID being supplied")
+	}
+}
+
+func TestRequestIdentityCannotBeChosenByHTTPHeaders(t *testing.T) {
+	req, err := buildReplayRequest(context.Background(), ReplayInput{ClientPath: "/v1/chat/completions", Header: http.Header{"X-Request-Id": []string{"untrusted"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, second := newRequestID(req), newRequestID(req)
+	if first == "untrusted" || first == second {
+		t.Fatal("caller header selected financial identity")
+	}
+	trusted, err := buildReplayRequest(context.Background(), ReplayInput{ClientPath: "/v1/chat/completions", RequestID: "internal-task", BillingOriginAt: time.Now().Add(-time.Hour), Header: req.Header})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if newRequestID(trusted) != "internal-task" {
+		t.Fatal("trusted task identity lost")
+	}
+}
+
+func TestTrustedReplayRequiresImmutableBillingOrigin(t *testing.T) {
+	_, err := buildReplayRequest(context.Background(), ReplayInput{ClientPath: "/v1/chat/completions", RequestID: "old-task"})
+	if err == nil {
+		t.Fatal("replay without original financial time accepted")
+	}
+	old := time.Now().AddDate(-2, 0, 0)
+	r, err := buildReplayRequest(context.Background(), ReplayInput{ClientPath: "/v1/chat/completions", RequestID: "old-task", BillingOriginAt: old})
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity, ok := r.Context().Value(trustedRequestIDKey{}).(trustedRequestIdentity)
+	if !ok || identity.ID != "old-task" || !identity.OriginAt.Equal(old) {
+		t.Fatalf("lost original financial identity: %+v", identity)
 	}
 }

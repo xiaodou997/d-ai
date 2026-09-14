@@ -1,6 +1,9 @@
 package serving
 
-import "time"
+import (
+	"maps"
+	"time"
+)
 
 // RequestTiming captures the request-level lifecycle milestones needed to
 // derive user-facing timing metrics. StartedAt still lives on Request as the
@@ -48,6 +51,9 @@ func (r *Request) CompleteAttempt(index int, at time.Time) {
 	if !attempt.CompletedAt.IsZero() {
 		return
 	}
+	attempt.UsageEvidence = r.UsageEvidence
+	attempt.UsageEvidence.Fields = maps.Clone(r.UsageEvidence.Fields)
+	attempt.ProviderTerminalState = r.ProviderTerminalState
 	attempt.CompletedAt = at
 	if !attempt.StartedAt.IsZero() {
 		attempt.TotalMs = durationMs(attempt.StartedAt, at)

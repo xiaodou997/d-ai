@@ -54,8 +54,7 @@ func TestAccountRepositoryUsesCanonicalBalanceAndQueryProjections(t *testing.T) 
 		t.Fatalf("seed recharge: %v", err)
 	}
 	if _, err := pool.Exec(ctx, `
-		INSERT INTO ai_usage_logs (request_id, key_owner_type, tenant_id, model_code, user_id, user_payable, user_charged, billing_status, request_status, created_at)
-		VALUES ('account-query-request', 'tenant', 'account-query-tenant', 'model-1', 'account-query-user', 125000, 125000, 'settled', 'success', $1)
+		INSERT INTO bill_settlements(request_id,tenant_id,user_id,user_due,user_charged,state,reason,created_at,posted_at) VALUES('account-query-request','account-query-tenant','account-query-user',125000,125000,'posted','reported_usage',$1,$1)
 	`, now); err != nil {
 		t.Fatalf("seed usage: %v", err)
 	}

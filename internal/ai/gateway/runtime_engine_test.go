@@ -194,6 +194,12 @@ func TestRuntimeResultUsesSettledCallerCharge(t *testing.T) {
 			APIKeyQuotaCostMicro: 1_100,
 		},
 	}
+	req.BillingStatus = domain.BillingPending
+	pending := runtimeResultFromServing(req)
+	if pending.CallerChargeMicro != 0 || pending.UserChargedMicro != 0 || pending.APIKeyQuotaCostMicro != 0 {
+		t.Fatal("queued amounts appeared as actual deductions")
+	}
+	req.BillingStatus = domain.BillingSettled
 	result := runtimeResultFromServing(req)
 	if result.CallerChargeMicro != 900 || result.UserChargedMicro != 900 {
 		t.Fatalf("runtime result actual/user debit = %d/%d, want 900/900", result.CallerChargeMicro, result.UserChargedMicro)

@@ -16,7 +16,7 @@ interface UserInsightItem {
   totalAmountUSD: number;
   amountText: string;
   requestCount: number;
-  successRateText: string;
+  errorRateText: string;
   lastActiveText: string;
 }
 

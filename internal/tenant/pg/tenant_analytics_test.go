@@ -23,11 +23,8 @@ func TestTenantAnalyticsReadModelsPreserveProjectionSemantics(t *testing.T) {
 		INSERT INTO iam_invitation_codes (code, tenant_id, created_by)
 		VALUES ('analytics-code', 'tenant-analytics', 'user-analytics');
 		UPDATE bill_accounts SET balance_micro = 25 WHERE account_id = 'user-analytics';
-		INSERT INTO ai_usage_logs
-			(request_id, key_owner_type, tenant_id, user_id, model_code, user_charged,
-			 user_payable, billing_status, request_status, request_source)
-		VALUES ('analytics-request', 'user', 'tenant-analytics', 'user-analytics',
-			 'analytics-model', 7, 7, 'settled', 'success', 'portal');
+		INSERT INTO bill_settlements(created_at,request_id,tenant_id,user_id,dimensions,user_due,user_charged,state,reason,posted_at)
+ VALUES(now(),'analytics-request','tenant-analytics','user-analytics','{"model_code":"analytics-model","request_source":"portal"}',7,7,'posted','reported_usage',now());
 		INSERT INTO pay_cash_ledger
 			(txn_id, tenant_id, txn_type, amount_micro_usd, balance_after_micro_usd, idempotency_key)
 		VALUES ('analytics-cash', 'tenant-analytics', 'topup_income', 13, 13, 'analytics-cash');

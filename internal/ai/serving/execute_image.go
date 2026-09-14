@@ -70,6 +70,8 @@ func (s *ExecuteStep) executeImageRelay(dc *deadlineController, req *Request, re
 	updateResponseSummaryState(req, req.AuditResponseMessage, true)
 	fillEstimatedUsage(req, len(providerBody))
 
+	observeMediaOutput(req, providerBody)
+
 	// Translate provider → client (passthrough when the protocols match, since
 	// the image response bridge only defines cross-surface conversions).
 	clientBody := providerBody
@@ -105,6 +107,10 @@ func (s *ExecuteStep) executeImageRelay(dc *deadlineController, req *Request, re
 
 func (s *ExecuteStep) commitImageClientSync(req *Request, w http.ResponseWriter, clientBody []byte, statusCode int) error {
 	markProviderTerminal(req, domain.ProviderTerminalCompleted)
+	req.HTTPStatus = statusCode
+	if err := s.sealCompletion(req); err != nil {
+		return err
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
 	req.ResponseCommitted = true
@@ -135,6 +141,11 @@ func (s *ExecuteStep) commitImageClientStream(dc *deadlineController, req *Reque
 		return &precommitError{cause: errUpstreamEmpty, httpStatus: statusCode, message: "image client stream is empty"}
 	}
 
+	markProviderTerminal(req, domain.ProviderTerminalCompleted)
+	req.HTTPStatus = statusCode
+	if err := s.sealCompletion(req); err != nil {
+		return err
+	}
 	hdr := w.Header()
 	hdr.Set("Content-Type", "text/event-stream")
 	hdr.Set("Cache-Control", "no-cache")

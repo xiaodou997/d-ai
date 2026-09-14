@@ -14,7 +14,7 @@ import (
 	"xiaodou/dai/internal/billing/ledger"
 )
 
-// Real PriceBook -> UsageLogger -> outbox -> ledger, including both API-key
+// Real PriceBook -> durable settlement -> ledger, including both API-key
 // and subscription meters. Stale estimates deliberately conflict with evidence.
 func TestReportedUsageSettlementAcrossAllMeters(t *testing.T) {
 	ctx := context.Background()
@@ -32,7 +32,7 @@ func TestReportedUsageSettlementAcrossAllMeters(t *testing.T) {
 		}{
 			{"failure_missing", domain.RequestFailed, nil, false},
 			{"success_missing", domain.RequestSuccess, nil, false},
-			{"failure_reported", domain.RequestFailed, map[string]int{"input_tokens": 9, "output_tokens": 2}, true},
+			{"failure_reported", domain.RequestFailed, map[string]int{"input_tokens": 9, "output_tokens": 2}, false},
 			{"cancelled_reported", domain.RequestCancelled, map[string]int{"input_tokens": 9, "output_tokens": 2}, true},
 			{"explicit_zero", domain.RequestSuccess, map[string]int{"input_tokens": 0, "output_tokens": 0}, false},
 		} {
@@ -61,6 +61,10 @@ func TestReportedUsageSettlementAcrossAllMeters(t *testing.T) {
 				req.SubscriptionID = subID
 				req.SubscriptionGroupQuotaDebitMultipliers = map[string]float64{groupID: 2}
 				req.RequestStatus = tc.status
+				if tc.status == domain.RequestFailed {
+					req.ProviderTerminalState = domain.ProviderTerminalFailed
+					req.ErrorCode = "provider_terminal_error"
+				}
 				req.UsageEvidence = domain.UsageEvidence{Protocol: domain.ProtocolOpenAIResponses, Fields: tc.fields, Event: "response.failed", Terminal: true}
 				req.TokenUsage = domain.TokenUsage{PromptTokens: 1875203, CompletionTokens: 99}
 				if tc.status == domain.RequestCancelled {
@@ -70,17 +74,19 @@ func TestReportedUsageSettlementAcrossAllMeters(t *testing.T) {
 				req.BillingSnapshots = map[string]domain.BillingSnapshot{req.Candidate.RouteID: {AccountEntry: entry, RetailEntry: entry, GroupDefaultUserMultiplier: 0.3, EffectiveUserMultiplier: 0.3}}
 				body, _ := json.Marshal(strings.Repeat("x", 5_625_609))
 				req.AuditPayload = &audit.Payload{RequestID: id, ClientProtocol: "openai_responses", CapabilityType: "chat", RequestMessages: body, ErrorCode: "provider_terminal_error", FailedStep: "execute"}
-				logger := NewUsageLogger(pool, &PriceBookBiller{}).WithAuditEnqueuer(NewAuditStore(pool))
+				logger := NewUsageLogger(pool, &PriceBookBiller{})
 				for range 2 {
 					if err := logger.Log(ctx, req); err != nil {
 						t.Fatal(err)
 					}
 				}
-				drainOutbox(t, ctx, pool)
+				if _, err := logger.DrainSettlements(ctx, 20); err != nil {
+					t.Fatal(err)
+				}
 				var userCharge, tenantCharge, keyUsed, subUsed, rows, outboxRows int64
 				var source, billingStatus string
 				var breakdown []byte
-				if err := pool.QueryRow(ctx, `SELECT user_charged,tenant_payable,token_usage_source,billing_status,billing_breakdown FROM ai_usage_logs WHERE request_id=$1`, id).Scan(&userCharge, &tenantCharge, &source, &billingStatus, &breakdown); err != nil {
+				if err := pool.QueryRow(ctx, `SELECT user_charged,tenant_payable,token_usage_source,billing_status,billing_breakdown FROM ai_consumption_projection WHERE request_id=$1`, id).Scan(&userCharge, &tenantCharge, &source, &billingStatus, &breakdown); err != nil {
 					t.Fatal(err)
 				}
 				if err := pool.QueryRow(ctx, `SELECT quota_used FROM ai_api_keys WHERE id=$1::uuid`, keyID).Scan(&keyUsed); err != nil {
@@ -89,10 +95,10 @@ func TestReportedUsageSettlementAcrossAllMeters(t *testing.T) {
 				if err := pool.QueryRow(ctx, `SELECT total_used_micro FROM ai_sub_subscriptions WHERE id=$1::uuid`, subID).Scan(&subUsed); err != nil {
 					t.Fatal(err)
 				}
-				if err := pool.QueryRow(ctx, `SELECT count(*) FROM ai_usage_logs WHERE request_id=$1`, id).Scan(&rows); err != nil {
+				if err := pool.QueryRow(ctx, `SELECT count(*) FROM ai_consumption_projection WHERE request_id=$1`, id).Scan(&rows); err != nil {
 					t.Fatal(err)
 				}
-				if err := pool.QueryRow(ctx, `SELECT count(*) FROM bill_charge_outbox WHERE request_id=$1`, id).Scan(&outboxRows); err != nil {
+				if err := pool.QueryRow(ctx, `SELECT count(*) FROM bill_settlements WHERE request_id=$1 AND state='posted'`, id).Scan(&outboxRows); err != nil {
 					t.Fatal(err)
 				}
 				wantTenant, wantUser, wantKey, wantSub, wantOutbox := int64(0), int64(0), int64(0), int64(0), int64(0)
@@ -118,8 +124,8 @@ func TestReportedUsageSettlementAcrossAllMeters(t *testing.T) {
 				}
 				var metadata map[string]json.RawMessage
 				_ = json.Unmarshal(breakdown, &metadata)
-				if len(metadata["usage_evidence"]) == 0 || len(metadata["audit_compaction"]) == 0 {
-					t.Fatalf("missing evidence/compaction: %s", breakdown)
+				if len(metadata["usage_evidence"]) == 0 {
+					t.Fatalf("missing evidence: %s", breakdown)
 				}
 			})
 		}

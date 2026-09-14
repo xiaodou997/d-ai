@@ -110,8 +110,8 @@ const userBalancePool = computed(() => Number(overview.value.userTotalBalanceUsd
 const totalRequests = computed(() => Number(summary.value?.total_requests) || 0);
 const successfulRequests = computed(() => Number(summary.value?.successful_requests) || 0);
 const failedRequests = computed(() => Number(summary.value?.failed_requests) || 0);
-const successRate = computed(() =>
-  totalRequests.value > 0 ? (successfulRequests.value / totalRequests.value) * 100 : null
+const errorRate = computed(() =>
+  totalRequests.value > 0 ? ((totalRequests.value - successfulRequests.value) / totalRequests.value) * 100 : null
 );
 const totalTokens = computed(() => Number(summary.value?.total_tokens) || 0);
 
@@ -265,11 +265,11 @@ function sourceLabel(value: string) {
 const recentUsageRows = computed(() =>
   dashboard.recentConsumption.value.slice(0, 6).map((record) => ({
     id: record.request_id,
-    user: record.username || record.user_id || record.external_user_id || "未知用户",
-    model: record.model_code || "未命名模型",
-    source: sourceLabel(record.request_source),
-    chargedUsd: Number(record.user_charged_usd) || 0,
-    payableUsd: Number(record.tenant_payable_usd) || 0,
+    user: record.user_id || "未知用户",
+    model: record.model || "未命名模型",
+    source: sourceLabel(record.source),
+    chargedUsd: (record.charge.user_charged_micro / 1_000_000) || 0,
+    payableUsd: ((record.charge.tenant_charged_micro || 0) / 1_000_000) || 0,
     createdAt: record.created_at
   }))
 );
@@ -652,8 +652,8 @@ function handleRangeChange(rangeId: string) {
                 <strong>{{ dashboard.summaryLoading.value ? "—" : formatCompactTokens(totalTokens) }}</strong>
               </div>
               <div class="hero-number">
-                <span>成功率</span>
-                <strong>{{ dashboard.summaryLoading.value ? "—" : formatPercent(successRate) }}</strong>
+                <span>明确错误率</span>
+                <strong>{{ dashboard.summaryLoading.value ? "—" : formatPercent(errorRate) }}</strong>
               </div>
             </div>
           </div>

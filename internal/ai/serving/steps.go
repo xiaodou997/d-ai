@@ -302,7 +302,9 @@ const financialCompletionTimeout = 8 * time.Second
 func (s *UsageLogFinalizer) Name() string { return "usage_completion" }
 
 func (s *UsageLogFinalizer) Finalize(ctx context.Context, req *Request) {
-	if req != nil && req.AuditPayload == nil {
+	if _, modern := s.Logger.(interface {
+		CaptureDebug(context.Context, *Request)
+	}); !modern && req != nil && req.AuditPayload == nil {
 		req.AuditPayload = BuildAuditPayload(req)
 	}
 	req.MarkCompleted(time.Now())
@@ -319,6 +321,11 @@ func (s *UsageLogFinalizer) Finalize(ctx context.Context, req *Request) {
 		} else {
 			req.FinancialCompletionFailed = false
 		}
+	}
+	if debug, ok := s.Logger.(interface {
+		CaptureDebug(context.Context, *Request)
+	}); ok {
+		debug.CaptureDebug(ctx, req)
 	}
 	if s.Metrics != nil {
 		s.Metrics.RecordRequest(req)

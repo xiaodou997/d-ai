@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"mime"
 	"net/http"
 	"strings"
+	"time"
 
 	coreidentity "xiaodou/dai/internal/ai/core/identity"
 	coreruntime "xiaodou/dai/internal/ai/core/runtime"
@@ -48,10 +50,12 @@ type ReplayInput struct {
 	// ContentType and RequestID are applied after these and win.
 	Header http.Header
 
-	// RequestID, when set, is injected as X-Request-Id, which newRequestID
-	// prefers over generating one. That makes the ai_usage_logs row this call
-	// produces join back to whatever queued it.
+	// RequestID is a trusted internal task identity. It is passed through a
+	// private context key; caller-supplied HTTP headers cannot select it.
 	RequestID string
+	// BillingOriginAt is the immutable persisted task creation time. Required
+	// with RequestID so a replay cannot reopen a retired financial period.
+	BillingOriginAt time.Time
 
 	// StreamExpected tells the aggregator to fold an SSE response back into a
 	// single JSON body. A replayed call has no client to stream to.
@@ -74,6 +78,9 @@ type ReplayResult struct {
 // forwarding caller must not be able to leak the inbound client's Content-Type
 // or X-Request-Id into a call whose body and identity we chose.
 func buildReplayRequest(ctx context.Context, in ReplayInput) (*http.Request, error) {
+	if in.RequestID != "" && in.BillingOriginAt.IsZero() {
+		return nil, errors.New("trusted replay requires its original billing time")
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, in.ClientPath, bytes.NewReader(in.Body))
 	if err != nil {
 		return nil, err
@@ -90,6 +97,7 @@ func buildReplayRequest(ctx context.Context, in ReplayInput) (*http.Request, err
 	req.Header.Set("Content-Type", contentType)
 	if in.RequestID != "" {
 		req.Header.Set("X-Request-Id", in.RequestID)
+		req = req.WithContext(context.WithValue(req.Context(), trustedRequestIDKey{}, trustedRequestIdentity{ID: in.RequestID, OriginAt: in.BillingOriginAt}))
 	}
 	req.ContentLength = int64(len(in.Body))
 	return req, nil

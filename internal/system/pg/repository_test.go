@@ -18,13 +18,8 @@ func TestListFailedTransactionAlertsKeepsProjectionInRepository(t *testing.T) {
 
 	now := time.Now().UTC()
 	if _, err := pool.Exec(ctx, `
-		INSERT INTO ai_usage_logs
-			(request_id, key_owner_type, tenant_id, model_code, billing_status, request_status, settlement_error, created_at)
-		VALUES
-			('alert-recent', 'tenant', 'tenant-alerts', 'gpt-test', 'failed', 'failed', 'upstream timeout', $1),
-			('alert-newest', 'tenant', 'tenant-alerts', 'gpt-test', 'failed', 'failed', NULL, $2),
-			('alert-old', 'tenant', 'tenant-alerts', 'gpt-test', 'failed', 'failed', 'old failure', $3),
-			('alert-pending', 'tenant', 'tenant-alerts', 'gpt-test', 'pending', 'success', NULL, $2)
+		INSERT INTO bill_settlements(request_id,tenant_id,state,reason,last_error,created_at)
+ VALUES ('alert-recent','tenant-alerts','review','reported_usage','upstream timeout',$1),('alert-newest','tenant-alerts','review','reported_usage','',$2),('alert-old','tenant-alerts','review','reported_usage','old failure',$3),('alert-pending','tenant-alerts','pending','reported_usage','',$2)
 	`, now.Add(-2*time.Hour), now.Add(-time.Hour), now.Add(-48*time.Hour)); err != nil {
 		t.Fatalf("seed usage alerts: %v", err)
 	}

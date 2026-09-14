@@ -67,7 +67,7 @@ func (h *chatTaskHandler) Execute(ctx context.Context, task asynctask.Task) (asy
 	replayed := h.replayer.Replay(ctx, ReplayInput{
 		Subject: task.Subject, ExecutionMode: coreruntime.ExecutionModeAsync, Capability: domain.CapabilityChat,
 		Protocol: domain.ProtocolOpenAIChat, ClientPath: chatCompletionsClientPath,
-		Body: body, ContentType: chatJSONContentType, RequestID: task.RequestID,
+		Body: body, ContentType: chatJSONContentType, RequestID: task.RequestID, BillingOriginAt: task.CreatedAt,
 	})
 	if err := ctx.Err(); err != nil {
 		return asynctask.Result{}, err

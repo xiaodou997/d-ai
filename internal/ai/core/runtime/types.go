@@ -38,6 +38,7 @@ type Request struct {
 	// the caller's accessible groups. The planner preserves the caller's group
 	// order; this slice is a membership constraint, not an ordering source.
 	AllowedGroupIDs []string
+	BillingOriginAt time.Time
 	ReceivedAt      time.Time
 }
 

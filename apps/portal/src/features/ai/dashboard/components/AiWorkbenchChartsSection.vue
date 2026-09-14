@@ -18,7 +18,7 @@ interface SourceInsightItem {
   colorToken: string;
   requestCount: number;
   shareText: string;
-  successRateText: string;
+  errorRateText: string;
   amountText: string;
   tokensText: string;
 }

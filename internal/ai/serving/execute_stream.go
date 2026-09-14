@@ -89,6 +89,7 @@ func (s *ExecuteStep) executeSync(dc *deadlineController, req *Request, resp *Up
 		u.VideoResolution = req.TokenUsage.VideoResolution
 		req.TokenUsage = u
 	}
+	observeMediaOutput(req, bodyBytes)
 	fillEstimatedUsage(req, len(bodyBytes))
 
 	// Forward upstream Content-Type when present (Anthropic returns
@@ -99,6 +100,10 @@ func (s *ExecuteStep) executeSync(dc *deadlineController, req *Request, resp *Up
 		w.Header().Set("Content-Type", "application/json")
 	}
 	markProviderTerminal(req, domain.ProviderTerminalCompleted)
+	req.HTTPStatus = resp.StatusCode
+	if err := s.sealCompletion(req); err != nil {
+		return err
+	}
 	w.WriteHeader(resp.StatusCode)
 	req.ResponseCommitted = true
 	req.MarkFirstResponseByte(time.Now())
@@ -560,6 +565,7 @@ func (s *ExecuteStep) executeSyncConvert(dc *deadlineController, req *Request, r
 		return &precommitError{cause: cerr, httpStatus: resp.StatusCode, message: "convert response: " + cerr.Error()}
 	}
 
+	observeMediaOutput(req, provBody)
 	fillEstimatedUsage(req, len(provBody))
 
 	// Sanitize with the CLIENT protocol policy — the bytes are now client-format.
@@ -570,6 +576,10 @@ func (s *ExecuteStep) executeSyncConvert(dc *deadlineController, req *Request, r
 
 	w.Header().Set("Content-Type", "application/json")
 	markProviderTerminal(req, domain.ProviderTerminalCompleted)
+	req.HTTPStatus = resp.StatusCode
+	if err := s.sealCompletion(req); err != nil {
+		return err
+	}
 	w.WriteHeader(resp.StatusCode)
 	req.ResponseCommitted = true
 	req.MarkFirstResponseByte(time.Now())

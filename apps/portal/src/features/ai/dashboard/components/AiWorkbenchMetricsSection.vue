@@ -45,7 +45,7 @@ const displayValue = (metric: MetricItem) => (metric.loading ? "—" : String(me
     <div class="ai-metric-cluster">
       <div class="ai-metric-cluster__lead">
         <h3 class="ai-metric-cluster__title">调用概况</h3>
-        <p class="ai-metric-cluster__desc">{{ rangeLabel }}内统一观察请求量、成功率、Token 使用量与平均延迟。</p>
+        <p class="ai-metric-cluster__desc">{{ rangeLabel }}内统一观察请求量、明确错误率、Token 使用量与平均延迟。</p>
       </div>
 
       <div class="ai-metric-grid">

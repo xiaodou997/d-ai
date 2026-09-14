@@ -29,11 +29,18 @@ func RedactInternalErrorDetail(s string) string {
 	if s == "" {
 		return s
 	}
-	for _, re := range redactSecretPatterns {
-		s = re.ReplaceAllString(s, "${1}[REDACTED]")
-	}
+	s = RedactCredentialText(s)
 	if len(s) > internalErrorDetailMaxLen {
 		s = s[:internalErrorDetailMaxLen] + "...[truncated]"
+	}
+	return s
+}
+
+// RedactCredentialText masks recognizable credentials without truncating a
+// separately size-bounded debug payload.
+func RedactCredentialText(s string) string {
+	for _, re := range redactSecretPatterns {
+		s = re.ReplaceAllString(s, "${1}[REDACTED]")
 	}
 	return s
 }

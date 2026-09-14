@@ -17,19 +17,18 @@ type usageSummaryInput struct {
 	TenantID      string `query:"tenant_id" doc:"租户 ID；为空表示全部租户"`
 	UserID        string `query:"user_id" doc:"用户 ID；为空表示全部用户"`
 	ModelCode     string `query:"model_code" doc:"模型编码过滤"`
-	RequestStatus string `query:"request_status" doc:"请求状态过滤"`
 	RequestSource string `query:"request_source" doc:"请求来源过滤"`
 	DateFrom      string `query:"date_from" doc:"开始时间，RFC3339"`
 	DateTo        string `query:"date_to" doc:"结束时间，RFC3339，按 [start, end) 解释"`
 }
 
 type usageLogsInput struct {
+	ErrorsOnly    bool   `query:"errors_only" doc:"仅返回明确请求错误，不含客户端断开或已恢复的重试错误"`
 	TenantID      string `query:"tenant_id" doc:"租户 ID；为空表示全部租户"`
 	TenantName    string `query:"tenant_name" doc:"租户名称模糊过滤"`
 	UserID        string `query:"user_id" doc:"用户 ID；为空表示全部用户"`
 	UserName      string `query:"user_name" doc:"用户名模糊过滤"`
 	ModelCode     string `query:"model_code" doc:"模型编码过滤"`
-	RequestStatus string `query:"request_status" doc:"请求状态过滤"`
 	RequestSource string `query:"request_source" doc:"请求来源过滤"`
 	DateFrom      string `query:"date_from" doc:"开始时间，RFC3339"`
 	DateTo        string `query:"date_to" doc:"结束时间，RFC3339"`
@@ -118,7 +117,7 @@ type usageLogDTO struct {
 	RefundOperatorID                   *string  `json:"refund_operator_id,omitempty" doc:"退款操作人"`
 	SettledAt                          *int64   `json:"settled_at,omitempty" doc:"结算时间，Unix 毫秒"`
 	RefundedAt                         *int64   `json:"refunded_at,omitempty" doc:"退款时间，Unix 毫秒"`
-	RequestStatus                      string   `json:"request_status" doc:"请求状态"`
+	RequestStatus                      string   `json:"-" doc:"请求状态"`
 	ProviderTerminalState              string   `json:"provider_terminal_state" doc:"上游终态：unknown/completed/failed/cancelled/incomplete"`
 	ClientDeliveryState                string   `json:"client_delivery_state" doc:"客户端交付状态"`
 	CancellationOrigin                 string   `json:"cancellation_origin" doc:"取消来源"`
@@ -193,7 +192,7 @@ type usageLogDetailDTO struct {
 	UpstreamModel                      *string         `json:"upstream_model,omitempty" doc:"上游模型"`
 	UpstreamModelMappingApplied        bool            `json:"upstream_model_mapping_applied"`
 	PublicResponseModel                *string         `json:"public_response_model,omitempty"`
-	RequestStatus                      string          `json:"request_status"`
+	RequestStatus                      string          `json:"-"`
 	ProviderTerminalState              string          `json:"provider_terminal_state"`
 	ClientDeliveryState                string          `json:"client_delivery_state"`
 	CancellationOrigin                 string          `json:"cancellation_origin"`
@@ -290,7 +289,7 @@ type tenantUsageLogDTO struct {
 	BillingStatusLabel                 string  `json:"billing_status_label" doc:"计费状态展示名"`
 	RefundStatus                       string  `json:"refund_status" doc:"退款状态：none/refunded"`
 	BillingSource                      string  `json:"billing_source" doc:"计费来源：payg=按量 / subscription=订阅内"`
-	RequestStatus                      string  `json:"request_status" doc:"请求状态"`
+	RequestStatus                      string  `json:"-" doc:"请求状态"`
 	ProviderTerminalState              string  `json:"provider_terminal_state" doc:"上游终态"`
 	ClientDeliveryState                string  `json:"client_delivery_state" doc:"客户端交付状态"`
 	CancellationOrigin                 string  `json:"cancellation_origin" doc:"取消来源"`
@@ -341,7 +340,7 @@ type userUsageLogDTO struct {
 	BillingStatus                   string  `json:"billing_status" doc:"计费状态"`
 	RefundStatus                    string  `json:"refund_status" doc:"退款状态：none/refunded"`
 	BillingSource                   string  `json:"billing_source" doc:"计费来源：payg=按量 / subscription=订阅内"`
-	RequestStatus                   string  `json:"request_status" doc:"请求状态"`
+	RequestStatus                   string  `json:"-" doc:"请求状态"`
 	ProviderTerminalState           string  `json:"provider_terminal_state" doc:"上游终态"`
 	ClientDeliveryState             string  `json:"client_delivery_state" doc:"客户端交付状态"`
 	CancellationOrigin              string  `json:"cancellation_origin" doc:"取消来源"`
@@ -449,7 +448,6 @@ type usageUserRankingInput struct {
 	TenantID      string `query:"tenant_id" doc:"租户 ID；为空表示全部租户"`
 	UserID        string `query:"user_id" doc:"用户 ID；为空表示全部用户"`
 	ModelCode     string `query:"model_code" doc:"模型编码过滤"`
-	RequestStatus string `query:"request_status" doc:"请求状态过滤"`
 	RequestSource string `query:"request_source" doc:"请求来源过滤"`
 	DateFrom      string `query:"date_from" doc:"开始时间，RFC3339"`
 	DateTo        string `query:"date_to" doc:"结束时间，RFC3339，按 [start, end) 解释"`
@@ -530,70 +528,6 @@ func registerUsage(api huma.API, d UsageHTTPDeps) {
 		}
 		out.Body.Total = len(out.Body.Items)
 		return out, nil
-	})
-
-	huma.Register(api, huma.Operation{
-		OperationID: "ai-list-usage-logs",
-		Method:      http.MethodGet,
-		Path:        "/api/v1/usage-logs",
-		Summary:     "用量日志列表",
-		Description: "返回 AI 网关用量日志分页，以及同过滤条件下的聚合统计。",
-		Tags:        []string{"usage"},
-	}, func(ctx context.Context, in *usageLogsInput) (*usageLogsOutput, error) {
-		if d.UsageQueries == nil {
-			return nil, httpx.ErrUnavailable.WithDetail("usage service is not configured")
-		}
-		filter, err := usageLogFilterFromInput(in)
-		if err != nil {
-			return nil, err
-		}
-		limit, offset, err := usagePageFromInput(in.Limit, in.Offset)
-		if err != nil {
-			return nil, err
-		}
-		page, err := d.UsageQueries.ListLogs(ctx, filter, limit, offset)
-		if err != nil {
-			return nil, mapServiceError(err)
-		}
-		out := &usageLogsOutput{}
-		out.Body.Total = page.Total
-		out.Body.Stats = usageStatsToDTO(page.Stats)
-		out.Body.Records = make([]usageLogDTO, 0, len(page.Records))
-		for _, record := range page.Records {
-			out.Body.Records = append(out.Body.Records, usageLogToDTO(record))
-		}
-		out.Body.Included = buildIdentityIncludedForLogs(ctx, d.IdentityProvider, d.IdentityEnrichmentFailures, page.Records)
-		return out, nil
-	})
-
-	huma.Register(api, huma.Operation{
-		OperationID: "ai-get-usage-log-detail",
-		Method:      http.MethodGet,
-		Path:        "/api/v1/usage-logs/{requestID}",
-		Summary:     "用量日志详情",
-		Description: "返回单次请求的调度链路和请求载荷摘要。",
-		Tags:        []string{"usage"},
-	}, func(ctx context.Context, in *usageLogDetailInput) (*usageLogDetailOutput, error) {
-		if d.UsageQueries == nil {
-			return nil, httpx.ErrUnavailable.WithDetail("usage service is not configured")
-		}
-		detail, err := d.UsageQueries.GetLogDetail(ctx, in.RequestID)
-		if err != nil {
-			return nil, mapServiceError(err)
-		}
-		out := usageLogDetailToDTO(detail)
-		included := buildIdentityIncluded(ctx, d.IdentityProvider, d.IdentityEnrichmentFailures,
-			filterNonEmptyIDs(detail.UserID), filterNonEmptyIDs(detail.TenantID))
-		if tenant, ok := included.Tenants[detail.TenantID]; ok {
-			out.TenantName = stringPtrOrNil(tenant.TenantName)
-		}
-		if user, ok := included.Users[detail.UserID]; ok {
-			out.Username = stringPtrOrNil(user.Username)
-			if out.Username == nil {
-				out.Username = user.Nickname
-			}
-		}
-		return &usageLogDetailOutput{Body: out}, nil
 	})
 
 	huma.Register(api, huma.Operation{
@@ -695,7 +629,6 @@ func registerUsage(api huma.API, d UsageHTTPDeps) {
 			TenantID:      in.TenantID,
 			UserID:        in.UserID,
 			ModelCode:     in.ModelCode,
-			RequestStatus: in.RequestStatus,
 			RequestSource: in.RequestSource,
 			DateFrom:      in.DateFrom,
 			DateTo:        in.DateTo,
@@ -731,12 +664,13 @@ func usageLogFilterFromInput(in *usageLogsInput) (domain.UsageFilter, error) {
 		return domain.UsageFilter{}, err
 	}
 	return domain.UsageFilter{
+		ErrorsOnly:    in.ErrorsOnly,
 		TenantID:      in.TenantID,
 		TenantName:    in.TenantName,
 		UserID:        in.UserID,
 		UserName:      in.UserName,
 		ModelCode:     in.ModelCode,
-		RequestStatus: in.RequestStatus,
+		RequestStatus: "",
 		RequestSource: in.RequestSource,
 		DateFrom:      dateFrom,
 		DateTo:        dateTo,
@@ -778,7 +712,7 @@ func usageSummaryFilterFromInput(in *usageSummaryInput) (domain.UsageSummaryFilt
 		TenantID:      in.TenantID,
 		UserID:        in.UserID,
 		ModelCode:     in.ModelCode,
-		RequestStatus: in.RequestStatus,
+		RequestStatus: "",
 		RequestSource: in.RequestSource,
 		DateFrom:      dateFrom,
 		DateTo:        dateTo,

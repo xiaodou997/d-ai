@@ -127,7 +127,7 @@ async function purgeRequestBodies() {
     cleanupPreview.value = preview;
     const bodyPreview = preview.requestBodyPurge;
     const result = await ElMessageBox.prompt(
-      `这是不可逆操作。系统会清空所有请求/响应正文、请求参数、媒体引用和底层错误详情，保留请求元数据、用量统计及账务数据；完成后会压缩审计表，期间可能短暂阻塞新的审计写入。
+      `这将永久清除限时调试保存的压缩正文。请求执行事实、用量证据和资金账目保留。
 
 本次预览：${bodyPreview.eligibleRows.toLocaleString()} 条正文数据，占用约 ${formatBytes(bodyPreview.occupiedBytes)}。
 预览时间：${cleanupDate(preview.generatedAt)}
@@ -213,16 +213,13 @@ onBeforeUnmount(() => { if (cleanupPollTimer) clearTimeout(cleanupPollTimer); })
             <DsTag :tone="cleanupPolicy.enabled ? 'positive' : 'neutral'">{{ cleanupPolicy.enabled ? '自动清理已开启' : '自动清理已关闭' }}</DsTag>
             <DsButton :disabled="cleanupBusy" @click="loadCleanup"><template #icon><RefreshCw :size="14" /></template>刷新</DsButton>
           </template>
+          <p>请求按月分区保留 90 天，错误及尝试保留 30 天，调试正文最多 7 天；资金逐笔证据保留 365 天，并在核验结转后清理。</p>
           <div class="cleanup-policy">
             <label class="cleanup-switch"><input v-model="cleanupPolicy.enabled" type="checkbox" /> <span>每日自动清理</span></label>
-            <label>请求正文保留天数 <DsInput :model-value="String(cleanupPolicy.requestBodyDays)" type="number" @update:model-value="updateCleanupNumber('requestBodyDays', $event)" /></label>
-            <label>请求记录保留天数 <DsInput :model-value="String(cleanupPolicy.requestPayloadDays)" type="number" @update:model-value="updateCleanupNumber('requestPayloadDays', $event)" /></label>
             <label>通知记录保留天数 <DsInput :model-value="String(cleanupPolicy.notificationDays)" type="number" @update:model-value="updateCleanupNumber('notificationDays', $event)" /></label>
             <label>审核记录保留天数 <DsInput :model-value="String(cleanupPolicy.moderationDays)" type="number" @update:model-value="updateCleanupNumber('moderationDays', $event)" /></label>
             <label>风险事件保留天数 <DsInput :model-value="String(cleanupPolicy.riskEventDays)" type="number" @update:model-value="updateCleanupNumber('riskEventDays', $event)" /></label>
             <label>审计日志保留天数 <DsInput :model-value="String(cleanupPolicy.adminAuditDays)" type="number" @update:model-value="updateCleanupNumber('adminAuditDays', $event)" /></label>
-            <label>媒体 Blob 保留天数 <DsInput :model-value="String(cleanupPolicy.auditBlobDays)" type="number" @update:model-value="updateCleanupNumber('auditBlobDays', $event)" /></label>
-            <label>用量汇总保留天数 <DsInput :model-value="String(cleanupPolicy.usageRollupDays)" type="number" @update:model-value="updateCleanupNumber('usageRollupDays', $event)" /></label>
             <label>单批处理数量 <DsInput :model-value="String(cleanupPolicy.batchSize)" type="number" @update:model-value="updateCleanupNumber('batchSize', $event)" /></label>
             <div class="cleanup-policy__actions"><DsButton variant="primary" :disabled="cleanupBusy" @click="saveCleanupPolicy"><template #icon><Save :size="14" /></template>保存策略</DsButton></div>
           </div>

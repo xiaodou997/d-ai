@@ -65,7 +65,6 @@ async function load() {
     const response = await listTenantUsageSummary({
       user_id: props.user.userId,
       model_code: props.filters.modelCode || undefined,
-      request_status: props.filters.requestStatus || undefined,
       request_source: props.filters.requestSource || undefined,
       date_from: props.filters.dateRange?.[0] ? new Date(props.filters.dateRange[0]).toISOString() : undefined,
       date_to: props.filters.dateRange?.[1] ? new Date(props.filters.dateRange[1]).toISOString() : undefined

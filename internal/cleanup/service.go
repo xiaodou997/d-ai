@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -24,11 +23,7 @@ import (
 
 const (
 	TargetRequestBody = "request_body"
-	// TargetRequestBodyPurge is a manual-only operation. It clears request and
-	// response payload fields for every retained audit row and compacts the
-	// table afterwards so PostgreSQL can return the old TOAST files to the OS.
-	// It is intentionally excluded from AllTargets and therefore never runs
-	// from the daily automatic cleanup policy.
+	// TargetRequestBodyPurge is a manual-only purge of compressed debug bodies.
 	TargetRequestBodyPurge = "request_body_purge"
 	TargetRequestPayloads  = "request_payloads"
 	TargetNotifications    = "notifications"
@@ -50,7 +45,6 @@ var (
 	ErrServiceStopped = errors.New("data cleanup service is stopped")
 	ErrInvalidTarget  = errors.New("invalid data cleanup target")
 	ErrLeaseLost      = errors.New("data cleanup lease was lost")
-	archiveTableName  = regexp.MustCompile(`^ai_request_payloads_archive_[0-9]{4}_[0-9]{2}$`)
 )
 
 // Policy is stored in sys_settings.data_cleanup. All values are days except
@@ -80,7 +74,7 @@ type PreviewItem struct {
 
 // RequestBodyPurgePreview reports the body values that the manual purge would
 // remove. occupiedBytes is the current storage size of those values, including
-// body keys still waiting in the durable audit inbox.
+// compressed debug payloads.
 type RequestBodyPurgePreview struct {
 	EligibleRows  int64 `json:"eligibleRows"`
 	OccupiedBytes int64 `json:"occupiedBytes"`
@@ -176,14 +170,10 @@ func DefaultPolicy() Policy {
 
 func AllTargets() []string {
 	return []string{
-		TargetRequestBody,
-		TargetRequestPayloads,
 		TargetNotifications,
 		TargetModerationLogs,
 		TargetRiskEvents,
 		TargetAdminAuditLogs,
-		TargetAuditBlobs,
-		TargetUsageRollups,
 	}
 }
 
@@ -347,62 +337,9 @@ func (s *Service) Preview(ctx context.Context) (Preview, error) {
 }
 
 func (s *Service) previewRequestBodyPurge(ctx context.Context) (RequestBodyPurgePreview, error) {
-	var preview RequestBodyPurgePreview
-	if err := s.pool.QueryRow(ctx, `
-		SELECT
-			(
-				SELECT COUNT(*)
-				FROM ai_request_payloads
-				WHERE request_messages IS NOT NULL
-				   OR request_params IS NOT NULL
-				   OR response_message IS NOT NULL
-				   OR internal_error_detail IS NOT NULL
-				   OR attempts_detail IS NOT NULL
-				   OR media_refs IS NOT NULL
-			)
-			+ (
-				SELECT COUNT(*)
-				FROM ai_audit_inbox
-				WHERE payload ?| ARRAY[
-					'request_messages', 'request_params', 'response_message',
-					'media_refs', 'internal_error_detail', 'attempts_detail'
-				]
-			),
-			(
-				SELECT COALESCE(SUM(
-					COALESCE(pg_column_size(request_messages), 0)::bigint
-					+ COALESCE(pg_column_size(request_params), 0)::bigint
-					+ COALESCE(pg_column_size(response_message), 0)::bigint
-					+ COALESCE(pg_column_size(internal_error_detail), 0)::bigint
-					+ COALESCE(pg_column_size(attempts_detail), 0)::bigint
-					+ COALESCE(pg_column_size(media_refs), 0)::bigint
-				), 0)::bigint
-				FROM ai_request_payloads
-				WHERE request_messages IS NOT NULL
-				   OR request_params IS NOT NULL
-				   OR response_message IS NOT NULL
-				   OR internal_error_detail IS NOT NULL
-				   OR attempts_detail IS NOT NULL
-				   OR media_refs IS NOT NULL
-			)
-			+ (
-				SELECT COALESCE(SUM(
-					GREATEST(
-						pg_column_size(payload)
-						- pg_column_size(payload - 'request_messages' - 'request_params' - 'response_message' - 'media_refs' - 'internal_error_detail' - 'attempts_detail'),
-						0
-					)::bigint
-				), 0)::bigint
-				FROM ai_audit_inbox
-				WHERE payload ?| ARRAY[
-					'request_messages', 'request_params', 'response_message',
-					'media_refs', 'internal_error_detail', 'attempts_detail'
-				]
-			)
-	`).Scan(&preview.EligibleRows, &preview.OccupiedBytes); err != nil {
-		return RequestBodyPurgePreview{}, err
-	}
-	return preview, nil
+	var result RequestBodyPurgePreview
+	err := s.pool.QueryRow(ctx, `SELECT count(*),COALESCE(sum(octet_length(content_gzip)),0) FROM ai_request_debug_payloads`).Scan(&result.EligibleRows, &result.OccupiedBytes)
+	return result, err
 }
 
 func (s *Service) StartManual(targets []string, actor string) (Run, error) {
@@ -807,12 +744,8 @@ func (s *Service) cleanupTargetTotal(ctx context.Context, target string, policy 
 func (s *Service) cleanTargetWithProgress(ctx context.Context, target string, policy Policy, progress cleanupProgressReporter) (int64, error) {
 	cutoff := time.Now().UTC().AddDate(0, 0, -policy.retentionDays(target))
 	switch target {
-	case TargetRequestBody:
-		return s.clearRequestBodies(ctx, cutoff, policy.BatchSize, progress)
 	case TargetRequestBodyPurge:
 		return s.clearAllRequestBodies(ctx, policy.BatchSize, progress)
-	case TargetRequestPayloads:
-		return s.deleteRequestPayloads(ctx, cutoff, policy.BatchSize, progress)
 	case TargetNotifications:
 		return s.deleteNotifications(ctx, cutoff, policy.BatchSize, progress)
 	case TargetModerationLogs:
@@ -821,10 +754,6 @@ func (s *Service) cleanTargetWithProgress(ctx context.Context, target string, po
 		return s.deleteRiskEvents(ctx, cutoff, policy.BatchSize, progress)
 	case TargetAdminAuditLogs:
 		return s.deleteAdminAuditLogs(ctx, cutoff, policy.BatchSize, progress)
-	case TargetAuditBlobs:
-		return s.deleteUnreferencedBlobs(ctx, cutoff, policy.BatchSize, progress)
-	case TargetUsageRollups:
-		return s.deleteUsageRollups(ctx, cutoff, policy.BatchSize, progress)
 	default:
 		return 0, fmt.Errorf("%w: %s", ErrInvalidTarget, target)
 	}
@@ -841,104 +770,25 @@ func reportCleanupProgress(progress []cleanupProgressReporter, processed int64, 
 // the audit row itself preserves request IDs and metadata for ordinary usage
 // queries while releasing the large JSONB values from the row.
 func (s *Service) clearAllRequestBodies(ctx context.Context, batchSize int, progress ...cleanupProgressReporter) (int64, error) {
-	if batchSize <= 0 {
-		batchSize = DefaultPolicy().BatchSize
-	}
 	var total int64
 	for {
-		result, err := s.pool.Exec(ctx, `
-			UPDATE ai_request_payloads
-			SET request_messages = NULL,
-			    request_params = NULL,
-			    response_message = NULL,
-			    internal_error_detail = NULL,
-			    attempts_detail = NULL,
-			    media_refs = NULL
-			WHERE id IN (
-				SELECT id FROM ai_request_payloads
-				WHERE request_messages IS NOT NULL
-				   OR request_params IS NOT NULL
-				   OR response_message IS NOT NULL
-				   OR internal_error_detail IS NOT NULL
-				   OR attempts_detail IS NOT NULL
-				   OR media_refs IS NOT NULL
-				ORDER BY created_at, id
-				LIMIT $1
-			)
-		`, batchSize)
+		tag, err := s.pool.Exec(ctx, `DELETE FROM ai_request_debug_payloads WHERE (created_at,request_id) IN (SELECT created_at,request_id FROM ai_request_debug_payloads ORDER BY created_at,request_id LIMIT $1)`, batchSize)
 		if err != nil {
 			return total, err
 		}
-		changed := result.RowsAffected()
-		total += changed
-		if err := reportCleanupProgress(progress, total, "clearing"); err != nil {
+		total += tag.RowsAffected()
+		if err = reportCleanupProgress(progress, total, "clearing"); err != nil {
 			return total, err
 		}
-		if changed < int64(batchSize) {
-			break
+		if tag.RowsAffected() < int64(batchSize) {
+			return total, nil
 		}
 	}
-
-	// The durable inbox may still contain payloads waiting for materialization.
-	// Strip their body keys as well, otherwise an old queued envelope could
-	// repopulate the large fields after this purge completes.
-	for {
-		inboxResult, err := s.pool.Exec(ctx, `
-			UPDATE ai_audit_inbox
-			SET payload = payload
-			  - 'request_messages'
-			  - 'request_params'
-			  - 'response_message'
-			  - 'media_refs'
-			  - 'internal_error_detail'
-			  - 'attempts_detail'
-			WHERE id IN (
-				SELECT id FROM ai_audit_inbox
-				WHERE payload ?| ARRAY[
-					'request_messages', 'request_params', 'response_message',
-					'media_refs', 'internal_error_detail', 'attempts_detail'
-				]
-				ORDER BY id
-				LIMIT $1
-			)
-		`, batchSize)
-		if err != nil {
-			return total, fmt.Errorf("clear audit inbox request bodies: %w", err)
-		}
-		changed := inboxResult.RowsAffected()
-		total += changed
-		if err := reportCleanupProgress(progress, total, "clearing"); err != nil {
-			return total, err
-		}
-		if changed < int64(batchSize) {
-			break
-		}
-	}
-
-	// DELETE/UPDATE leaves dead TOAST tuples behind. This operation is
-	// explicitly initiated by an administrator, so compact both audit
-	// relations now instead of waiting for autovacuum. VACUUM FULL runs outside
-	// a transaction (pool.Exec uses a fresh autocommit statement) and takes an
-	// ACCESS EXCLUSIVE lock while it rewrites each relation.
-	if err := reportCleanupProgress(progress, total, "compacting"); err != nil {
-		return total, err
-	}
-	if _, err := s.pool.Exec(ctx, `VACUUM (FULL, ANALYZE) ai_request_payloads, ai_audit_inbox`); err != nil {
-		return total, fmt.Errorf("compact request payload and audit inbox tables (runtime role needs table ownership): %w", err)
-	}
-	if err := reportCleanupProgress(progress, total, "cleared"); err != nil {
-		return total, err
-	}
-	return total, nil
 }
 
 func (s *Service) countTarget(ctx context.Context, target string, cutoff time.Time) (int64, error) {
 	var query string
 	switch target {
-	case TargetRequestBody:
-		query = `SELECT COUNT(*) FROM ai_request_payloads WHERE created_at < $1 AND (request_messages IS NOT NULL OR request_params IS NOT NULL OR response_message IS NOT NULL OR internal_error_detail IS NOT NULL OR attempts_detail IS NOT NULL OR media_refs IS NOT NULL)`
-	case TargetRequestPayloads:
-		query = `SELECT COUNT(*) FROM ai_request_payloads WHERE created_at < $1`
 	case TargetNotifications:
 		query = `SELECT COUNT(*) FROM sys_notification_deliveries WHERE created_at < $1 AND status IN ('sent', 'failed')`
 	case TargetModerationLogs:
@@ -949,10 +799,6 @@ func (s *Service) countTarget(ctx context.Context, target string, cutoff time.Ti
 		query = `SELECT COUNT(*) FROM ai_risk_events WHERE created_at < $1 AND status IN ('resolved', 'dismissed')`
 	case TargetAdminAuditLogs:
 		query = `SELECT COUNT(*) FROM ai_admin_audit_logs WHERE created_at < $1`
-	case TargetAuditBlobs:
-		return s.countUnreferencedBlobs(ctx, cutoff)
-	case TargetUsageRollups:
-		query = `SELECT COUNT(*) FROM ai_usage_rollups_hourly WHERE bucket_start < $1`
 	default:
 		return 0, fmt.Errorf("%w: %s", ErrInvalidTarget, target)
 	}
@@ -961,54 +807,6 @@ func (s *Service) countTarget(ctx context.Context, target string, cutoff time.Ti
 		return 0, err
 	}
 	return count, nil
-}
-
-func (s *Service) clearRequestBodies(ctx context.Context, cutoff time.Time, batchSize int, progress ...cleanupProgressReporter) (int64, error) {
-	var total int64
-	for {
-		result, err := s.pool.Exec(ctx, `
-			UPDATE ai_request_payloads
-			SET request_messages = NULL,
-			    request_params = NULL,
-			    response_message = NULL,
-			    internal_error_detail = NULL,
-			    attempts_detail = NULL,
-			    media_refs = NULL
-			WHERE id IN (
-				SELECT id FROM ai_request_payloads
-				WHERE created_at < $1
-				  AND (request_messages IS NOT NULL OR request_params IS NOT NULL OR response_message IS NOT NULL OR internal_error_detail IS NOT NULL OR attempts_detail IS NOT NULL OR media_refs IS NOT NULL)
-				ORDER BY created_at
-				LIMIT $2
-			)
-		`, cutoff, batchSize)
-		if err != nil {
-			return total, err
-		}
-		changed := result.RowsAffected()
-		total += changed
-		if err := reportCleanupProgress(progress, total, "clearing"); err != nil {
-			return total, err
-		}
-		if changed < int64(batchSize) {
-			return total, nil
-		}
-	}
-}
-
-func (s *Service) deleteRequestPayloads(ctx context.Context, cutoff time.Time, batchSize int, progress ...cleanupProgressReporter) (int64, error) {
-	return s.deleteInBatches(ctx, func() (int64, error) {
-		result, err := s.pool.Exec(ctx, `
-			DELETE FROM ai_request_payloads
-			WHERE id IN (
-				SELECT id FROM ai_request_payloads
-				WHERE created_at < $1
-				ORDER BY created_at
-				LIMIT $2
-			)
-		`, cutoff, batchSize)
-		return result.RowsAffected(), err
-	}, progress...)
 }
 
 func (s *Service) deleteNotifications(ctx context.Context, cutoff time.Time, batchSize int, progress ...cleanupProgressReporter) (int64, error) {
@@ -1102,22 +900,6 @@ func (s *Service) deleteAdminAuditLogs(ctx context.Context, cutoff time.Time, ba
 	}, progress...)
 }
 
-func (s *Service) deleteUsageRollups(ctx context.Context, cutoff time.Time, batchSize int, progress ...cleanupProgressReporter) (int64, error) {
-	return s.deleteInBatches(ctx, func() (int64, error) {
-		result, err := s.pool.Exec(ctx, `
-			DELETE FROM ai_usage_rollups_hourly
-			WHERE (bucket_start, tenant_id, user_id, api_key_id, request_source, model_code, provider_code, request_status, billable_unit_type) IN (
-				SELECT bucket_start, tenant_id, user_id, api_key_id, request_source, model_code, provider_code, request_status, billable_unit_type
-				FROM ai_usage_rollups_hourly
-				WHERE bucket_start < $1
-				ORDER BY bucket_start
-				LIMIT $2
-			)
-		`, cutoff, batchSize)
-		return result.RowsAffected(), err
-	}, progress...)
-}
-
 func (s *Service) deleteInBatches(ctx context.Context, operation func() (int64, error), progress ...cleanupProgressReporter) (int64, error) {
 	var total int64
 	for {
@@ -1133,83 +915,6 @@ func (s *Service) deleteInBatches(ctx context.Context, operation func() (int64, 
 			return total, nil
 		}
 	}
-}
-
-func (s *Service) countUnreferencedBlobs(ctx context.Context, cutoff time.Time) (int64, error) {
-	filter, err := s.unreferencedBlobFilter(ctx, "candidate")
-	if err != nil {
-		return 0, err
-	}
-	query := fmt.Sprintf(`
-		SELECT COUNT(*) FROM ai_audit_blobs candidate
-		WHERE candidate.created_at < $1 AND %s
-	`, filter)
-	var count int64
-	if err := s.pool.QueryRow(ctx, query, cutoff).Scan(&count); err != nil {
-		return 0, err
-	}
-	return count, nil
-}
-
-func (s *Service) deleteUnreferencedBlobs(ctx context.Context, cutoff time.Time, batchSize int, progress ...cleanupProgressReporter) (int64, error) {
-	filter, err := s.unreferencedBlobFilter(ctx, "candidate")
-	if err != nil {
-		return 0, err
-	}
-	query := fmt.Sprintf(`
-		DELETE FROM ai_audit_blobs blob
-		WHERE blob.sha256 IN (
-			SELECT candidate.sha256
-			FROM ai_audit_blobs candidate
-			WHERE candidate.created_at < $1 AND %s
-			ORDER BY candidate.created_at
-			LIMIT $2
-		)
-	`, filter)
-	return s.deleteInBatches(ctx, func() (int64, error) {
-		result, err := s.pool.Exec(ctx, query, cutoff, batchSize)
-		return result.RowsAffected(), err
-	}, progress...)
-}
-
-func (s *Service) unreferencedBlobFilter(ctx context.Context, candidateAlias string) (string, error) {
-	tables, err := s.archiveTables(ctx)
-	if err != nil {
-		return "", err
-	}
-	clauses := []string{
-		fmt.Sprintf("NOT EXISTS (SELECT 1 FROM ai_request_payloads p WHERE p.media_refs IS NOT NULL AND p.media_refs::text LIKE '%%' || %s.sha256 || '%%')", candidateAlias),
-	}
-	for _, table := range tables {
-		quoted := `"` + strings.ReplaceAll(table, `"`, `""`) + `"`
-		clauses = append(clauses, fmt.Sprintf("NOT EXISTS (SELECT 1 FROM %s p WHERE p.media_refs IS NOT NULL AND p.media_refs::text LIKE '%%' || %s.sha256 || '%%')", quoted, candidateAlias))
-	}
-	return strings.Join(clauses, " AND "), nil
-}
-
-func (s *Service) archiveTables(ctx context.Context) ([]string, error) {
-	rows, err := s.pool.Query(ctx, `
-		SELECT tablename
-		FROM pg_tables
-		WHERE schemaname = current_schema()
-		  AND tablename LIKE 'ai_request_payloads_archive_%'
-		ORDER BY tablename
-	`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var tables []string
-	for rows.Next() {
-		var table string
-		if err := rows.Scan(&table); err != nil {
-			return nil, err
-		}
-		if archiveTableName.MatchString(table) {
-			tables = append(tables, table)
-		}
-	}
-	return tables, rows.Err()
 }
 
 func (s *Service) recoverStaleRuns(ctx context.Context) error {

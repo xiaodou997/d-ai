@@ -258,15 +258,10 @@ func (r *TenantRepository) DeleteTenant(ctx context.Context, tenantID string) (b
 		`DELETE FROM ann_audiences WHERE tenant_id = $1`,
 		`DELETE FROM ann_receipts WHERE tenant_id = $1`,
 		`DELETE FROM ann_announcements WHERE publisher_tenant_id = $1`,
-		`DELETE FROM ledger_credit_leases WHERE tenant_id = $1`,
 		`DELETE FROM ai_upstream_resource_tenant_policies WHERE tenant_id = $1`,
 		`DELETE FROM ai_price_book_entries WHERE price_book_id IN (SELECT id FROM ai_price_books WHERE owner_type = 'tenant' AND owner_tenant_id = $1)`,
 		`DELETE FROM ai_price_books WHERE owner_type = 'tenant' AND owner_tenant_id = $1`,
 		`DELETE FROM ai_admin_audit_logs WHERE actor_tenant_id = $1`,
-		`DELETE FROM ai_billing_settlement_outbox WHERE batch_id IN (SELECT batch_id FROM ai_billing_settlement_batches WHERE window_id IN (SELECT window_id FROM ai_billing_windows WHERE tenant_id = $1))`,
-		`DELETE FROM ai_billing_settlement_batches WHERE window_id IN (SELECT window_id FROM ai_billing_windows WHERE tenant_id = $1)`,
-		`DELETE FROM ai_billing_request_admissions WHERE window_id IN (SELECT window_id FROM ai_billing_windows WHERE tenant_id = $1)`,
-		`DELETE FROM ai_billing_windows WHERE tenant_id = $1`,
 		`DELETE FROM ai_async_task_deliveries WHERE task_id IN (SELECT id FROM ai_async_tasks WHERE tenant_id = $1)`,
 		`DELETE FROM ai_sub_plan_purchase_policy_revisions WHERE plan_id IN (SELECT id FROM ai_sub_plans WHERE tenant_id = $1)`,
 		`DELETE FROM ai_sub_plan_purchase_policies WHERE plan_id IN (SELECT id FROM ai_sub_plans WHERE tenant_id = $1)`,
@@ -284,14 +279,9 @@ func (r *TenantRepository) DeleteTenant(ctx context.Context, tenantID string) (b
 		`DELETE FROM ai_async_tasks WHERE tenant_id = $1`,
 		`DELETE FROM ai_conversation_bindings WHERE tenant_id = $1`,
 		`DELETE FROM ai_runtime_limit_policies WHERE (scope_type = 'tenant' AND scope_id = $1) OR (scope_type = 'user' AND scope_id IN (SELECT user_id FROM iam_accounts WHERE tenant_id = $1))`,
-		`DELETE FROM ai_request_payloads WHERE request_id IN (SELECT request_id FROM ai_usage_logs WHERE tenant_id = $1)`,
-		`DELETE FROM ai_usage_rollups_hourly WHERE tenant_id = $1`,
-		`DELETE FROM ai_usage_logs WHERE tenant_id = $1`,
 		`DELETE FROM ai_content_moderation_logs WHERE tenant_id = $1`,
 		`DELETE FROM ai_prompt_audit_events WHERE tenant_id = $1`,
 		`DELETE FROM ai_risk_events WHERE tenant_id = $1`,
-		`DELETE FROM ai_audit_inbox WHERE payload->>'tenant_id' = $1`,
-		`DELETE FROM bill_charge_outbox WHERE tenant_id = $1`,
 		`DELETE FROM bill_credit_lots WHERE account_id IN (SELECT account_id FROM bill_accounts WHERE tenant_id = $1)`,
 		`DELETE FROM bill_refund_reversal_effects WHERE account_id IN (SELECT account_id FROM bill_accounts WHERE tenant_id = $1)`,
 		`DELETE FROM pay_refunds WHERE payment_order_id IN (SELECT order_id FROM pay_orders WHERE tenant_id = $1)`,
@@ -344,7 +334,7 @@ func (r *TenantRepository) deleteTenantArchivedPayloads(ctx context.Context, ten
 	}
 	rows.Close()
 	for _, table := range tables {
-		query := fmt.Sprintf(`DELETE FROM %s WHERE request_id IN (SELECT request_id FROM ai_usage_logs WHERE tenant_id = $1)`, pgx.Identifier{table}.Sanitize())
+		query := fmt.Sprintf(`DELETE FROM %s WHERE request_id IN (SELECT request_id FROM ai_request_keys WHERE tenant_id = $1)`, pgx.Identifier{table}.Sanitize())
 		if _, err := tx.Exec(ctx, query, tenantID); err != nil {
 			return fmt.Errorf("tenant deletion archive query failed: %s: %w", table, err)
 		}
@@ -362,7 +352,7 @@ func (r *TenantRepository) deleteTenantLargeTables(ctx context.Context, tenantID
 		if err != nil {
 			return err
 		}
-		rows, err := tx.Query(ctx, `DELETE FROM ai_usage_logs WHERE ctid IN (SELECT ctid FROM ai_usage_logs WHERE tenant_id = $1 LIMIT $2) RETURNING request_id`, tenantID, batchSize)
+		rows, err := tx.Query(ctx, `DELETE FROM ai_requests WHERE (created_at,request_id) IN (SELECT created_at,request_id FROM ai_requests WHERE tenant_id=$1 LIMIT $2) RETURNING request_id`, tenantID, batchSize)
 		if err != nil {
 			_ = tx.Rollback(ctx)
 			return err
@@ -384,7 +374,7 @@ func (r *TenantRepository) deleteTenantLargeTables(ctx context.Context, tenantID
 		}
 		rows.Close()
 		if len(requestIDs) > 0 {
-			if _, err := tx.Exec(ctx, `DELETE FROM ai_request_payloads WHERE request_id = ANY($1::text[])`, requestIDs); err != nil {
+			if _, err := tx.Exec(ctx, `DELETE FROM ai_request_debug_payloads WHERE request_id = ANY($1::text[])`, requestIDs); err != nil {
 				_ = tx.Rollback(ctx)
 				return err
 			}
@@ -396,7 +386,7 @@ func (r *TenantRepository) deleteTenantLargeTables(ctx context.Context, tenantID
 			break
 		}
 	}
-	for _, table := range []string{"ai_usage_rollups_hourly", "ai_content_moderation_logs", "ai_prompt_audit_events", "ai_risk_events", "sys_notification_deliveries"} {
+	for _, table := range []string{"ai_content_moderation_logs", "ai_prompt_audit_events", "ai_risk_events", "sys_notification_deliveries"} {
 		for {
 			tx, err := r.pool.Begin(ctx)
 			if err != nil {

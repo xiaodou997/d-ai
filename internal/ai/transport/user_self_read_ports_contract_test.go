@@ -13,7 +13,6 @@ func TestUserSelfReadRoutesRegisterIndependentlyFromCoreAI(t *testing.T) {
 		"/api/v1/users/me/groups",
 		"/api/v1/users/me/groups/group-1/effective-prices",
 		"/api/v1/user-model-grants",
-		"/api/v1/user-usage-logs",
 		"/api/v1/user-usage-summary",
 	}
 

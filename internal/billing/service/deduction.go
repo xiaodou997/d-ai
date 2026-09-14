@@ -32,9 +32,14 @@ type BatchOpResult struct {
 //
 // 运行时的 AI 扣费不走这里 —— 它由 billing/outbox 消费者直接调用 ledger。
 // 本类型只承载需要人工授权的、有审计意义的账务动作。
+type UsageRefunder interface {
+	Refund(context.Context, string, string, string) error
+}
+
 type DeductionService struct {
-	pool   *pgxpool.Pool
-	logger *zap.Logger
+	usageRefunder UsageRefunder
+	pool          *pgxpool.Pool
+	logger        *zap.Logger
 }
 
 func NewDeductionService(pool *pgxpool.Pool, logger *zap.Logger) *DeductionService {
@@ -44,106 +49,23 @@ func NewDeductionService(pool *pgxpool.Pool, logger *zap.Logger) *DeductionServi
 	return &DeductionService{pool: pool, logger: logger}
 }
 
+func (s *DeductionService) WithUsageRefunder(r UsageRefunder) *DeductionService {
+	s.usageRefunder = r
+	return s
+}
+
 // RefundUsage 全额退回一条已结算的 AI 使用记录（仅平台管理员可操作）。
 //
 // 退款就是把钱加回账户。账户余额是有符号的，所以「欠费的账户退款只清欠、不退现」
 // 这条规则不需要任何代码来实现 —— 加法本身就是这个语义。
 func (s *DeductionService) RefundUsage(ctx context.Context, requestID, reason, operatorID string) error {
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
+	if err := ctx.Err(); err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
-
-	var tenantID, userID string
-	var tenantCredits, userCredits int64
-	var billingStatus, refundStatus string
-	err = tx.QueryRow(ctx, `
-		SELECT tenant_id, COALESCE(user_id, ''), tenant_payable, user_charged,
-		       billing_status, refund_status
-		FROM ai_usage_logs
-		WHERE request_id = $1
-		FOR UPDATE
-	`, requestID).Scan(&tenantID, &userID, &tenantCredits, &userCredits, &billingStatus, &refundStatus)
-	if err != nil {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		return shared.ErrUsageNotFound
+	if s.usageRefunder == nil {
+		return fmt.Errorf("independent settlement refunder is not configured")
 	}
-	if billingStatus != "settled" {
-		return fmt.Errorf("usage not refundable (billing_status=%s)", billingStatus)
-	}
-	if refundStatus != "none" {
-		return fmt.Errorf("usage already refunded")
-	}
-	if tenantCredits <= 0 && userCredits <= 0 {
-		return fmt.Errorf("usage has no refundable charge")
-	}
-	beforeState, err := audit.Snapshot(map[string]any{
-		"request_id": requestID, "tenant_id": tenantID, "user_id": userID,
-		"billing_status": billingStatus, "refund_status": refundStatus,
-		"tenant_payable": tenantCredits, "user_charged": userCredits,
-	})
-	if err != nil {
-		return err
-	}
-
-	now := billing.NowUTC()
-
-	if tenantCredits > 0 {
-		if _, err := ledger.Grant(ctx, tx,
-			ledger.Ref{Kind: ledger.KindTenant, ID: tenantID, TenantID: tenantID},
-			tenantCredits, nil, billing.PackageSourceRefund, ""); err != nil {
-			return fmt.Errorf("退回租户余额失败：%w", err)
-		}
-	}
-	if userCredits > 0 && userID != "" {
-		if _, err := ledger.Grant(ctx, tx,
-			ledger.Ref{Kind: ledger.KindUser, ID: userID, TenantID: tenantID},
-			userCredits, nil, billing.PackageSourceRefund, ""); err != nil {
-			return fmt.Errorf("退回用户余额失败：%w", err)
-		}
-	}
-	if userCredits > 0 && userID == "" {
-		return fmt.Errorf("user charge has no user id")
-	}
-
-	if _, err := tx.Exec(ctx, `
-		UPDATE ai_usage_logs
-		SET refund_status = 'refunded',
-		    refund_reason = NULLIF($1, ''),
-		    refund_operator_id = NULLIF($2, ''),
-		    refunded_at = $3
-		WHERE request_id = $4
-	`, reason, operatorID, now, requestID); err != nil {
-		return err
-	}
-	afterState, err := audit.Snapshot(map[string]any{
-		"request_id": requestID, "tenant_id": tenantID, "user_id": userID,
-		"billing_status": billingStatus, "refund_status": "refunded",
-		"tenant_payable": tenantCredits, "user_charged": userCredits,
-		"refund_reason": reason, "refund_operator_id": operatorID,
-	})
-	if err != nil {
-		return err
-	}
-	if err := audit.Append(ctx, tx, audit.Event{
-		RepairID: audit.NewRepairID(), Action: "usage_refund",
-		IdempotencyKey: "usage-refund:" + requestID,
-		TargetType:     "ai_usage_logs", TargetID: requestID,
-		OperatorID: operatorID, Reason: reason,
-		BeforeState: beforeState, AfterState: afterState,
-	}); err != nil {
-		return err
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return err
-	}
-
-	s.logger.Info("Usage refund completed", zap.String("request_id", requestID), zap.String("operator_id", operatorID))
-	return nil
+	return s.usageRefunder.Refund(ctx, requestID, reason, operatorID)
 }
 
 // ReverseResult 充值撤销结果
@@ -325,7 +247,7 @@ func (s *DeductionService) BatchRefundUsage(ctx context.Context, requestIDs []st
 		// 读取原始金额用于汇总（RefundUsage 内部会校验状态）。
 		var tenantCredits, userCredits int64
 		if err := s.pool.QueryRow(ctx, `
-			SELECT tenant_payable, user_charged FROM ai_usage_logs WHERE request_id = $1
+			SELECT tenant_charged, user_charged FROM bill_settlements WHERE request_id = $1
 		`, requestID).Scan(&tenantCredits, &userCredits); err != nil && ctx.Err() != nil {
 			for _, pendingID := range requestIDs[i:] {
 				result.Failed = append(result.Failed, BatchOpError{RequestID: pendingID, Reason: ctx.Err().Error()})

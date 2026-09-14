@@ -137,7 +137,7 @@ func (s *postgresStore) countInFlight(ctx context.Context, tenantID string) (int
 // snapshotted.
 //
 // request_id is settled here, before the upstream is ever called, so the
-// ai_usage_logs row the attempt produces joins back to this task — and so the
+// ai_request_keys row the attempt produces joins back to this task — and so the
 // reaper can tell whether an attempt already reached billing.
 const claimSQL = `
 WITH running AS (
@@ -177,7 +177,7 @@ FROM candidate c
 WHERE t.id = c.id AND t.status = 'pending'
 RETURNING t.id::text, t.task_type, t.auth_method, t.tenant_id,
           COALESCE(t.user_id, ''), COALESCE(t.api_key_id::text, ''),
-          t.model_code, t.input_payload, t.attempt_count, COALESCE(t.request_id, '')
+          t.model_code, t.input_payload, t.attempt_count, COALESCE(t.request_id, ''), t.created_at
 `
 
 func (s *postgresStore) claim(ctx context.Context, types []string, cap int, workerID string, lease time.Duration) (claimedTask, bool, error) {
@@ -191,7 +191,7 @@ func (s *postgresStore) claim(ctx context.Context, types []string, cap int, work
 	err := s.pool.QueryRow(ctx, claimSQL, types, cap, workerID, lease.Seconds()).Scan(
 		&t.ID, &t.Type, &authMethod, &t.SubjectRef.TenantID,
 		&t.SubjectRef.UserID, &t.SubjectRef.APIKeyID,
-		&t.ModelCode, &t.Input, &t.Attempt, &t.RequestID,
+		&t.ModelCode, &t.Input, &t.Attempt, &t.RequestID, &t.CreatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return claimedTask{}, false, nil
@@ -266,7 +266,7 @@ func (s *postgresStore) complete(ctx context.Context, taskID, workerID string, r
 // reapRetryableSQL returns orphaned tasks to pending with exponential backoff.
 //
 // The NOT EXISTS clause is the double-spend guard. request_id is written before
-// the upstream call, so a matching ai_usage_logs row proves the attempt already
+// the upstream call, so a matching ai_request_keys row proves the attempt already
 // reached billing; retrying it would charge the customer twice. Such tasks fall
 // through to reapDead instead.
 const reapRetryableSQL = `
@@ -281,7 +281,7 @@ WHERE id IN (
       AND t.lease_expires_at < now()
       AND t.attempt_count < t.max_attempts
       AND NOT EXISTS (
-          SELECT 1 FROM ai_usage_logs u WHERE u.request_id = t.request_id
+          SELECT 1 FROM ai_request_keys u WHERE u.request_id = t.request_id
       )
     ORDER BY t.lease_expires_at
     FOR UPDATE SKIP LOCKED
@@ -347,7 +347,7 @@ func (s *postgresStore) releaseWorker(ctx context.Context, workerID string) (int
 	// is why a second instance could reset tasks the first was still executing.
 	//
 	// The NOT EXISTS clause is the same double-spend guard reapRetryable uses: an
-	// attempt whose request_id already reached ai_usage_logs has billed, so it
+	// attempt whose request_id already reached ai_request_keys has billed, so it
 	// must not be requeued and run again. Such a row is left running for the
 	// lease-expiry path (reapDead) to fail. With MaxAttempts=1 handlers no row is
 	// running here at all once workers have drained; the guard is what keeps the
@@ -361,7 +361,7 @@ func (s *postgresStore) releaseWorker(ctx context.Context, workerID string) (int
 		    attempt_count    = greatest(attempt_count - 1, 0)
 		WHERE worker_id = $1 AND status = 'running'
 		  AND NOT EXISTS (
-		      SELECT 1 FROM ai_usage_logs u WHERE u.request_id = ai_async_tasks.request_id
+		      SELECT 1 FROM ai_request_keys u WHERE u.request_id = ai_async_tasks.request_id
 		  )
 	`, workerID)
 	if err != nil {

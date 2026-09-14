@@ -3,303 +3,141 @@ package postgres
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
-	"time"
-
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
-
-	"xiaodou/dai/internal/ai/audit"
-	coreidentity "xiaodou/dai/internal/ai/core/identity"
-	dbgen "xiaodou/dai/internal/ai/db/gen"
 	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/internal/ai/serving"
-	"xiaodou/dai/internal/ai/subscription"
-	"xiaodou/dai/internal/billing/outbox"
 )
 
 const usageClientUserAgentMaxLen = 512
 
-const (
-	usageCompletionMaxAttempts = 5
-	usageCompletionRetryBase   = 50 * time.Millisecond
-)
-
-// UsageLogger implements serving.UsageLogger.
-// It creates the usage log row, upserts the hourly rollup, enqueues the balance
-// charge, and computes billing amounts via the unified Price Book model
-// (PriceBookBiller): platform (tenant) price, cascaded user price, and the
-// API-key quota debit.
-//
-// It does not move money itself. The charge is enqueued on bill_charge_outbox
-// in the same transaction as the usage row, and applied to the ledger by
-// billing/outbox shortly afterwards. Keeping the account update out of the
-// request transaction is what lets requests for one tenant settle in parallel.
-type UsageLogger struct {
-	pool              *translatingPool
-	q                 *dbgen.Queries
-	biller            usageBiller
-	apiKeyInvalidator apiKeyCacheInvalidator
-	auditEnqueuer     auditTxEnqueuer
-	logger            *zap.Logger
-}
-
 type apiKeyCacheInvalidator interface {
 	DelByID(context.Context, string) error
 }
-
-type auditTxEnqueuer interface {
-	EnqueueTx(context.Context, pgx.Tx, *audit.Payload) error
-}
-
 type usageBiller interface {
 	Calculate(context.Context, *serving.Request) (domain.BillingResult, error)
 }
 
-func NewUsageLogger(pool *pgxpool.Pool, biller usageBiller) *UsageLogger {
-	return &UsageLogger{
-		pool:   newTranslatingPool(pool),
-		q:      NewQueries(pool),
-		biller: biller,
-		logger: zap.NewNop(),
-	}
+// Deprecated constructor name for internal callers; there is only one writer.
+func NewUsageLogger(pool *pgxpool.Pool, biller usageBiller) *RequestStore {
+	return NewRequestStore(pool, biller, nil)
 }
-
-func (l *UsageLogger) WithLogger(logger *zap.Logger) *UsageLogger {
+func (s *RequestStore) WithLogger(logger *zap.Logger) *RequestStore {
 	if logger != nil {
-		l.logger = logger
+		s.logger = logger
 	}
-	return l
+	return s
 }
 
-func (l *UsageLogger) WithAPIKeyCacheInvalidator(invalidator apiKeyCacheInvalidator) *UsageLogger {
-	l.apiKeyInvalidator = invalidator
-	return l
+type usageMetadata struct {
+	RequestID                          string         `json:"request_id"`
+	TraceID                            pgtype.Text    `json:"trace_id"`
+	ApiKeyID                           pgtype.UUID    `json:"api_key_id"`
+	KeyOwnerType                       string         `json:"key_owner_type"`
+	AuthMethod                         string         `json:"auth_method"`
+	RequestSource                      string         `json:"request_source"`
+	TenantID                           string         `json:"tenant_id"`
+	UserID                             pgtype.Text    `json:"user_id"`
+	ClientUserAgent                    string         `json:"client_user_agent"`
+	ExternalUserID                     pgtype.Text    `json:"external_user_id"`
+	GroupID                            pgtype.UUID    `json:"group_id"`
+	GroupNameSnapshot                  string         `json:"group_name_snapshot"`
+	GroupDefaultUserMultiplierSnapshot pgtype.Numeric `json:"group_default_user_multiplier_snapshot"`
+	UserMultiplierOverrideSnapshot     pgtype.Numeric `json:"user_multiplier_override_snapshot"`
+	EffectiveUserMultiplierSnapshot    pgtype.Numeric `json:"effective_user_multiplier_snapshot"`
+	BillingGroupLabelSnapshot          string         `json:"billing_group_label_snapshot"`
+	ModelCode                          string         `json:"model_code"`
+	RequestedModel                     string         `json:"requested_model"`
+	MatchedDispatchRuleID              pgtype.UUID    `json:"matched_dispatch_rule_id"`
+	MatchedDispatchRuleSummary         pgtype.Text    `json:"matched_dispatch_rule_summary"`
+	ResolvedLogicalModel               pgtype.Text    `json:"resolved_logical_model"`
+	ResolvedProviderFamily             pgtype.Text    `json:"resolved_provider_family"`
+	CapabilityType                     string         `json:"capability_type"`
+	GroupTargetID                      pgtype.UUID    `json:"group_target_id"`
+	UpstreamAccountID                  pgtype.UUID    `json:"upstream_account_id"`
+	EndpointID                         pgtype.UUID    `json:"endpoint_id"`
+	CredentialPoolID                   pgtype.UUID    `json:"credential_pool_id"`
+	OauthCredentialID                  pgtype.UUID    `json:"oauth_credential_id"`
+	ProviderCode                       pgtype.Text    `json:"provider_code"`
+	UpstreamModel                      pgtype.Text    `json:"upstream_model"`
+	ProviderFormat                     pgtype.Text    `json:"provider_format"`
+	ConversationID                     pgtype.Text    `json:"conversation_id"`
+	Stream                             bool           `json:"stream"`
+	PromptTokens                       int32          `json:"prompt_tokens"`
+	CompletionTokens                   int32          `json:"completion_tokens"`
+	CacheWriteTokens                   int32          `json:"cache_write_tokens"`
+	CacheReadTokens                    int32          `json:"cache_read_tokens"`
+	ReasoningTokens                    int32          `json:"reasoning_tokens"`
+	ReasoningEffort                    pgtype.Text    `json:"reasoning_effort"`
+	TotalTokens                        int32          `json:"total_tokens"`
+	BillableUnitType                   string         `json:"billable_unit_type"`
+	BillableUnits                      int64          `json:"billable_units"`
+	CatalogBase                        int64          `json:"catalog_base"`
+	TenantPayable                      int64          `json:"tenant_payable"`
+	RetailBase                         int64          `json:"retail_base"`
+	UserPayable                        int64          `json:"user_payable"`
+	UserCharged                        int64          `json:"user_charged"`
+	ApiKeyQuotaCost                    int64          `json:"api_key_quota_cost"`
+	ServiceTier                        string         `json:"service_tier"`
+	BillingBreakdown                   []byte         `json:"billing_breakdown"`
+	BillingStatus                      string         `json:"billing_status"`
+	RequestStatus                      string         `json:"request_status"`
+	HttpStatus                         pgtype.Int4    `json:"http_status"`
+	UpstreamStatus                     pgtype.Int4    `json:"upstream_status"`
+	LatencyMs                          pgtype.Int4    `json:"latency_ms"`
+	FirstTokenLatencyMs                pgtype.Int4    `json:"first_token_latency_ms"`
+	RequestTotalMs                     pgtype.Int4    `json:"request_total_ms"`
+	RequestSetupMs                     pgtype.Int4    `json:"request_setup_ms"`
+	FirstResponseByteMs                pgtype.Int4    `json:"first_response_byte_ms"`
+	ResponseTailMs                     pgtype.Int4    `json:"response_tail_ms"`
+	FinalAttemptHeaderMs               pgtype.Int4    `json:"final_attempt_header_ms"`
+	FinalAttemptTotalMs                pgtype.Int4    `json:"final_attempt_total_ms"`
+	ErrorCode                          pgtype.Text    `json:"error_code"`
+	ErrorMessage                       pgtype.Text    `json:"error_message"`
+	UsageEstimated                     bool           `json:"usage_estimated"`
+	TokenUsageSource                   string         `json:"token_usage_source"`
+	ProviderTerminalState              string         `json:"provider_terminal_state"`
+	ClientDeliveryState                string         `json:"client_delivery_state"`
+	CancellationOrigin                 string         `json:"cancellation_origin"`
+	BillingReason                      string         `json:"billing_reason"`
+	ResponseSummaryState               string         `json:"response_summary_state"`
+	AttemptsCount                      int32          `json:"attempts_count"`
+	FinalRouteID                       pgtype.UUID    `json:"final_route_id"`
+	ClientProtocol                     string         `json:"client_protocol"`
+	Resolution                         pgtype.Text    `json:"resolution"`
+	ProtocolConversionEnabled          bool           `json:"protocol_conversion_enabled"`
+	UpstreamModelMappingApplied        bool           `json:"upstream_model_mapping_applied"`
+	PublicResponseModel                pgtype.Text    `json:"public_response_model"`
+	BillingSource                      string         `json:"billing_source"`
+	SubscriptionID                     pgtype.UUID    `json:"subscription_id"`
 }
-
-func (l *UsageLogger) WithAuditEnqueuer(enqueuer auditTxEnqueuer) *UsageLogger {
-	l.auditEnqueuer = enqueuer
-	return l
-}
-
-// Log records a usage entry regardless of request success/failure.
-// BillingResult is calculated here, then usage, API-key quota, subscription
-// quota, and the direct balance charge are committed in one transaction.
-func (l *UsageLogger) Log(ctx context.Context, req *serving.Request) error {
-	serving.EnsureSettlementState(req)
-	serving.ApplyReportedUsage(req)
-	if req.AuditPayload != nil {
-		audit.CompactTextPayload(req.AuditPayload)
-	}
-	subject := req.RuntimeSubject()
-	if subject == nil || req.Candidate == nil {
-		return nil
-	}
-
-	billing, err := l.biller.Calculate(ctx, req)
-	if err != nil {
-		return fmt.Errorf("calculate prepared billing: %w", err)
-	}
-	if serving.ShouldVoidBilling(req) {
-		if domain.UsesReportedTokenBilling(req.CapabilityType) {
-			req.BillingReason = "missing_upstream_usage"
-		}
-		billing = voidBilling(billing, req.BillingReason)
-		req.BillingStatus = domain.BillingVoid
-	} else if len(req.Attempts) == 0 && req.RequestStatus == domain.RequestFailed {
-		req.TokenUsage = domain.TokenUsage{}
-		req.TokenCountSource = ""
-		req.UpstreamStatus = 0
-		billing = unattemptedBilling(billing)
-	}
-	billing.BillingBreakdownJSON = annotateSettlementMetadata(billing.BillingBreakdownJSON, req)
-	req.BillingResult = billing
-	var lastErr error
-	backoff := usageCompletionRetryBase
-	for attempt := 1; attempt <= usageCompletionMaxAttempts; attempt++ {
-		completed, err := l.logOnce(ctx, req, billing)
-		if err == nil {
-			if completed {
-				l.invalidateAPIKeyCache(ctx, req.RuntimeSubject())
-			}
-			return nil
-		}
-		lastErr = err
-		if attempt == usageCompletionMaxAttempts {
-			break
-		}
-		timer := time.NewTimer(backoff)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return fmt.Errorf("complete usage after %d attempt(s): %w", attempt, errors.Join(lastErr, ctx.Err()))
-		case <-timer.C:
-		}
-		backoff *= 3
-	}
-	// Nothing was committed, so nothing is half-recorded: the usage row and the
-	// charge share one transaction. Reaching here means PostgreSQL was
-	// unreachable for the whole retry window, which the admission gate would
-	// also have failed closed on.
-	return fmt.Errorf("complete usage after %d attempts: %w", usageCompletionMaxAttempts, lastErr)
-}
-
-// logOnce performs one idempotent completion attempt. A commit whose result is
-// unknown can be retried safely: request_id is unique and every financial
-// mutation is in the same transaction as that insert.
-func (l *UsageLogger) logOnce(ctx context.Context, req *serving.Request, billing domain.BillingResult) (bool, error) {
-	subject := req.RuntimeSubject()
-	tx, err := l.pool.Begin(ctx)
-	if err != nil {
-		return false, fmt.Errorf("begin usage completion: %w", err)
-	}
-	defer tx.Rollback(ctx)
-	qtx := queriesWithTx(tx)
-
-	if _, err := l.createUsageLog(ctx, qtx, req, billing); errors.Is(err, pgx.ErrNoRows) {
-		// request_id is the completion idempotency key. Duplicate completion must
-		// not increment API key quota or rollups again.
-		return false, nil
-	} else if err != nil {
-		return false, fmt.Errorf("create usage log: %w", err)
-	}
-	if l.auditEnqueuer != nil && req.AuditPayload != nil {
-		if err := l.auditEnqueuer.EnqueueTx(ctx, tx, req.AuditPayload); err != nil {
-			return false, fmt.Errorf("enqueue audit inbox with usage: %w", err)
-		}
-	}
-	if subject.AuthMethod == coreidentity.AuthMethodAPIKey && subject.APIKeyID != "" {
-		rows, err := qtx.ConfirmAPIKeyQuotaUsage(ctx, dbgen.ConfirmAPIKeyQuotaUsageParams{
-			ID:        mustParseUUID(subject.APIKeyID),
-			QuotaUsed: billing.APIKeyQuotaCostMicro,
-		})
-		if err != nil {
-			return false, fmt.Errorf("confirm api key quota: %w", err)
-		}
-		if rows != 1 {
-			return false, fmt.Errorf("confirm api key quota: key not found")
-		}
-	}
-	if err := l.accrueFinancials(ctx, tx, qtx, req, billing); err != nil {
-		return false, err
-	}
-	if err := qtx.UpsertUsageRollupHourly(ctx, buildUsageRollupParams(req, billing)); err != nil {
-		return false, fmt.Errorf("complete usage rollup: %w", err)
-	}
-	if err := l.reconcileAsyncTaskCharge(ctx, tx, req, billing); err != nil {
-		return false, err
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return false, fmt.Errorf("commit usage completion: %w", err)
-	}
-	return true, nil
-}
-
-// reconcileAsyncTaskCharge makes the usage completion authoritative for a
-// queued task, including tasks cancelled after upstream work began.
-func (l *UsageLogger) reconcileAsyncTaskCharge(ctx context.Context, tx pgx.Tx, req *serving.Request, billing domain.BillingResult) error {
-	if req == nil || req.RequestID == "" {
-		return nil
-	}
-	charge := billing.TenantPayableMicro
-	if subject := req.RuntimeSubject(); subject != nil && runtimeSubjectOwnerType(subject) == domain.OwnerUser {
-		charge = billing.UserChargedMicro
-	}
-	if req.BillingStatus == domain.BillingVoid {
-		// A void completion has no new customer charge. Preserve any existing
-		// caller_charge: clearing a positive value would silently erase a prior
-		// settlement without a compensating ledger reversal. The async task
-		// completion path uses GREATEST as well, so zero remains idempotent.
-		return nil
-	}
-	if _, err := tx.Exec(ctx, `
-		UPDATE ai_async_tasks
-		SET caller_charge = GREATEST(caller_charge, $2)
-		WHERE request_id = $1
-	`, req.RequestID, charge); err != nil {
-		return fmt.Errorf("reconcile async task charge: %w", err)
-	}
-	return nil
-}
-
-func (l *UsageLogger) invalidateAPIKeyCache(ctx context.Context, subject *coreidentity.Subject) {
-	if l.apiKeyInvalidator == nil || subject == nil || subject.APIKeyID == "" {
-		return
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
-	if err := l.apiKeyInvalidator.DelByID(ctx, subject.APIKeyID); err != nil {
-		l.logger.Warn("invalidate API key quota cache failed", zap.String("api_key_id", subject.APIKeyID), zap.Error(err))
-	}
-}
-
-// accrueFinancials runs in the same transaction as the unique usage insert.
-// The usage row is therefore the idempotency anchor for quota, subscription
-// quota, and the enqueued balance charge.
-//
-// Subscription quota is debited here because it is a counter on a row this
-// request already owns. The balance charge is only enqueued: applying it needs
-// the account row, and holding that lock inside the request transaction is what
-// made every request for one tenant settle in single file.
-func (l *UsageLogger) accrueFinancials(
-	ctx context.Context,
-	tx pgx.Tx,
-	q *dbgen.Queries,
-	req *serving.Request,
-	billing domain.BillingResult,
-) error {
-	subject := req.RuntimeSubject()
-	if subject == nil || subject.TenantID == "" {
-		return nil
-	}
-	ownerType := runtimeSubjectOwnerType(subject)
-	tenantMicro := billing.TenantPayableMicro
-	userMicro := billing.UserChargedMicro
-	if ownerType == domain.OwnerTenant {
-		userMicro = 0
-	}
-
-	if req.BillingSource == subscription.BillingSourceSubscription && ownerType == domain.OwnerUser {
-		subMicro, ok := serving.SubscriptionDebitMicro(req)
-		if !ok {
-			// A failed request with no billable output is still an observable usage
-			// record, but consumes no package quota. A positive unmeterable amount
-			// indicates a broken admission snapshot and must fail closed.
-			if billing.RetailBaseMicro > 0 {
-				return fmt.Errorf("complete subscription billing: admitted usage is not meterable")
-			}
-			subMicro = 0
-		}
-		if subMicro > 0 {
-			if _, err := q.DebitSubscription(ctx, dbgen.DebitSubscriptionParams{
-				ID:             mustParseUUID(req.SubscriptionID),
-				Win5hUsedMicro: subMicro,
-			}); err != nil {
-				return fmt.Errorf("complete subscription billing: %w", err)
-			}
-		}
-		userMicro = 0
-	}
-	if tenantMicro == 0 && userMicro == 0 {
-		return nil
-	}
-	if err := outbox.Enqueue(ctx, tx, outbox.Charge{
-		RequestID:   req.RequestID,
-		TenantID:    subject.TenantID,
-		UserID:      subject.UserID,
-		TenantMicro: tenantMicro,
-		UserMicro:   userMicro,
-		Description: "AI 请求额度扣费",
-	}); err != nil {
-		return fmt.Errorf("enqueue balance charge: %w", err)
-	}
-	return nil
+type usageRollupMetadata struct {
+	TenantID            string      `json:"tenant_id"`
+	UserID              pgtype.Text `json:"user_id"`
+	ApiKeyID            pgtype.UUID `json:"api_key_id"`
+	RequestSource       string      `json:"request_source"`
+	CapabilityType      string      `json:"capability_type"`
+	ModelCode           string      `json:"model_code"`
+	ProviderCode        pgtype.Text `json:"provider_code"`
+	RequestStatus       string      `json:"request_status"`
+	BillableUnitType    string      `json:"billable_unit_type"`
+	PromptTokens        int64       `json:"prompt_tokens"`
+	CompletionTokens    int64       `json:"completion_tokens"`
+	CacheWriteTokens    int64       `json:"cache_write_tokens"`
+	CacheReadTokens     int64       `json:"cache_read_tokens"`
+	ReasoningTokens     int64       `json:"reasoning_tokens"`
+	TotalTokens         int64       `json:"total_tokens"`
+	BillableUnits       int64       `json:"billable_units"`
+	CatalogBase         int64       `json:"catalog_base"`
+	TenantPayable       int64       `json:"tenant_payable"`
+	RetailBase          int64       `json:"retail_base"`
+	UserPayable         int64       `json:"user_payable"`
+	UserCharged         int64       `json:"user_charged"`
+	ApiKeyQuotaCost     int64       `json:"api_key_quota_cost"`
+	LatencyMs           pgtype.Int4 `json:"latency_ms"`
+	RequestTotalMs      pgtype.Int4 `json:"request_total_ms"`
+	FirstResponseByteMs pgtype.Int4 `json:"first_response_byte_ms"`
 }
 
 func usageUserMultiplierOverrideSnapshot(billing domain.BillingResult) pgtype.Numeric {
@@ -313,7 +151,7 @@ func usageUserMultiplierOverrideSnapshot(billing domain.BillingResult) pgtype.Nu
 // DB writes
 // ============================================================================
 
-func buildUsageLogParams(req *serving.Request, billing domain.BillingResult) dbgen.CreateUsageLogParams {
+func buildUsageLogParams(req *serving.Request, billing domain.BillingResult) usageMetadata {
 	c := req.Candidate
 	subject := req.RuntimeSubject()
 	usage := req.TokenUsage
@@ -363,7 +201,7 @@ func buildUsageLogParams(req *serving.Request, billing domain.BillingResult) dbg
 	finalAttemptHeaderMs, hasFinalAttemptHeaderMs := req.FinalAttemptHeaderMs()
 	finalAttemptTotalMs, hasFinalAttemptTotalMs := req.FinalAttemptTotalMs()
 
-	params := dbgen.CreateUsageLogParams{
+	params := usageMetadata{
 		RequestID:                          req.RequestID,
 		TraceID:                            nullableText(req.TraceID),
 		ApiKeyID:                           apiKeyUUID,
@@ -449,10 +287,6 @@ func buildUsageLogParams(req *serving.Request, billing domain.BillingResult) dbg
 	return params
 }
 
-func (l *UsageLogger) createUsageLog(ctx context.Context, q *dbgen.Queries, req *serving.Request, billing domain.BillingResult) (pgtype.UUID, error) {
-	return q.CreateUsageLog(ctx, buildUsageLogParams(req, billing))
-}
-
 func usageClientUserAgent(req *serving.Request) string {
 	if req == nil || req.Envelope == nil || req.Envelope.R == nil {
 		return ""
@@ -464,7 +298,7 @@ func usageClientUserAgent(req *serving.Request) string {
 	return ua
 }
 
-func buildUsageRollupParams(req *serving.Request, billing domain.BillingResult) dbgen.UpsertUsageRollupHourlyParams {
+func buildUsageRollupParams(req *serving.Request, billing domain.BillingResult) usageRollupMetadata {
 	subject := req.RuntimeSubject()
 	usage := req.TokenUsage
 	apiKeyID := mustParseUUID("00000000-0000-0000-0000-000000000000")
@@ -478,7 +312,7 @@ func buildUsageRollupParams(req *serving.Request, billing domain.BillingResult) 
 		providerCode = req.Candidate.ProviderCode
 	}
 
-	return dbgen.UpsertUsageRollupHourlyParams{
+	return usageRollupMetadata{
 		TenantID:            runtimeSubjectTenantID(subject),
 		UserID:              nullableText(runtimeSubjectUserID(subject)),
 		ApiKeyID:            apiKeyID,

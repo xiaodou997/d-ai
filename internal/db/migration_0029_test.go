@@ -10,7 +10,7 @@ import (
 
 func TestMigration0029SimplifiesGroupRoutingPolicy(t *testing.T) {
 	ctx := context.Background()
-	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 4})
+	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 4, SchemaSQL: legacySchema40(t)})
 	if err != nil {
 		t.Skipf("database unavailable: %v", err)
 	}
@@ -22,7 +22,8 @@ func TestMigration0029SimplifiesGroupRoutingPolicy(t *testing.T) {
 			ADD COLUMN route_strategy TEXT NOT NULL DEFAULT 'adaptive',
 			ADD COLUMN route_objective TEXT NOT NULL DEFAULT 'balanced';
 		ALTER TABLE ai_group_targets
-			ADD COLUMN priority INTEGER NOT NULL DEFAULT 100,
+			DROP COLUMN IF EXISTS priority;
+ ALTER TABLE ai_group_targets ADD COLUMN priority INTEGER NOT NULL DEFAULT 100,
 			ADD COLUMN routing_weight NUMERIC(10,4) NOT NULL DEFAULT 1;
 		UPDATE dai_schema_metadata SET version = 28 WHERE singleton = TRUE;
 	`); err != nil {

@@ -128,15 +128,16 @@ func (h *imageTaskHandler) Execute(ctx context.Context, task asynctask.Task) (as
 		return asynctask.Result{}, fmt.Errorf("decode persisted image request: %w", err)
 	}
 	replayed := h.replayer.Replay(ctx, ReplayInput{
-		Subject:        task.Subject,
-		ExecutionMode:  coreruntime.ExecutionModeAsync,
-		Capability:     domain.CapabilityImage,
-		Protocol:       domain.ProtocolOpenAIImages,
-		ClientPath:     clientPath,
-		Body:           input.Body,
-		ContentType:    input.ContentType,
-		RequestID:      task.RequestID,
-		StreamExpected: meta.Stream,
+		Subject:         task.Subject,
+		ExecutionMode:   coreruntime.ExecutionModeAsync,
+		Capability:      domain.CapabilityImage,
+		Protocol:        domain.ProtocolOpenAIImages,
+		ClientPath:      clientPath,
+		Body:            input.Body,
+		ContentType:     input.ContentType,
+		RequestID:       task.RequestID,
+		BillingOriginAt: task.CreatedAt,
+		StreamExpected:  meta.Stream,
 	})
 	if err := ctx.Err(); err != nil {
 		return asynctask.Result{}, err

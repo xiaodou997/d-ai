@@ -63,9 +63,9 @@ type GetResourceStatisticsParams = systemports.ResourceStatisticsQuery
 // transport.
 func (r *SystemRepository) ListFailedTransactionAlerts(ctx context.Context) ([]systemports.FailedTransactionAlert, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT request_id, COALESCE(settlement_error, ''), billing_status, created_at
-		FROM ai_usage_logs
-		WHERE billing_status = 'failed' AND created_at > now() - interval '24 hours'
+		SELECT request_id, last_error, state, created_at
+		FROM bill_settlements
+		WHERE state = 'review' AND created_at > now() - interval '24 hours'
 		ORDER BY created_at DESC
 		LIMIT 20
 	`)

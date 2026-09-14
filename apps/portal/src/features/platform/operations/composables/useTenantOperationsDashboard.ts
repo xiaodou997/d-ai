@@ -3,7 +3,7 @@ import { computed, onMounted, shallowRef } from "vue";
 import { platformTenantApi } from "@/api/platformTenant";
 import { aiTenantApi } from "@/api/aiTenant";
 import { tenantApi } from "@/api/tenant";
-import { tenantUsageApi } from "@/features/ai/usage";
+import { listTenantUsageRecords } from "@/features/ai/usage";
 import {
   buildWorkbenchRangeWindow,
   getWorkbenchRangeOption,
@@ -123,10 +123,9 @@ export function useTenantOperationsDashboard() {
       platformTenantApi.getAnalyticsOverview(params),
       aiTenantApi.getDashboardSummary(dateRange),
       platformTenantApi.getUserConsumption({ ...params, limit: 8 }),
-      tenantUsageApi.listRecords({
+      listTenantUsageRecords({
         limit: 8,
         offset: 0,
-        request_status: "success",
         ...dateRange
       }),
       platformTenantApi.getAppConsumption(params),

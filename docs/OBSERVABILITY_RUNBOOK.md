@@ -64,3 +64,5 @@ dai_ai_audit_inbox_dead > 0
 - `/ready` 能够检查 runtime PostgreSQL、billing PostgreSQL（如独立配置）和 Redis。
 - 生产追踪 sampler 使用 parent-based 配置，OTLP endpoint 和 TLS 配置与部署环境一致。
 - 告警规则、联系人和本手册一起纳入发布制品或运维配置仓库。
+
+请求账本重构后，`dai_ai_requests_total` 与 `dai_ai_usage_reports_total` 的请求分类标签改为 `end_reason`：`completed`、`client_interrupted`、`request_error` 等。明确错误率与客户端中断率应分别查询 `end_reason="request_error"` 和 `end_reason="client_interrupted"`，不能合并为失败率。最终金额以 `bill_settlements` 的已过账数据及反向流水为准，执行侧计价结果不等于已扣款。

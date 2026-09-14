@@ -74,6 +74,7 @@ func buildRuntimeServingRequest(in coreruntime.ExecutionInput) (*serving.Request
 		IsStream:          in.Request.Stream,
 		ServiceTier:       serviceTier,
 		Subject:           runtimeSubjectPtr(in.Subject),
+		BillingOriginAt:   in.Request.BillingOriginAt,
 		StartedAt:         firstNonZeroTime(in.Request.ReceivedAt, time.Now()),
 		RequestID:         in.Request.RequestID,
 		TraceID:           in.Request.TraceID,
@@ -259,9 +260,16 @@ func runtimeResultFromServing(req *serving.Request) coreruntime.Result {
 			upstreamSurface = mapped
 		}
 	}
-	callerCharge := req.BillingResult.TenantPayableMicro
-	if subject := req.RuntimeSubject(); subject != nil && subject.Scope == coreidentity.ScopeUser {
-		callerCharge = req.BillingResult.UserChargedMicro
+	// A frozen price is an amount due, not a posted debit. Async task rows are
+	// updated independently by the settlement worker, even after task completion.
+	callerCharge, userCharged, keyUsed := int64(0), int64(0), int64(0)
+	if req.BillingStatus == domain.BillingSettled {
+		callerCharge = req.BillingResult.TenantPayableMicro
+		userCharged = req.BillingResult.UserChargedMicro
+		keyUsed = req.BillingResult.APIKeyQuotaCostMicro
+		if subject := req.RuntimeSubject(); subject != nil && subject.Scope == coreidentity.ScopeUser {
+			callerCharge = userCharged
+		}
 	}
 	return coreruntime.Result{
 		RequestID:            req.RequestID,
@@ -277,8 +285,8 @@ func runtimeResultFromServing(req *serving.Request) coreruntime.Result {
 		CatalogBaseMicro:     req.BillingResult.CatalogBaseMicro,
 		TenantPayableMicro:   req.BillingResult.TenantPayableMicro,
 		UserPayableMicro:     req.BillingResult.UserPayableMicro,
-		UserChargedMicro:     req.BillingResult.UserChargedMicro,
-		APIKeyQuotaCostMicro: req.BillingResult.APIKeyQuotaCostMicro,
+		UserChargedMicro:     userCharged,
+		APIKeyQuotaCostMicro: keyUsed,
 		CallerChargeMicro:    callerCharge,
 		ErrorCode:            req.ErrorCode,
 		ErrorMessage:         req.ErrorMessage,

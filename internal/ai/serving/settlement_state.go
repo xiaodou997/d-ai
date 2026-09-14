@@ -151,17 +151,7 @@ func isClientContextCancellation(ctx context.Context) bool {
 // observed. This protects customers from paying for an unconfirmed stream
 // while preserving raw observed usage in the usage log.
 func shouldVoidBilling(req *Request) bool {
-	if req == nil {
-		return false
-	}
-	initializeSettlementState(req)
-	if domain.UsesReportedTokenBilling(req.CapabilityType) {
-		return !req.UsageEvidence.Reported()
-	}
-	return req.RequestStatus == domain.RequestCancelled &&
-		(req.CancellationOrigin == domain.CancellationClient || req.CancellationOrigin == domain.CancellationGateway || req.CancellationOrigin == domain.CancellationProvider) &&
-		req.ProviderTerminalState != domain.ProviderTerminalCompleted &&
-		req.ProviderTerminalState != domain.ProviderTerminalFailed
+	return !DecideCompletion(req).Billable
 }
 
 // ShouldVoidBilling is the settlement boundary used by adapters. It exposes

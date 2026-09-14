@@ -2593,9 +2593,6 @@ components:
         request_id:
           description: 请求 ID
           type: string
-        request_status:
-          description: 请求状态
-          type: string
         requested_model:
           description: 客户端请求模型名
           type: string
@@ -2612,7 +2609,6 @@ components:
         - request_id
         - model_code
         - protocol_conversion_enabled
-        - request_status
       type: object
     DashboardRecentErrorsOutputBody:
       additionalProperties: false
@@ -2917,6 +2913,53 @@ components:
         - account_id
         - outstanding_debt_micro_usd
         - service_state
+      type: object
+    DebugSession:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/DebugSession.json
+          format: uri
+          readOnly: true
+          type: string
+        expires_at:
+          format: date-time
+          type: string
+        id:
+          type: string
+      required:
+        - id
+        - expires_at
+      type: object
+    DebugSessionInput:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/DebugSessionInput.json
+          format: uri
+          readOnly: true
+          type: string
+        api_key_id:
+          type: string
+        hours:
+          default: 1
+          format: int64
+          maximum: 24
+          minimum: 1
+          type: integer
+        model:
+          type: string
+        tenant_id:
+          type: string
+      required:
+        - tenant_id
+        - api_key_id
+        - model
+        - hours
       type: object
     DeleteAPIKeyOutputBody:
       additionalProperties: false
@@ -4343,7 +4386,7 @@ components:
         retail_price_book_id:
           type: string
         route_policy:
-          description: 分组路由策略；为空默认智能均衡
+          description: 分组路由策略；创建时为空默认智能均衡
           enum:
             - balanced
             - cost
@@ -7210,6 +7253,53 @@ components:
         - tenantName
         - createdTime
       type: object
+    RecordCharge:
+      additionalProperties: false
+      properties:
+        api_key_used_micro:
+          format: int64
+          type: integer
+        posted_at:
+          format: date-time
+          type: string
+        processing_detail:
+          type: string
+        reason:
+          type: string
+        reference_cost_micro:
+          format: int64
+          type: integer
+        refunded_at:
+          format: date-time
+          type: string
+        source:
+          type: string
+        state:
+          type: string
+        subscription_used_micro:
+          format: int64
+          type: integer
+        tenant_charged_micro:
+          format: int64
+          type: integer
+        tenant_due_micro:
+          format: int64
+          type: integer
+        user_charged_micro:
+          format: int64
+          type: integer
+        user_due_micro:
+          format: int64
+          type: integer
+      required:
+        - state
+        - reason
+        - source
+        - user_due_micro
+        - user_charged_micro
+        - api_key_used_micro
+        - subscription_used_micro
+      type: object
     RecordCompletedRefundInputBody:
       additionalProperties: false
       properties:
@@ -7249,31 +7339,156 @@ components:
         - refundedAt
         - reason
       type: object
-    RecordingSettings:
+    RecordError:
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        origin:
+          type: string
+        stage:
+          type: string
+      required:
+        - origin
+        - stage
+        - code
+        - message
+      type: object
+    RecordPage:
       additionalProperties: false
       properties:
         $schema:
           description: A URL to the JSON Schema for this object.
           examples:
-            - https://example.com/schemas/RecordingSettings.json
+            - https://example.com/schemas/RecordPage.json
           format: uri
           readOnly: true
           type: string
-        level:
-          enum:
-            - basic
-            - headers
-            - full
+        next_cursor:
           type: string
-        sensitive_headers:
+        records:
           items:
-            type: string
+            $ref: "#/components/schemas/RequestRecord"
           type:
             - array
             - "null"
       required:
-        - level
-        - sensitive_headers
+        - records
+      type: object
+    RecordRefundInputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/RecordRefundInputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        reason:
+          maxLength: 500
+          minLength: 1
+          type: string
+      required:
+        - reason
+      type: object
+    RecordRefundOutputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/RecordRefundOutputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        refunded:
+          type: boolean
+      required:
+        - refunded
+      type: object
+    RecordSummary:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/RecordSummary.json
+          format: uri
+          readOnly: true
+          type: string
+        errors:
+          format: int64
+          type: integer
+        input_tokens:
+          format: int64
+          type: integer
+        interruptions:
+          format: int64
+          type: integer
+        output_tokens:
+          format: int64
+          type: integer
+        requests:
+          format: int64
+          type: integer
+        tenant_charged_micro:
+          format: int64
+          type: integer
+        tenant_refunded_micro:
+          format: int64
+          type: integer
+        user_charged_micro:
+          format: int64
+          type: integer
+        user_refunded_micro:
+          format: int64
+          type: integer
+      required:
+        - requests
+        - errors
+        - interruptions
+        - input_tokens
+        - output_tokens
+        - user_charged_micro
+        - user_refunded_micro
+      type: object
+    RecordTokens:
+      additionalProperties: false
+      properties:
+        cache_read:
+          format: int64
+          type:
+            - integer
+            - "null"
+        cache_write:
+          format: int64
+          type:
+            - integer
+            - "null"
+        input:
+          format: int64
+          type:
+            - integer
+            - "null"
+        output:
+          format: int64
+          type:
+            - integer
+            - "null"
+        reasoning:
+          format: int64
+          type:
+            - integer
+            - "null"
+      required:
+        - input
+        - output
+        - cache_read
+        - cache_write
+        - reasoning
       type: object
     ReplaceGroupTargetsRequest:
       additionalProperties: false
@@ -7344,6 +7559,93 @@ components:
       required:
         - eligibleRows
         - occupiedBytes
+      type: object
+    RequestRecord:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/RequestRecord.json
+          format: uri
+          readOnly: true
+          type: string
+        attempts:
+          items: {}
+          type:
+            - array
+            - "null"
+        charge:
+          $ref: "#/components/schemas/RecordCharge"
+        created_at:
+          format: date-time
+          type: string
+        delivery:
+          type: string
+        diagnostics_available:
+          type: boolean
+        end_reason:
+          type: string
+        error:
+          $ref: "#/components/schemas/RecordError"
+        evidence: {}
+        execution_available:
+          type: boolean
+        first_token_ms:
+          format: int64
+          type:
+            - integer
+            - "null"
+        http_status:
+          format: int64
+          type:
+            - integer
+            - "null"
+        internal_detail:
+          type: string
+        is_error:
+          type: boolean
+        media_unit_type:
+          type: string
+        media_units:
+          format: double
+          type: number
+        model:
+          type: string
+        pricing: {}
+        request_id:
+          type: string
+        source:
+          type: string
+        stream:
+          type: boolean
+        tenant_id:
+          type: string
+        tokens:
+          $ref: "#/components/schemas/RecordTokens"
+        total_ms:
+          format: int64
+          type:
+            - integer
+            - "null"
+        user_id:
+          type: string
+      required:
+        - request_id
+        - created_at
+        - model
+        - source
+        - end_reason
+        - delivery
+        - http_status
+        - stream
+        - first_token_ms
+        - total_ms
+        - tokens
+        - charge
+        - is_error
+        - execution_available
+        - diagnostics_available
       type: object
     ResolutionUSDDTO:
       additionalProperties: false
@@ -9727,9 +10029,6 @@ components:
         request_source:
           description: 请求来源
           type: string
-        request_status:
-          description: 请求状态
-          type: string
         request_total_ms:
           description: 请求总耗时，毫秒
           format: int32
@@ -9795,37 +10094,10 @@ components:
         - billing_status_label
         - refund_status
         - billing_source
-        - request_status
         - provider_terminal_state
         - client_delivery_state
         - cancellation_origin
         - response_summary_state
-      type: object
-    TenantUsageLogsOutputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/TenantUsageLogsOutputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        records:
-          items:
-            $ref: "#/components/schemas/TenantUsageLogDTO"
-          type:
-            - array
-            - "null"
-        stats:
-          $ref: "#/components/schemas/UsageStatsDTO"
-        total:
-          format: int64
-          type: integer
-      required:
-        - total
-        - stats
-        - records
       type: object
     TenantWorkspaceOverviewOutputBody:
       additionalProperties: false
@@ -11190,620 +11462,6 @@ components:
         - items
         - total
       type: object
-    UsageLogDTO:
-      additionalProperties: false
-      properties:
-        api_key_id:
-          description: API key ID
-          type: string
-        api_key_quota_usd:
-          description: API key 配额USD 金额
-          format: double
-          type: number
-        attempts_count:
-          description: 路由尝试次数（含重试）
-          format: int32
-          type: integer
-        auth_method:
-          description: 认证方式
-          type: string
-        billable_unit_type:
-          description: 计费单位类型
-          type: string
-        billable_units:
-          description: 计费单位数
-          format: int64
-          type: integer
-        billing_group_label_snapshot:
-          description: 请求时分组展示标签快照
-          type: string
-        billing_reason:
-          description: 计费判定原因
-          type: string
-        billing_source:
-          description: 计费来源：payg=按量 / subscription=订阅内
-          type: string
-        billing_status:
-          description: 计费状态
-          type: string
-        cache_read_tokens:
-          description: 缓存读 token 数
-          format: int32
-          type: integer
-        cache_write_tokens:
-          description: 缓存写 token 数
-          format: int32
-          type: integer
-        cancellation_origin:
-          description: 取消来源
-          type: string
-        capability_type:
-          description: 能力类型
-          type: string
-        catalog_base_usd:
-          description: 按命中上游资源价格表计算的参考成本
-          format: double
-          type: number
-        client_delivery_state:
-          description: 客户端交付状态
-          type: string
-        client_user_agent:
-          description: 客户端 User-Agent 摘要
-          type: string
-        completion_tokens:
-          description: 输出 token 数
-          format: int32
-          type: integer
-        conversation_id:
-          description: 会话 ID
-          type: string
-        created_at:
-          description: 创建时间，Unix 毫秒
-          format: int64
-          type: integer
-        effective_user_multiplier_snapshot:
-          description: 请求时最终倍率快照
-          format: double
-          type: number
-        endpoint_id:
-          description: 供应商端点 ID
-          type: string
-        error_code:
-          description: 错误码
-          type: string
-        error_message:
-          description: 错误信息
-          type: string
-        external_user_id:
-          description: 外部用户 ID
-          type: string
-        final_attempt_header_ms:
-          description: 最终一次上游尝试拿到响应头的耗时，毫秒
-          format: int32
-          type: integer
-        final_attempt_total_ms:
-          description: 最终一次上游尝试总耗时，毫秒
-          format: int32
-          type: integer
-        first_response_byte_ms:
-          description: 首个响应字节耗时，毫秒
-          format: int32
-          type: integer
-        first_token_latency_ms:
-          description: 首 token 延迟，毫秒
-          format: int32
-          type: integer
-        group_default_user_multiplier_snapshot:
-          description: 请求时分组默认倍率快照
-          format: double
-          type: number
-        group_id:
-          description: 命中分组 ID
-          type: string
-        group_name_snapshot:
-          description: 请求时分组名称快照
-          type: string
-        group_target_id:
-          description: 命中的分组上游目标 ID
-          type: string
-        http_status:
-          description: HTTP 状态码
-          format: int32
-          type: integer
-        id:
-          description: 用量日志 ID
-          type: string
-        key_owner_type:
-          description: Key 所属主体类型
-          type: string
-        latency_ms:
-          description: 请求延迟，毫秒
-          format: int32
-          type: integer
-        matched_dispatch_rule_id:
-          description: 命中的分组调度规则 ID
-          type: string
-        matched_dispatch_rule_summary:
-          description: 命中的分组调度规则摘要
-          type: string
-        model_code:
-          description: 模型编码
-          type: string
-        prompt_tokens:
-          description: 输入 token 数
-          format: int32
-          type: integer
-        protocol_conversion_enabled:
-          description: 分组是否允许协议转换
-          type: boolean
-        provider_code:
-          description: 供应商编码
-          type: string
-        provider_terminal_state:
-          description: 上游终态：unknown/completed/failed/cancelled/incomplete
-          type: string
-        public_response_model:
-          description: 对客户端暴露的响应模型名
-          type: string
-        reasoning_effort:
-          description: 客户端请求推理强度（归一化：low/medium/high/xhigh/max）
-          type: string
-        reasoning_tokens:
-          description: 推理 token 数
-          format: int32
-          type: integer
-        refund_operator_id:
-          description: 退款操作人
-          type: string
-        refund_reason:
-          description: 退款原因
-          type: string
-        refund_status:
-          description: 退款状态：none/refunded
-          type: string
-        refunded_at:
-          description: 退款时间，Unix 毫秒
-          format: int64
-          type: integer
-        request_id:
-          description: 请求 ID
-          type: string
-        request_setup_ms:
-          description: 网关准备耗时，毫秒
-          format: int32
-          type: integer
-        request_source:
-          description: 请求来源
-          type: string
-        request_status:
-          description: 请求状态
-          type: string
-        request_total_ms:
-          description: 请求总耗时，毫秒
-          format: int32
-          type: integer
-        requested_model:
-          description: 客户端请求模型名
-          type: string
-        resolution:
-          description: 图片/视频规格，例如 1024x1024 / 720p
-          type: string
-        resolved_logical_model:
-          description: 调度后的逻辑模型
-          type: string
-        resolved_provider_family:
-          description: 最终实际选中的上游协议家族
-          type: string
-        response_summary_state:
-          description: 响应摘要状态
-          type: string
-        response_tail_ms:
-          description: 首个响应字节之后到请求结束的耗时，毫秒
-          format: int32
-          type: integer
-        retail_base_usd:
-          description: 分组零售价格表原价
-          format: double
-          type: number
-        service_tier:
-          description: 服务档位：standard/fast
-          type: string
-        settled_at:
-          description: 结算时间，Unix 毫秒
-          format: int64
-          type: integer
-        settlement_error:
-          description: 结算失败原因
-          type: string
-        stream:
-          description: 是否流式请求
-          type: boolean
-        tenant_id:
-          description: 租户 ID
-          type: string
-        tenant_payable_usd:
-          description: 平台向租户应收：上游参考成本乘租户结算倍率
-          format: double
-          type: number
-        token_usage_source:
-          description: token 用量来源：upstream=上游报告 / missing=缺失用量未计费 / mixed=历史或媒体部分估算 / estimated=历史或媒体完全估算
-          type: string
-        total_tokens:
-          description: 总 token 数
-          format: int32
-          type: integer
-        trace_id:
-          description: Trace ID
-          type: string
-        upstream_account_id:
-          description: 命中的上游账号 ID
-          type: string
-        upstream_account_name:
-          description: 命中的上游账号名称
-          type: string
-        upstream_model:
-          description: 上游模型
-          type: string
-        upstream_model_mapping_applied:
-          description: 是否发生了上游模型名映射
-          type: boolean
-        upstream_status:
-          description: 上游状态码
-          format: int32
-          type: integer
-        upstream_tenant_display_name:
-          description: 上游账号租户侧展示名称
-          type: string
-        usage_estimated:
-          description: 是否估算用量
-          type: boolean
-        user_charged_usd:
-          description: 用户实际扣款；订阅覆盖时为零
-          format: double
-          type: number
-        user_id:
-          description: 用户 ID
-          type: string
-        user_multiplier_override_snapshot:
-          description: 请求时用户侧覆盖倍率快照
-          format: double
-          type: number
-        user_payable_usd:
-          description: 用户零售应收：零售原价乘有效用户倍率
-          format: double
-          type: number
-      required:
-        - id
-        - request_id
-        - key_owner_type
-        - auth_method
-        - request_source
-        - tenant_id
-        - model_code
-        - capability_type
-        - stream
-        - prompt_tokens
-        - completion_tokens
-        - cache_write_tokens
-        - cache_read_tokens
-        - reasoning_tokens
-        - total_tokens
-        - attempts_count
-        - billable_unit_type
-        - billable_units
-        - catalog_base_usd
-        - tenant_payable_usd
-        - retail_base_usd
-        - user_payable_usd
-        - user_charged_usd
-        - api_key_quota_usd
-        - service_tier
-        - billing_status
-        - refund_status
-        - request_status
-        - provider_terminal_state
-        - client_delivery_state
-        - cancellation_origin
-        - response_summary_state
-        - protocol_conversion_enabled
-        - upstream_model_mapping_applied
-        - usage_estimated
-        - token_usage_source
-        - billing_source
-      type: object
-    UsageLogDetailDTO:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/UsageLogDetailDTO.json
-          format: uri
-          readOnly: true
-          type: string
-        api_key_id:
-          type: string
-        api_key_quota_usd:
-          description: API key 配额USD 金额
-          format: double
-          type: number
-        attempts_count:
-          description: 路由尝试次数（含重试）
-          format: int32
-          type: integer
-        attempts_detail:
-          description: 仅管理员可见：本次请求每次候选路由（上游账号/凭据）重试的明细
-        auth_method:
-          type: string
-        billing_breakdown: {}
-        billing_group_label_snapshot:
-          type: string
-        billing_reason:
-          type: string
-        billing_source:
-          description: 计费来源
-          type: string
-        billing_status:
-          type: string
-        cache_read_tokens:
-          format: int32
-          type: integer
-        cache_write_tokens:
-          format: int32
-          type: integer
-        cancellation_origin:
-          type: string
-        catalog_base_usd:
-          description: 上游目录基准价USD 金额
-          format: double
-          type: number
-        client_api_format:
-          description: 客户端 API 格式
-          type: string
-        client_delivery_state:
-          type: string
-        client_ip:
-          type: string
-        completion_tokens:
-          format: int32
-          type: integer
-        created_at:
-          description: 创建时间，Unix 毫秒
-          format: int64
-          type: integer
-        effective_user_multiplier_snapshot:
-          format: double
-          type: number
-        endpoint_id:
-          type: string
-        error_code:
-          type: string
-        error_message:
-          type: string
-        external_user_id:
-          type: string
-        failed_step:
-          description: 仅管理员可见：触发失败的调用链路阶段
-          type: string
-        final_attempt_header_ms:
-          format: int32
-          type: integer
-        final_attempt_total_ms:
-          format: int32
-          type: integer
-        first_response_byte_ms:
-          format: int32
-          type: integer
-        first_token_latency_ms:
-          format: int32
-          type: integer
-        group_default_user_multiplier_snapshot:
-          format: double
-          type: number
-        group_id:
-          type: string
-        group_name_snapshot:
-          type: string
-        http_status:
-          format: int32
-          type: integer
-        id:
-          type: string
-        internal_error_detail:
-          description: 仅管理员可见：未脱敏/未截断的真实底层错误（Go 错误链或上游原始报文）
-          type: string
-        key_owner_type:
-          type: string
-        latency_ms:
-          format: int32
-          type: integer
-        matched_dispatch_rule_id:
-          type: string
-        matched_dispatch_rule_summary:
-          type: string
-        media_refs: {}
-        model_code:
-          description: 模型编码
-          type: string
-        prompt_tokens:
-          format: int32
-          type: integer
-        protocol_conversion_enabled:
-          type: boolean
-        provider_api_format:
-          description: 最终上游 API 格式
-          type: string
-        provider_terminal_state:
-          type: string
-        public_response_model:
-          type: string
-        reasoning_effort:
-          description: 客户端请求推理强度（归一化）
-          type: string
-        reasoning_tokens:
-          format: int32
-          type: integer
-        refund_operator_id:
-          type: string
-        refund_reason:
-          type: string
-        refund_status:
-          type: string
-        refunded_at:
-          format: int64
-          type: integer
-        request_headers: {}
-        request_id:
-          type: string
-        request_messages: {}
-        request_params: {}
-        request_path:
-          type: string
-        request_setup_ms:
-          format: int32
-          type: integer
-        request_source:
-          type: string
-        request_status:
-          type: string
-        request_total_ms:
-          format: int32
-          type: integer
-        requested_model:
-          type: string
-        resolution:
-          description: 图片/视频规格，例如 1024x1024 / 720p
-          type: string
-        resolved_logical_model:
-          type: string
-        resolved_provider_family:
-          type: string
-        response_headers: {}
-        response_message: {}
-        response_summary_state:
-          type: string
-        response_tail_ms:
-          format: int32
-          type: integer
-        retail_base_usd:
-          description: 零售价格表原价USD 金额
-          format: double
-          type: number
-        selected_upstream_model:
-          type: string
-        selected_upstream_target_type:
-          type: string
-        service_tier:
-          type: string
-        settled_at:
-          format: int64
-          type: integer
-        settlement_error:
-          type: string
-        stream:
-          description: 是否流式请求
-          type: boolean
-        tenant_id:
-          type: string
-        tenant_name:
-          type: string
-        tenant_payable_usd:
-          description: 租户扣除积分，即平台与租户之间的结算USD 金额
-          format: double
-          type: number
-        token_usage_source:
-          description: 用量来源：upstream=上游报告 / missing=缺失用量未计费 / mixed、estimated=历史或媒体估算
-          type: string
-        total_tokens:
-          format: int32
-          type: integer
-        trace_id:
-          type: string
-        upstream_account_id:
-          type: string
-        upstream_model:
-          description: 上游模型
-          type: string
-        upstream_model_mapping_applied:
-          type: boolean
-        upstream_status:
-          format: int32
-          type: integer
-        user_agent:
-          type: string
-        user_charged_usd:
-          description: 用户实际扣除积分USD 金额
-          format: double
-          type: number
-        user_id:
-          type: string
-        user_multiplier_override_snapshot:
-          format: double
-          type: number
-        user_payable_usd:
-          description: 用户应付USD 金额
-          format: double
-          type: number
-        username:
-          type: string
-      required:
-        - request_id
-        - client_api_format
-        - requested_model
-        - protocol_conversion_enabled
-        - upstream_model_mapping_applied
-        - request_status
-        - provider_terminal_state
-        - client_delivery_state
-        - cancellation_origin
-        - response_summary_state
-        - stream
-        - prompt_tokens
-        - completion_tokens
-        - cache_write_tokens
-        - cache_read_tokens
-        - reasoning_tokens
-        - total_tokens
-        - attempts_count
-        - service_tier
-        - catalog_base_usd
-        - tenant_payable_usd
-        - retail_base_usd
-        - user_payable_usd
-        - user_charged_usd
-        - api_key_quota_usd
-        - billing_status
-        - refund_status
-      type: object
-    UsageLogsOutputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/UsageLogsOutputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        included:
-          $ref: "#/components/schemas/IdentityIncludedDTO"
-        records:
-          items:
-            $ref: "#/components/schemas/UsageLogDTO"
-          type:
-            - array
-            - "null"
-        stats:
-          $ref: "#/components/schemas/UsageStatsDTO"
-        total:
-          format: int64
-          type: integer
-      required:
-        - total
-        - stats
-        - records
-        - included
-      type: object
     UsageRefundInputBody:
       additionalProperties: false
       properties:
@@ -11820,77 +11478,6 @@ components:
           type: string
       required:
         - requestId
-      type: object
-    UsageStatsDTO:
-      additionalProperties: false
-      properties:
-        avg_first_response_byte_ms:
-          description: 平均首个响应字节耗时，毫秒
-          format: double
-          type: number
-        avg_latency_ms:
-          description: 平均延迟，毫秒
-          format: double
-          type: number
-        avg_request_total_ms:
-          description: 平均总耗时，毫秒
-          format: double
-          type: number
-        cache_read_tokens:
-          description: 缓存读 token 数
-          format: int64
-          type: integer
-        cache_write_tokens:
-          description: 缓存写 token 数
-          format: int64
-          type: integer
-        failed_count:
-          description: 失败请求数
-          format: int64
-          type: integer
-        success_count:
-          description: 成功请求数
-          format: int64
-          type: integer
-        total_catalog_base_usd:
-          description: 目录基准价USD 金额（倍率1，谁都不付这个数）
-          format: double
-          type: number
-        total_completion_tokens:
-          description: 输出 token 数
-          format: int64
-          type: integer
-        total_prompt_tokens:
-          description: 输入 token 数
-          format: int64
-          type: integer
-        total_requests:
-          description: 请求总数
-          format: int64
-          type: integer
-        total_tenant_payable_usd:
-          description: 平台向租户应收USD 金额
-          format: double
-          type: number
-        total_tokens:
-          description: 总 token 数
-          format: int64
-          type: integer
-        total_user_charged_usd:
-          description: 用户实际扣款USD 金额；租户自有 key 与订阅覆盖流量为 0
-          format: double
-          type: number
-      required:
-        - total_requests
-        - success_count
-        - failed_count
-        - total_tokens
-        - total_catalog_base_usd
-        - total_tenant_payable_usd
-        - total_user_charged_usd
-        - avg_latency_ms
-        - avg_request_total_ms
-        - avg_first_response_byte_ms
       type: object
     UsageSummaryOutputBody:
       additionalProperties: false
@@ -12571,9 +12158,6 @@ components:
         request_source:
           description: 请求来源
           type: string
-        request_status:
-          description: 请求状态
-          type: string
         response_summary_state:
           description: 响应摘要状态
           type: string
@@ -12620,34 +12204,10 @@ components:
         - billing_status
         - refund_status
         - billing_source
-        - request_status
         - provider_terminal_state
         - client_delivery_state
         - cancellation_origin
         - response_summary_state
-      type: object
-    UserUsageLogsOutputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/UserUsageLogsOutputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        items:
-          items:
-            $ref: "#/components/schemas/UserUsageLogDTO"
-          type:
-            - array
-            - "null"
-        total:
-          format: int64
-          type: integer
-      required:
-        - items
-        - total
       type: object
     UserUsageSummaryDTO:
       additionalProperties: false
@@ -14333,49 +13893,6 @@ paths:
       summary: 预览敏感信息替换结果
       tags:
         - modules
-  /api/v1/admin/modules/request-recording/config:
-    get:
-      operationId: admin-get-request-recording
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RecordingSettings"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 读取请求记录设置
-      tags:
-        - system-modules
-    put:
-      operationId: admin-update-request-recording
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/RecordingSettings"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RecordingSettings"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 保存请求记录设置
-      tags:
-        - system-modules
   /api/v1/admin/modules/{name}:
     get:
       operationId: admin-get-module
@@ -20396,87 +19913,6 @@ paths:
       summary: 租户可选上游资源
       tags:
         - upstream-resources
-  /api/v1/tenants/me/usage-logs:
-    get:
-      description: 按当前租户 token 返回本租户可见的用量日志分页与同过滤条件下的聚合统计；包含用户名称和 API key 的非敏感标识，不含上游/供应商内部字段。
-      operationId: ai-list-tenant-self-usage-logs
-      parameters:
-        - description: 用户 ID 过滤；为空表示本租户全部用户
-          explode: false
-          in: query
-          name: user_id
-          schema:
-            description: 用户 ID 过滤；为空表示本租户全部用户
-            type: string
-        - description: 模型编码过滤
-          explode: false
-          in: query
-          name: model_code
-          schema:
-            description: 模型编码过滤
-            type: string
-        - description: 请求状态过滤
-          explode: false
-          in: query
-          name: request_status
-          schema:
-            description: 请求状态过滤
-            type: string
-        - description: 请求来源过滤
-          explode: false
-          in: query
-          name: request_source
-          schema:
-            description: 请求来源过滤
-            type: string
-        - description: 开始时间，RFC3339
-          explode: false
-          in: query
-          name: date_from
-          schema:
-            description: 开始时间，RFC3339
-            type: string
-        - description: 结束时间，RFC3339
-          explode: false
-          in: query
-          name: date_to
-          schema:
-            description: 结束时间，RFC3339
-            type: string
-        - description: 返回条数；默认 20，最大 100
-          explode: false
-          in: query
-          name: limit
-          schema:
-            default: 20
-            description: 返回条数；默认 20，最大 100
-            format: int32
-            type: integer
-        - description: 偏移量；默认 0
-          explode: false
-          in: query
-          name: offset
-          schema:
-            default: 0
-            description: 偏移量；默认 0
-            format: int32
-            type: integer
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/TenantUsageLogsOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 租户自助用量日志列表
-      tags:
-        - usage
   /api/v1/tenants/me/usage-summary:
     get:
       description: 按当前租户 token 按模型聚合本租户用量，支持精确的 [start, end) 时间窗口。
@@ -20495,13 +19931,6 @@ paths:
           name: model_code
           schema:
             description: 模型编码过滤
-            type: string
-        - description: 请求状态过滤
-          explode: false
-          in: query
-          name: request_status
-          schema:
-            description: 请求状态过滤
             type: string
         - description: 请求来源过滤
           explode: false
@@ -22238,136 +21667,6 @@ paths:
       summary: 拉取上游账号模型列表
       tags:
         - upstream-accounts
-  /api/v1/usage-logs:
-    get:
-      description: 返回 AI 网关用量日志分页，以及同过滤条件下的聚合统计。
-      operationId: ai-list-usage-logs
-      parameters:
-        - description: 租户 ID；为空表示全部租户
-          explode: false
-          in: query
-          name: tenant_id
-          schema:
-            description: 租户 ID；为空表示全部租户
-            type: string
-        - description: 租户名称模糊过滤
-          explode: false
-          in: query
-          name: tenant_name
-          schema:
-            description: 租户名称模糊过滤
-            type: string
-        - description: 用户 ID；为空表示全部用户
-          explode: false
-          in: query
-          name: user_id
-          schema:
-            description: 用户 ID；为空表示全部用户
-            type: string
-        - description: 用户名模糊过滤
-          explode: false
-          in: query
-          name: user_name
-          schema:
-            description: 用户名模糊过滤
-            type: string
-        - description: 模型编码过滤
-          explode: false
-          in: query
-          name: model_code
-          schema:
-            description: 模型编码过滤
-            type: string
-        - description: 请求状态过滤
-          explode: false
-          in: query
-          name: request_status
-          schema:
-            description: 请求状态过滤
-            type: string
-        - description: 请求来源过滤
-          explode: false
-          in: query
-          name: request_source
-          schema:
-            description: 请求来源过滤
-            type: string
-        - description: 开始时间，RFC3339
-          explode: false
-          in: query
-          name: date_from
-          schema:
-            description: 开始时间，RFC3339
-            type: string
-        - description: 结束时间，RFC3339
-          explode: false
-          in: query
-          name: date_to
-          schema:
-            description: 结束时间，RFC3339
-            type: string
-        - description: 返回条数；默认 20，最大 100
-          explode: false
-          in: query
-          name: limit
-          schema:
-            default: 20
-            description: 返回条数；默认 20，最大 100
-            format: int32
-            type: integer
-        - description: 偏移量；默认 0
-          explode: false
-          in: query
-          name: offset
-          schema:
-            default: 0
-            description: 偏移量；默认 0
-            format: int32
-            type: integer
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/UsageLogsOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 用量日志列表
-      tags:
-        - usage
-  /api/v1/usage-logs/{requestID}:
-    get:
-      description: 返回单次请求的调度链路和请求载荷摘要。
-      operationId: ai-get-usage-log-detail
-      parameters:
-        - description: 请求 ID
-          in: path
-          name: requestID
-          required: true
-          schema:
-            description: 请求 ID
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/UsageLogDetailDTO"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 用量日志详情
-      tags:
-        - usage
   /api/v1/usage-ranking/users:
     get:
       description: 按用户计费USD 金额降序返回用户排行，支持精确的 [start, end) 时间窗口和使用记录筛选口径。
@@ -22393,13 +21692,6 @@ paths:
           name: model_code
           schema:
             description: 模型编码过滤
-            type: string
-        - description: 请求状态过滤
-          explode: false
-          in: query
-          name: request_status
-          schema:
-            description: 请求状态过滤
             type: string
         - description: 请求来源过滤
           explode: false
@@ -22473,13 +21765,6 @@ paths:
           schema:
             description: 模型编码过滤
             type: string
-        - description: 请求状态过滤
-          explode: false
-          in: query
-          name: request_status
-          schema:
-            description: 请求状态过滤
-            type: string
         - description: 请求来源过滤
           explode: false
           in: query
@@ -22543,13 +21828,6 @@ paths:
           schema:
             description: 模型编码过滤
             type: string
-        - description: 请求状态过滤
-          explode: false
-          in: query
-          name: request_status
-          schema:
-            description: 请求状态过滤
-            type: string
         - description: 请求来源过滤
           explode: false
           in: query
@@ -22612,13 +21890,6 @@ paths:
           name: model_code
           schema:
             description: 模型编码过滤
-            type: string
-        - description: 请求状态过滤
-          explode: false
-          in: query
-          name: request_status
-          schema:
-            description: 请求状态过滤
             type: string
         - description: 请求来源过滤
           explode: false
@@ -22697,43 +21968,6 @@ paths:
       summary: 终端用户自助可用模型列表
       tags:
         - model-grants
-  /api/v1/user-usage-logs:
-    get:
-      description: 按当前用户 token 返回本用户的用量日志。
-      operationId: ai-list-user-self-usage-logs
-      parameters:
-        - description: 请求来源过滤
-          explode: false
-          in: query
-          name: request_source
-          schema:
-            description: 请求来源过滤
-            type: string
-        - description: 返回条数；默认 100，最大 100
-          explode: false
-          in: query
-          name: limit
-          schema:
-            default: 100
-            description: 返回条数；默认 100，最大 100
-            format: int32
-            type: integer
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/UserUsageLogsOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 终端用户自助用量日志列表
-      tags:
-        - usage
   /api/v1/user-usage-summary:
     get:
       description: 按当前用户 token 返回本用户的用量汇总。
@@ -23639,6 +22873,392 @@ paths:
       summary: 启用/停用终端用户
       tags:
         - admin-end-users
+  /api/v2/billing/settlements:
+    get:
+      operationId: ai-v2-settlements
+      parameters:
+        - explode: false
+          in: query
+          name: tenant_id
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: user_id
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: model
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: source
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: from
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: to
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: cursor
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: limit
+          schema:
+            default: 20
+            format: int64
+            maximum: 100
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecordPage"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 请求与独立消费记录
+      tags:
+        - request-records
+  /api/v2/billing/settlements/{requestID}:
+    get:
+      operationId: ai-v2-settlement-detail
+      parameters:
+        - in: path
+          name: requestID
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RequestRecord"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 请求与费用详情
+      tags:
+        - request-records
+  /api/v2/billing/settlements/{requestID}/refund:
+    post:
+      operationId: ai-v2-refund-settlement
+      parameters:
+        - in: path
+          name: requestID
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecordRefundInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecordRefundOutputBody"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 全额退回实际费用与计费额度
+      tags:
+        - request-records
+  /api/v2/request-debug-sessions:
+    post:
+      operationId: ai-v2-debug-session
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DebugSessionInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DebugSession"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 限时开启指定范围的完整内容记录
+      tags:
+        - request-records
+  /api/v2/request-errors:
+    get:
+      operationId: ai-v2-request-errors
+      parameters:
+        - explode: false
+          in: query
+          name: tenant_id
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: user_id
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: model
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: source
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: from
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: to
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: cursor
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: limit
+          schema:
+            default: 20
+            format: int64
+            maximum: 100
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecordPage"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 请求与独立消费记录
+      tags:
+        - request-records
+  /api/v2/request-summary:
+    get:
+      operationId: ai-v2-record-summary
+      parameters:
+        - explode: false
+          in: query
+          name: tenant_id
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: user_id
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: model
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: source
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: from
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: to
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: cursor
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: limit
+          schema:
+            default: 20
+            format: int64
+            maximum: 100
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecordSummary"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 用量与实际扣款日汇总
+      tags:
+        - request-records
+  /api/v2/requests:
+    get:
+      operationId: ai-v2-requests
+      parameters:
+        - explode: false
+          in: query
+          name: tenant_id
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: user_id
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: model
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: source
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: from
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: to
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: cursor
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: limit
+          schema:
+            default: 20
+            format: int64
+            maximum: 100
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecordPage"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 请求与独立消费记录
+      tags:
+        - request-records
+  /api/v2/requests/{requestID}:
+    get:
+      operationId: ai-v2-request-detail
+      parameters:
+        - in: path
+          name: requestID
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RequestRecord"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 请求与费用详情
+      tags:
+        - request-records
+  /api/v2/requests/{requestID}/debug:
+    get:
+      operationId: ai-v2-debug-payload
+      parameters:
+        - in: path
+          name: requestID
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 管理员读取限时调试内容
+      tags:
+        - request-records
   /public/jwks.json:
     get:
       operationId: get-jwks-public

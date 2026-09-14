@@ -3,9 +3,9 @@
 
 Source: `contracts/openapi.yaml`
 
-Contract SHA-256: `fd73955df19e1e4cd1d112ee107085206414b5f67a0091b8d316d52ddcee896c`
+Contract SHA-256: `4b6640a86f6a02b50bc8e82abe21e1ace35641722b92c8bf932a4b255cd6bb1c`
 
-Coverage: **335/335 operations (100%)**
+Coverage: **338/338 operations (100%)**
 
 The matrix is a review artifact and a generation gate. Middleware and application services remain the enforcement points; `ownership` describes the second authorization check required after capability admission.
 
@@ -14,14 +14,14 @@ The matrix is a review artifact and a generation gate. Middleware and applicatio
 | Policy | Operations | Required capability/auth | Ownership |
 | --- | ---: | --- | --- |
 | `api_key_or_session` | 4 | `api_key_or_session` | `resource` |
-| `authenticated` | 13 | `authenticated` | `actor.user` |
-| `customer_self` | 28 | `customer_self` | `actor.user` |
-| `platform_admin` | 166 | `platform_admin` | `actor.user` |
+| `authenticated` | 19 | `authenticated` | `actor.user` |
+| `customer_self` | 27 | `customer_self` | `actor.user` |
+| `platform_admin` | 165 | `platform_admin` | `actor.user` |
 | `platform_or_tenant` | 8 | `platform_or_tenant` | `actor.tenant/resource` |
 | `public` | 9 | `public` | `none` |
 | `super_admin` | 2 | `super_admin` | `global` |
 | `tenant_or_customer` | 4 | `tenant_or_customer` | `actor.tenant + actor.user` |
-| `tenant_self` | 101 | `tenant_self` | `actor.tenant` |
+| `tenant_self` | 100 | `tenant_self` | `actor.tenant` |
 
 ## Operation matrix
 
@@ -261,7 +261,6 @@ The matrix is a review artifact and a generation gate. Middleware and applicatio
 | `PUT` | `/api/v1/tenants/me/subscription-plans/{planID}/status` | `ai-set-tenant-self-subscription-plan-status` | `tenant_self` | `actor.tenant` |
 | `GET` | `/api/v1/tenants/me/subscriptions` | `ai-list-tenant-self-subscriptions` | `tenant_self` | `actor.tenant` |
 | `GET` | `/api/v1/tenants/me/upstream-resources` | `ai-list-tenant-upstream-resources` | `tenant_self` | `actor.tenant` |
-| `GET` | `/api/v1/tenants/me/usage-logs` | `ai-list-tenant-self-usage-logs` | `tenant_self` | `actor.tenant` |
 | `GET` | `/api/v1/tenants/me/usage-summary` | `ai-list-tenant-self-usage-summary` | `tenant_self` | `actor.tenant` |
 | `GET` | `/api/v1/tenants/me/users/{userID}/groups` | `ai-list-user-groups` | `tenant_self` | `actor.tenant` |
 | `DELETE` | `/api/v1/tenants/me/users/{userID}/groups/{groupID}` | `ai-delete-user-group` | `tenant_self` | `actor.tenant` |
@@ -278,8 +277,6 @@ The matrix is a review artifact and a generation gate. Middleware and applicatio
 | `DELETE` | `/api/v1/tenants/{id}` | `admin-delete-tenant` | `platform_admin` | `global/resource` |
 | `GET` | `/api/v1/tenants/{id}` | `admin-get-tenant` | `platform_admin` | `global/resource` |
 | `PUT` | `/api/v1/tenants/{id}` | `admin-update-tenant` | `platform_admin` | `global/resource` |
-| `GET` | `/api/v1/tenants/{id}/deletion` | `admin-get-tenant-deletion` | `platform_admin` | `global/resource` |
-| `POST` | `/api/v1/tenants/{id}/deletion/cancel` | `admin-cancel-tenant-deletion` | `platform_admin` | `global/resource` |
 | `POST` | `/api/v1/tenants/{id}/operations-token` | `admin-enter-tenant-operations` | `platform_admin` | `global/resource` |
 | `PATCH` | `/api/v1/tenants/{id}/status` | `admin-update-tenant-status` | `platform_admin` | `global/resource` |
 | `GET` | `/api/v1/tenants/{tenantID}/api-keys` | `ai-list-tenant-api-keys` | `platform_admin` | `global/resource` |
@@ -318,15 +315,12 @@ The matrix is a review artifact and a generation gate. Middleware and applicatio
 | `PATCH` | `/api/v1/upstream-accounts/{accountID}/status` | `ai-update-upstream-account-status` | `platform_admin` | `global/resource` |
 | `POST` | `/api/v1/upstream-accounts/{accountID}/test` | `ai-test-account-upstream` | `platform_admin` | `global/resource` |
 | `GET` | `/api/v1/upstream-accounts/{accountID}/upstream-models` | `ai-fetch-account-upstream-models` | `platform_admin` | `global/resource` |
-| `GET` | `/api/v1/usage-logs` | `ai-list-usage-logs` | `platform_admin` | `global/resource` |
-| `GET` | `/api/v1/usage-logs/{requestID}` | `ai-get-usage-log-detail` | `platform_admin` | `global/resource` |
 | `GET` | `/api/v1/usage-ranking/users` | `ai-list-usage-user-ranking` | `platform_admin` | `global/resource` |
 | `GET` | `/api/v1/usage-summary` | `ai-list-usage-summary` | `platform_admin` | `global/resource` |
 | `GET` | `/api/v1/usage-unit-summary` | `ai-list-usage-unit-summary` | `platform_admin` | `global/resource` |
 | `GET` | `/api/v1/usage-upstream-summary` | `ai-list-usage-upstream-summary` | `platform_admin` | `global/resource` |
 | `GET` | `/api/v1/user-api-keys` | `ai-list-user-self-api-keys` | `customer_self` | `actor.user` |
 | `GET` | `/api/v1/user-model-grants` | `ai-list-user-self-model-grants` | `customer_self` | `actor.user` |
-| `GET` | `/api/v1/user-usage-logs` | `ai-list-user-self-usage-logs` | `customer_self` | `actor.user` |
 | `GET` | `/api/v1/user-usage-summary` | `ai-get-user-self-usage-summary` | `customer_self` | `actor.user` |
 | `GET` | `/api/v1/users` | `admin-list-end-users` | `platform_or_tenant` | `actor.tenant/resource` |
 | `POST` | `/api/v1/users` | `admin-create-end-user` | `platform_or_tenant` | `actor.tenant/resource` |
@@ -357,6 +351,15 @@ The matrix is a review artifact and a generation gate. Middleware and applicatio
 | `PATCH` | `/api/v1/users/{id}` | `admin-update-end-user` | `platform_or_tenant` | `actor.tenant/resource` |
 | `POST` | `/api/v1/users/{id}/reset-password` | `admin-reset-end-user-password` | `platform_or_tenant` | `actor.tenant/resource` |
 | `PATCH` | `/api/v1/users/{id}/status` | `admin-update-end-user-status` | `platform_or_tenant` | `actor.tenant/resource` |
+| `GET` | `/api/v2/billing/settlements` | `ai-v2-settlements` | `authenticated` | `claims tenant/user; administrators global` |
+| `GET` | `/api/v2/billing/settlements/{requestID}` | `ai-v2-settlement-detail` | `authenticated` | `claims tenant/user; administrators global` |
+| `POST` | `/api/v2/billing/settlements/{requestID}/refund` | `ai-v2-refund-settlement` | `platform_admin` | `global/resource` |
+| `POST` | `/api/v2/request-debug-sessions` | `ai-v2-debug-session` | `platform_admin` | `global/resource` |
+| `GET` | `/api/v2/request-errors` | `ai-v2-request-errors` | `authenticated` | `claims tenant/user; administrators global` |
+| `GET` | `/api/v2/request-summary` | `ai-v2-record-summary` | `authenticated` | `claims tenant/user; administrators global` |
+| `GET` | `/api/v2/requests` | `ai-v2-requests` | `authenticated` | `claims tenant/user; administrators global` |
+| `GET` | `/api/v2/requests/{requestID}` | `ai-v2-request-detail` | `authenticated` | `claims tenant/user; administrators global` |
+| `GET` | `/api/v2/requests/{requestID}/debug` | `ai-v2-debug-payload` | `platform_admin` | `global/resource` |
 | `GET` | `/public/jwks.json` | `get-jwks-public` | `public` | `none` |
 | `GET` | `/v1/tasks` | `ai-list-tasks` | `api_key_or_session` | `resource` |
 | `POST` | `/v1/tasks` | `ai-create-task` | `api_key_or_session` | `resource` |

@@ -496,7 +496,7 @@ func settlementUsage(req *serving.Request) domain.TokenUsage {
 	if usage.CacheWriteTokens > remaining {
 		usage.CacheWriteTokens = remaining
 	}
-	if req.RequestStatus != domain.RequestFailed {
+	if req.MediaUsageConfirmed {
 		req.TokenUsage = usage
 		return usage
 	}

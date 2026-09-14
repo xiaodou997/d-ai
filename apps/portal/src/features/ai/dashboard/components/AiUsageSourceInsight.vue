@@ -21,7 +21,7 @@ interface SourceInsightItem {
   colorToken: string;
   requestCount: number;
   shareText: string;
-  successRateText: string;
+  errorRateText: string;
   amountText: string;
   tokensText: string;
 }
@@ -120,7 +120,7 @@ onUnmounted(() => {
     <div class="source-insight__header">
       <div>
         <h3 class="source-insight__title">来源分布</h3>
-        <p class="source-insight__desc">用环形图先看入口结构，再看每类入口的成功率和费用占比。</p>
+        <p class="source-insight__desc">用环形图先看入口结构，再看每类入口的明确错误率和费用占比。</p>
       </div>
       <span class="source-insight__summary">{{ summary }}</span>
     </div>
@@ -146,7 +146,7 @@ onUnmounted(() => {
             <span class="source-insight__dot" :style="{ backgroundColor: resolvedColors[item.key] || undefined }"></span>
             <div>
               <p class="source-insight__legend-label">{{ item.label }}</p>
-              <p class="source-insight__legend-meta">{{ item.shareText }} 样本占比 · {{ item.successRateText }} 成功率</p>
+              <p class="source-insight__legend-meta">{{ item.shareText }} 样本占比 · {{ item.errorRateText }} 明确错误率</p>
             </div>
           </div>
           <div class="source-insight__legend-values">

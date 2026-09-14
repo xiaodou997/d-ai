@@ -61,7 +61,7 @@ describe("TenantDashboardWorkspace", () => {
     expect(aiApi.listApiKeys).toHaveBeenCalledOnce();
     expect(aiApi.getDashboardSummary).toHaveBeenCalledWith({ date_from: expect.any(String), date_to: expect.any(String) });
     expect(tenantApi.listEndUsers).toHaveBeenCalledWith({ page: 1, size: 200 });
-    expect(usageApi.listTenantUsageRecords).toHaveBeenCalledWith(expect.objectContaining({ limit: 360, offset: 0, date_from: expect.any(String), date_to: expect.any(String) }));
+    expect(usageApi.listTenantUsageRecords).toHaveBeenCalledWith(expect.objectContaining({ limit: 120, offset: 0, date_from: expect.any(String), date_to: expect.any(String) }));
 
     wrapper.unmount();
   });
@@ -75,7 +75,7 @@ describe("TenantDashboardWorkspace", () => {
 
     expect(aiApi.getDashboardSummary).toHaveBeenCalledTimes(2);
     expect(aiApi.getDashboardTopModels).toHaveBeenCalledTimes(2);
-    expect(aiApi.listDashboardRecentErrors).toHaveBeenCalledTimes(2);
+    expect(aiApi.listDashboardRecentErrors).not.toHaveBeenCalled();
     expect(usageApi.listTenantUsageRecords).toHaveBeenCalledTimes(2);
     expect(aiApi.listMyGroups).toHaveBeenCalledOnce();
     expect(tenantApi.listEndUsers).toHaveBeenCalledOnce();

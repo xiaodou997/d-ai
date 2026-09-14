@@ -118,6 +118,10 @@ func parseOperations(content string) ([]operation, error) {
 func classify(op operation) (rule, bool) {
 	p, id := op.Path, op.ID
 	switch {
+	case strings.HasPrefix(p, "/api/v2/") && (strings.HasSuffix(p, "/refund") || strings.HasSuffix(p, "/debug") || p == "/api/v2/request-debug-sessions"):
+		return rule{"platform_admin", "global/resource", "settlement refund and scoped request diagnostics"}, true
+	case strings.HasPrefix(p, "/api/v2/requests") || p == "/api/v2/request-errors" || p == "/api/v2/request-summary" || strings.HasPrefix(p, "/api/v2/billing/settlements"):
+		return rule{"authenticated", "claims tenant/user; administrators global", "execution and independent settlement evidence"}, true
 	case p == "/.well-known/jwks.json" || p == "/public/jwks.json" || p == "/api/v1/info":
 		return rule{"public", "none", "public metadata or signing keys"}, true
 	case p == "/api/auth/login" || p == "/api/auth/refresh" || p == "/api/auth/activate" || p == "/api/auth/password-policy":

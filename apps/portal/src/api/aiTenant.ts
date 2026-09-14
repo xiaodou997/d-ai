@@ -405,7 +405,6 @@ function toDashboardRecentErrors(value: DashboardRecentErrorsTransport): TenantA
     items: value.items?.map((item) => ({
       request_id: item.request_id,
       model_code: item.model_code,
-      request_status: item.request_status,
       error_code: item.error_code,
       error_message: item.error_message,
       http_status: item.http_status,

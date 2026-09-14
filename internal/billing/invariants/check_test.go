@@ -7,11 +7,11 @@ import (
 
 	"go.uber.org/zap"
 
+	aiadapters "xiaodou/dai/internal/ai/adapters/postgres"
 	"xiaodou/dai/internal/ai/subscription"
 	billingdomain "xiaodou/dai/internal/billing"
 	"xiaodou/dai/internal/billing/invariants"
 	"xiaodou/dai/internal/billing/ledger"
-	"xiaodou/dai/internal/billing/outbox"
 	billingservice "xiaodou/dai/internal/billing/service"
 	"xiaodou/dai/internal/dbtest"
 )
@@ -151,22 +151,19 @@ func TestMoneyInvariantSuiteCoversCrossModuleLifecycle(t *testing.T) {
 	}
 	checkHealthy("after recharge reversal")
 
-	if _, err := pool.Exec(ctx, `
-		INSERT INTO ai_usage_logs
-			(request_id, key_owner_type, auth_method, request_source, tenant_id, user_id,
-			 model_code, billable_unit_type, tenant_payable, user_payable, user_charged,
-			 billing_status, request_status, client_protocol, billing_source)
-		VALUES ('INV_REFUND_USAGE', 'user', 'jwt', 'invariant-test', $1, $2,
-			 'invariant-model', 'token', 100, 200, 200,
-			 'settled', 'success', 'openai_chat', 'payg')
-	`, tenantID, userID); err != nil {
-		t.Fatalf("seed refundable usage: %v", err)
+	store := aiadapters.NewRequestStore(pool, nil, nil)
+	if _, err := pool.Exec(ctx, `INSERT INTO bill_settlements(created_at,request_id,tenant_id,user_id,tenant_due,user_due,state,reason) VALUES (now(),'INV_REFUND_USAGE',$1,$2,100,200,'pending','reported_usage')`, tenantID, userID); err != nil {
+		t.Fatal(err)
 	}
-	if err := billingservice.NewDeductionService(pool, zap.NewNop()).RefundUsage(ctx, "INV_REFUND_USAGE", "invariant refund", "invariant-test"); err != nil {
-		t.Fatalf("refund usage: %v", err)
+	if _, err := store.DrainSettlements(ctx, 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Refund(ctx, "INV_REFUND_USAGE", "invariant refund", "test"); err != nil {
+		t.Fatal(err)
 	}
 	checkHealthy("after usage refund")
 
+	grant(ledger.Ref{Kind: ledger.KindUser, ID: userID, TenantID: tenantID}, 1000, nil, "ADMIN_RECHARGE", "")
 	const orderNo = "INV_SUB_ORDER"
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO ai_sub_orders
@@ -189,38 +186,14 @@ func TestMoneyInvariantSuiteCoversCrossModuleLifecycle(t *testing.T) {
 	}
 	checkHealthy("after subscription debit")
 
-	// The request usage row and its outbox charge are committed together; the
-	// checker must accept both pending and settled forms of that pair.
-	tx, err = pool.Begin(ctx)
-	if err != nil {
+	if _, err := pool.Exec(ctx, `INSERT INTO bill_settlements(created_at,request_id,tenant_id,user_id,tenant_due,user_due,state,reason) VALUES (now(),'INV_SETTLEMENT',$1,$2,50,25,'pending','reported_usage')`, tenantID, userID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := tx.Exec(ctx, `
-		INSERT INTO ai_usage_logs
-			(request_id, key_owner_type, auth_method, request_source, tenant_id, user_id,
-			 model_code, billable_unit_type, tenant_payable, user_payable, user_charged,
-			 billing_status, request_status, client_protocol, billing_source)
-		VALUES ('INV_OUTBOX_USAGE', 'user', 'jwt', 'invariant-test', $1, $2,
-			 'invariant-model', 'token', 50, 25, 25,
-			 'pending', 'success', 'openai_chat', 'payg')
-	`, tenantID, userID); err != nil {
-		t.Fatalf("seed outbox usage: %v", err)
+	checkHealthy("pending settlement")
+	if count, err := store.DrainSettlements(ctx, 1); err != nil || count != 1 {
+		t.Fatalf("drain=%d %v", count, err)
 	}
-	if err := outbox.Enqueue(ctx, tx, outbox.Charge{
-		RequestID: "INV_OUTBOX_USAGE", TenantID: tenantID, UserID: userID,
-		TenantMicro: 50, UserMicro: 25, Description: "invariant outbox",
-	}); err != nil {
-		t.Fatalf("enqueue outbox charge: %v", err)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		t.Fatal(err)
-	}
-	checkHealthy("with pending outbox")
-
-	if count, err := outbox.NewConsumer(pool, zap.NewNop()).DrainOnce(ctx); err != nil || count != 1 {
-		t.Fatalf("drain outbox = %d, err=%v", count, err)
-	}
-	checkHealthy("after outbox settlement")
+	checkHealthy("posted settlement")
 
 	// The checker must fail loudly on a broken balance/lot relationship, then
 	// return healthy again once the test restores the row.

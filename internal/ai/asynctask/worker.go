@@ -144,6 +144,7 @@ func (e *Engine) execute(ctx context.Context, claimed claimedTask) (Result, erro
 	}
 
 	return reg.handler.Execute(ctx, Task{
+		CreatedAt: claimed.CreatedAt,
 		ID:        claimed.ID,
 		Type:      claimed.Type,
 		ModelCode: claimed.ModelCode,

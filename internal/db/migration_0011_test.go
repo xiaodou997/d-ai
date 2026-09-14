@@ -10,7 +10,7 @@ import (
 
 func TestMigration0011AddsStatefulAuthSessions(t *testing.T) {
 	ctx := context.Background()
-	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 2})
+	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 2, SchemaSQL: legacySchema40(t)})
 	if err != nil {
 		t.Skipf("database unavailable: %v", err)
 	}
@@ -65,7 +65,7 @@ func TestMigration0011AddsStatefulAuthSessions(t *testing.T) {
 
 func TestMigration0011RejectsMissingSchemaMetadata(t *testing.T) {
 	ctx := context.Background()
-	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 2})
+	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 2, SchemaSQL: legacySchema40(t)})
 	if err != nil {
 		t.Skipf("database unavailable: %v", err)
 	}

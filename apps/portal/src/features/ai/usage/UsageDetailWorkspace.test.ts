@@ -1,66 +1,32 @@
-import { flushPromises, shallowMount } from "@vue/test-utils";
+import { flushPromises, mount } from "@vue/test-utils";
+import { createPinia } from "pinia";
 import { createMemoryHistory, createRouter } from "vue-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
-import UsageDetailWorkspace from "./UsageDetailWorkspace.vue";
-
-const getDetail = vi.hoisted(() => vi.fn());
-
-vi.mock("@/features/ai/usage/api", () => ({
-  adminUsageApi: { getDetail }
-}));
-
-describe("UsageDetailWorkspace", () => {
+import RequestRecordsWorkspace from "./RequestRecordsWorkspace.vue";
+const api = vi.hoisted(() => ({ list: vi.fn(), summary: vi.fn(), detail: vi.fn(), refund: vi.fn(), debug: vi.fn() }));
+vi.mock("./recordsApi", async importOriginal => ({ ...await importOriginal<typeof import("./recordsApi")>(), recordsApi: api }));
+vi.mock("@/stores/auth", () => ({ useAuthStore: () => ({ userInfo: { userType: 4 } }) }));
+describe("request and fee details", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    getDetail.mockResolvedValue({ request_id: "request-1", model_code: "gpt-4o" });
+    api.list.mockResolvedValue({ records: [] });
+    api.summary.mockResolvedValue({ requests: 1, errors: 0, interruptions: 1 });
+    api.detail.mockResolvedValue({ request_id: "r1", model: "model", tokens: { input: 10, output: 2 }, charge: { state: "pending", reason: "reported_usage_before_disconnect", user_charged_micro: 0, subscription_used_micro: 0 }, delivery: "disconnected", execution_available: true });
   });
-
-  it("loads the request detail selected by the route", async () => {
-    const wrapper = await mountWorkspace("request-1");
-
-    expect(getDetail).toHaveBeenCalledWith("request-1");
-    expect(wrapper.get("[data-testid='detail-request']").text()).toBe("request-1");
-    wrapper.unmount();
-  });
-
-  it("renders the feature-owned empty state when detail loading fails", async () => {
-    getDetail.mockRejectedValueOnce(new Error("missing"));
-    const wrapper = await mountWorkspace("missing");
-
-    expect(wrapper.get("[data-testid='detail-empty']").text()).toContain("未找到该请求的详情");
+  it("explains interrupted delivery separately from pending fees", async () => {
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: "/:requestId", component: RequestRecordsWorkspace }] });
+    await router.push("/r1"); await router.isReady();
+    const wrapper = mount(RequestRecordsWorkspace, { global: { plugins: [router, createPinia()], stubs: {
+      PortalPagePanel: { template: "<main><slot /></main>" }, PortalMetricGrid: true, DsTabs: true, DsTable: true, DsFilterBar: true,
+      DsDrawer: { template: "<aside><slot /></aside>" }, DsTag: { template: "<span><slot /></span>" }, "el-button": true
+    } } });
+    await flushPromises();
+    expect(api.detail).toHaveBeenCalledWith("r1", expect.any(AbortSignal));
+    expect(wrapper.text()).toContain("结算处理中");
+    expect(wrapper.text()).toContain("仅结算取消前已报告用量");
+    expect(wrapper.text()).toContain("客户端连接中断");
+    expect(wrapper.text()).not.toContain("失败阶段");
+    expect(wrapper.text()).not.toContain("全额退款");
     wrapper.unmount();
   });
 });
-
-async function mountWorkspace(requestId: string) {
-  const router = createRouter({
-    history: createMemoryHistory(),
-    routes: [
-      { path: "/admin/ai/usage/:requestId", component: UsageDetailWorkspace },
-      { path: "/admin/ai/usage", name: "ai-usage", component: { template: "<div />" } }
-    ]
-  });
-  await router.push(`/admin/ai/usage/${requestId}`);
-  await router.isReady();
-
-  const wrapper = shallowMount(UsageDetailWorkspace, {
-    global: {
-      plugins: [router],
-      stubs: {
-        PortalPagePanel: { template: "<main><slot /></main>" },
-        UsageDetailContent: {
-          props: ["detail"],
-          template: "<div data-testid='detail-request'>{{ detail?.request_id || 'loading' }}</div>"
-        },
-        DsEmpty: {
-          props: ["title"],
-          template: "<section data-testid='detail-empty'>{{ title }}<slot name='action' /></section>"
-        },
-        "el-button": { template: "<button><slot /></button>" }
-      }
-    }
-  });
-  await flushPromises();
-  return wrapper;
-}

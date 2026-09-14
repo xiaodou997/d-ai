@@ -43,7 +43,7 @@ func TestUsageLoggerInvalidatesAPIKeyCacheWithCompletionContext(t *testing.T) {
 
 func TestUsageLoggerInvalidatesOnlyAPIKeySubjects(t *testing.T) {
 	invalidator := &usageCacheInvalidatorStub{}
-	logger := &UsageLogger{apiKeyInvalidator: invalidator}
+	logger := &RequestStore{invalidator: invalidator}
 	logger.invalidateAPIKeyCache(context.Background(), &coreidentity.Subject{
 		AuthMethod: coreidentity.AuthMethodJWT,
 	})

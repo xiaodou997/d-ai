@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
+	aiadapters "xiaodou/dai/internal/ai/adapters/postgres"
 	"xiaodou/dai/internal/billing"
 	"xiaodou/dai/internal/billing/ledger"
 	"xiaodou/dai/internal/billing/service"
@@ -48,106 +48,33 @@ func TestDeductionCommandsHonorCanceledContext(t *testing.T) {
 
 func TestRefundUsageCreditsAccountsOnceAndAuditsUsage(t *testing.T) {
 	ctx := context.Background()
-	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 2})
+	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 3})
 	if err != nil {
-		t.Skipf("database unavailable: %v", err)
+		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = cleanup(context.Background()) })
-
-	if _, err := pool.Exec(ctx, `
-		INSERT INTO iam_tenants (tenant_id, tenant_name, status)
-		VALUES ('tenant_refund', 'Refund Tenant', 'active');
-		INSERT INTO iam_accounts (user_id, tenant_id, username, password_hash, user_type, status)
-		VALUES ('user_refund', 'tenant_refund', 'refund-user', 'x', 4, 'active');
-		INSERT INTO ai_usage_logs (
-			request_id, key_owner_type, auth_method, request_source, tenant_id, user_id,
-			model_code, requested_model, capability_type, billable_unit_type,
-			tenant_payable, user_payable, user_charged, billing_status, request_status,
-			client_protocol, billing_source, settled_at
-		) VALUES (
-			'req-refund', 'user', 'jwt', 'web_chat', 'tenant_refund', 'user_refund',
-			'model', 'model', 'chat', 'token', 100, 200, 200, 'settled', 'success',
-			'openai_chat', 'payg', now()
-		)
-	`); err != nil {
-		t.Fatalf("seed refund usage: %v", err)
+	defer cleanup(ctx)
+	if _, err = pool.Exec(ctx, `INSERT INTO iam_tenants(tenant_id,tenant_name) VALUES('tenant_refund','refund'); INSERT INTO iam_accounts(user_id,tenant_id,username,password_hash,user_type) VALUES('user_refund','tenant_refund','refund','x',4); INSERT INTO bill_settlements(created_at,request_id,tenant_id,user_id,tenant_due,user_due,state,reason) VALUES(now(),'req-refund','tenant_refund','user_refund',100,200,'pending','reported_usage')`); err != nil {
+		t.Fatal(err)
 	}
-
 	grantRefundBalance(t, ctx, pool, ledger.Ref{Kind: ledger.KindTenant, ID: "tenant_refund", TenantID: "tenant_refund"}, 1000)
 	grantRefundBalance(t, ctx, pool, ledger.Ref{Kind: ledger.KindUser, ID: "user_refund", TenantID: "tenant_refund"}, 2000)
-
-	deduction := service.NewDeductionService(pool, zap.NewNop())
-	if err := deduction.RefundUsage(ctx, "req-refund", "operator correction", "admin-refund"); err != nil {
-		t.Fatalf("refund usage: %v", err)
+	store := aiadapters.NewRequestStore(pool, nil, nil)
+	if _, err = store.DrainSettlements(ctx, 1); err != nil {
+		t.Fatal(err)
 	}
-
-	var tenantBalance, userBalance int64
-	if err := pool.QueryRow(ctx, `SELECT balance_micro FROM bill_accounts WHERE account_id = 'tenant_refund'`).Scan(&tenantBalance); err != nil {
-		t.Fatalf("read tenant balance: %v", err)
+	deduction := service.NewDeductionService(pool, zap.NewNop()).WithUsageRefunder(store)
+	for range 2 {
+		if err = deduction.RefundUsage(ctx, "req-refund", "operator correction", "admin-refund"); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if err := pool.QueryRow(ctx, `SELECT balance_micro FROM bill_accounts WHERE account_id = 'user_refund'`).Scan(&userBalance); err != nil {
-		t.Fatalf("read user balance: %v", err)
+	var balance int64
+	if err = pool.QueryRow(ctx, `SELECT balance_micro FROM bill_accounts WHERE account_id='user_refund'`).Scan(&balance); err != nil || balance != 2000 {
+		t.Fatalf("refund balance=%d %v", balance, err)
 	}
-	if tenantBalance != 1100 || userBalance != 2200 {
-		t.Fatalf("refunded balances = %d/%d, want 1100/2200", tenantBalance, userBalance)
-	}
-
-	var refundStatus, reason, operator string
-	var refundedAt *time.Time
-	if err := pool.QueryRow(ctx, `
-		SELECT refund_status, refund_reason, refund_operator_id, refunded_at
-		FROM ai_usage_logs WHERE request_id = 'req-refund'
-	`).Scan(&refundStatus, &reason, &operator, &refundedAt); err != nil {
-		t.Fatalf("read usage refund audit: %v", err)
-	}
-	if refundStatus != "refunded" || reason != "operator correction" || operator != "admin-refund" || refundedAt == nil {
-		t.Fatalf("usage refund audit = %s/%s/%s/%v", refundStatus, reason, operator, refundedAt)
-	}
-	var repairAction, repairKey string
-	var beforeState, afterState []byte
-	var before, after map[string]any
-	if err := pool.QueryRow(ctx, `
-		SELECT action, idempotency_key, before_state, after_state FROM bill_repair_audits
-		WHERE target_type = 'ai_usage_logs' AND target_id = 'req-refund'
-	`).Scan(&repairAction, &repairKey, &beforeState, &afterState); err != nil {
-		t.Fatalf("read usage repair evidence: %v", err)
-	}
-	if repairAction != "usage_refund" || repairKey != "usage-refund:req-refund" {
-		t.Fatalf("usage repair evidence = %s/%s", repairAction, repairKey)
-	}
-	if err := json.Unmarshal(beforeState, &before); err != nil {
-		t.Fatalf("decode usage repair before state: %v", err)
-	}
-	if err := json.Unmarshal(afterState, &after); err != nil {
-		t.Fatalf("decode usage repair after state: %v", err)
-	}
-	if before["refund_status"] != "none" || after["refund_status"] != "refunded" {
-		t.Fatalf("usage repair before/after state = %#v -> %#v", before, after)
-	}
-
-	if err := deduction.RefundUsage(ctx, "req-refund", "duplicate", "admin-refund"); err == nil {
-		t.Fatal("duplicate usage refund succeeded")
-	}
-	if err := pool.QueryRow(ctx, `SELECT balance_micro FROM bill_accounts WHERE account_id = 'user_refund'`).Scan(&userBalance); err != nil {
-		t.Fatalf("read user balance after duplicate: %v", err)
-	}
-	if userBalance != 2200 {
-		t.Fatalf("duplicate refund changed user balance to %d", userBalance)
-	}
-}
-
-func grantRefundBalance(t *testing.T, ctx context.Context, pool *pgxpool.Pool, ref ledger.Ref, amount int64) {
-	t.Helper()
-	tx, err := pool.Begin(ctx)
-	if err != nil {
-		t.Fatalf("begin grant: %v", err)
-	}
-	defer tx.Rollback(ctx)
-	if _, err := ledger.Grant(ctx, tx, ref, amount, nil, billing.PackageSourceAdminRecharge, ""); err != nil {
-		t.Fatalf("grant refund balance: %v", err)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		t.Fatalf("commit grant: %v", err)
+	var state, reason, operator string
+	if err = pool.QueryRow(ctx, `SELECT state,refund_reason,refund_operator FROM bill_settlements WHERE request_id='req-refund'`).Scan(&state, &reason, &operator); err != nil || state != "refunded" || operator != "admin-refund" || reason != "operator correction" {
+		t.Fatalf("refund evidence %s %s %s %v", state, reason, operator, err)
 	}
 }
 
@@ -315,5 +242,20 @@ func grantTenantRechargeBalance(t *testing.T, ctx context.Context, pool *pgxpool
 	}
 	if err := tx.Commit(ctx); err != nil {
 		t.Fatalf("commit tenant recharge grant: %v", err)
+	}
+}
+
+func grantRefundBalance(t *testing.T, ctx context.Context, pool *pgxpool.Pool, ref ledger.Ref, amount int64) {
+	t.Helper()
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(ctx)
+	if _, err = ledger.Grant(ctx, tx, ref, amount, nil, "ADMIN_RECHARGE", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err = tx.Commit(ctx); err != nil {
+		t.Fatal(err)
 	}
 }

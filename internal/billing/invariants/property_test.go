@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
+	aiadapters "xiaodou/dai/internal/ai/adapters/postgres"
 	billingdomain "xiaodou/dai/internal/billing"
 	"xiaodou/dai/internal/billing/invariants"
 	"xiaodou/dai/internal/billing/ledger"
@@ -101,7 +102,7 @@ func TestRandomConcurrentBillingProperty(t *testing.T) {
 		operations = append(operations, propertyOperation{
 			name: "refund/" + requestID,
 			run: func(ctx context.Context) error {
-				return billingservice.NewDeductionService(pool, zap.NewNop()).RefundUsage(ctx, requestID, "property refund", "property-test")
+				return billingservice.NewDeductionService(pool, zap.NewNop()).WithUsageRefunder(aiadapters.NewRequestStore(pool, nil, nil)).RefundUsage(ctx, requestID, "property refund", "property-test")
 			},
 		})
 	}
@@ -202,7 +203,7 @@ func TestConcurrentFinancialCommandsAreIdempotent(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			<-start
-			results <- commandResult{kind: "refund", err: billingservice.NewDeductionService(pool, zap.NewNop()).RefundUsage(ctx, "IDEMP_USAGE", "idempotent refund", "property-test")}
+			results <- commandResult{kind: "refund", err: billingservice.NewDeductionService(pool, zap.NewNop()).WithUsageRefunder(aiadapters.NewRequestStore(pool, nil, nil)).RefundUsage(ctx, "IDEMP_USAGE", "idempotent refund", "property-test")}
 		}()
 		go func() {
 			defer wg.Done()
@@ -236,8 +237,8 @@ func TestConcurrentFinancialCommandsAreIdempotent(t *testing.T) {
 			}
 		}
 	}
-	if refunds != 1 || reversals != 1 {
-		t.Fatalf("idempotent winners = refunds:%d reversals:%d, want one each", refunds, reversals)
+	if refunds != attempts || reversals != 1 {
+		t.Fatalf("idempotent winners = refunds:%d reversals:%d, want all refund retries acknowledged and one reversal", refunds, reversals)
 	}
 
 	var userBalance int64
@@ -329,18 +330,13 @@ func seedPropertyFixture(ctx context.Context, pool *pgxpool.Pool, tenantID, user
 	for i := 0; i < 8; i++ {
 		requestID := fmt.Sprintf("PROP_REFUND_%02d", i)
 		if _, err := pool.Exec(ctx, `
-			INSERT INTO ai_usage_logs
-				(request_id, key_owner_type, auth_method, request_source, tenant_id, user_id,
-				 model_code, billable_unit_type, tenant_payable, user_payable, user_charged,
-				 billing_status, request_status, client_protocol, billing_source)
-			VALUES ($1, 'user', 'jwt', 'property-test', $2, $3,
-				 'property-model', 'token', 100, 200, 200,
-				 'settled', 'success', 'openai_chat', 'payg')
+			INSERT INTO bill_settlements(created_at,request_id,tenant_id,user_id,tenant_due,user_due,state,reason) VALUES(now(),$1,$2,$3,100,200,'pending','reported_usage')
 		`, requestID, tenantID, userID); err != nil {
 			return fmt.Errorf("seed property usage %s: %w", requestID, err)
 		}
 	}
-	return nil
+	_, err := aiadapters.NewRequestStore(pool, nil, nil).DrainSettlements(ctx, 100)
+	return err
 }
 
 func seedIdempotencyFixture(ctx context.Context, pool *pgxpool.Pool, tenantID, userID string) error {
@@ -370,17 +366,12 @@ func seedIdempotencyFixture(ctx context.Context, pool *pgxpool.Pool, tenantID, u
 		return fmt.Errorf("seed idempotency lot: %w", err)
 	}
 	if _, err := pool.Exec(ctx, `
-		INSERT INTO ai_usage_logs
-			(request_id, key_owner_type, auth_method, request_source, tenant_id, user_id,
-			 model_code, billable_unit_type, tenant_payable, user_payable, user_charged,
-			 billing_status, request_status, client_protocol, billing_source)
-		VALUES ('IDEMP_USAGE', 'user', 'jwt', 'property-test', $1, $2,
-			 'property-model', 'token', 0, 200, 200,
-			 'settled', 'success', 'openai_chat', 'payg')
+		INSERT INTO bill_settlements(created_at,request_id,tenant_id,user_id,user_due,state,reason) VALUES(now(),'IDEMP_USAGE',$1,$2,200,'pending','reported_usage')
 	`, tenantID, userID); err != nil {
 		return fmt.Errorf("seed idempotency usage: %w", err)
 	}
-	return nil
+	_, err := aiadapters.NewRequestStore(pool, nil, nil).DrainSettlements(ctx, 100)
+	return err
 }
 
 func assertPropertyHealthy(t *testing.T, ctx context.Context, pool *pgxpool.Pool, stage string) {

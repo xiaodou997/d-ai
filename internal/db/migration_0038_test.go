@@ -10,14 +10,15 @@ import (
 
 func TestMigration0038AddsUpstreamAccountDescription(t *testing.T) {
 	ctx := context.Background()
-	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 2})
+	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 2, SchemaSQL: legacySchema40(t)})
 	if err != nil {
 		t.Skipf("database unavailable: %v", err)
 	}
 	t.Cleanup(func() { _ = cleanup(context.Background()) })
 
 	if _, err := pool.Exec(ctx, `
-		ALTER TABLE ai_upstream_accounts DROP COLUMN IF EXISTS description;
+		DROP VIEW ai_upstream_resources;
+ ALTER TABLE ai_upstream_accounts DROP COLUMN IF EXISTS description;
 		UPDATE dai_schema_metadata SET version = 37 WHERE singleton = TRUE;
 	`); err != nil {
 		t.Fatalf("prepare schema 37 fixture: %v", err)

@@ -38,13 +38,13 @@ var buckets = []float64{50, 100, 250, 500, 1000, 2500, 5000, 10000, 30000, 60000
 // NewGateway registers all metrics with the default Prometheus registry.
 func NewGateway() *Gateway {
 	return &Gateway{
-		usageReports:        promauto.NewCounterVec(prometheus.CounterOpts{Name: "dai_ai_usage_reports_total", Help: "Text requests by reported usage source and route."}, []string{"route_id", "source", "status"}),
+		usageReports:        promauto.NewCounterVec(prometheus.CounterOpts{Name: "dai_ai_usage_reports_total", Help: "Text requests by reported usage source and route."}, []string{"route_id", "source", "end_reason"}),
 		missingUsageCharged: promauto.NewCounterVec(prometheus.CounterOpts{Name: "dai_ai_missing_usage_charged_total", Help: "Text requests charged without reported usage; must remain zero."}, []string{"route_id"}),
 		auditCompacted:      promauto.NewCounterVec(prometheus.CounterOpts{Name: "dai_ai_audit_compacted_total", Help: "Text audit payloads compacted to retain diagnostics."}, []string{"route_id"}),
 		requestsTotal: promauto.NewCounterVec(prometheus.CounterOpts{
 			Name: "dai_ai_requests_total",
-			Help: "Total number of AI requests processed, by model, status, and capability.",
-		}, []string{"model", "capability", "status", "provider"}),
+			Help: "Total number of AI requests processed, by model, execution end reason, and capability.",
+		}, []string{"model", "capability", "end_reason", "provider"}),
 
 		requestDuration: promauto.NewHistogramVec(prometheus.HistogramOpts{
 			Name:    "dai_ai_request_duration_ms",
@@ -93,7 +93,8 @@ func (g *Gateway) RecordRequest(req *serving.Request) {
 
 	model := req.ModelCode
 	capability := string(req.CapabilityType)
-	status := string(req.RequestStatus)
+	decision := serving.DecideCompletion(req)
+	status := decision.EndReason
 	provider := ""
 	if req.Candidate != nil {
 		provider = req.Candidate.ProviderCode
@@ -103,7 +104,7 @@ func (g *Gateway) RecordRequest(req *serving.Request) {
 	if req.Candidate != nil && domain.UsesReportedTokenBilling(req.CapabilityType) {
 		route := req.Candidate.RouteID
 		g.usageReports.WithLabelValues(route, req.TokenCountSource, status).Inc()
-		if req.TokenCountSource == domain.TokenUsageSourceMissing && (req.BillingResult.UserChargedMicro > 0 || req.BillingResult.TenantPayableMicro > 0 || req.BillingResult.APIKeyQuotaCostMicro > 0 || req.BillingResult.RetailBaseMicro > 0) {
+		if decision.Billable && req.TokenCountSource == domain.TokenUsageSourceMissing && (req.BillingResult.UserChargedMicro > 0 || req.BillingResult.TenantPayableMicro > 0 || req.BillingResult.APIKeyQuotaCostMicro > 0 || req.BillingResult.RetailBaseMicro > 0) {
 			g.missingUsageCharged.WithLabelValues(route).Inc()
 		}
 		if req.AuditPayload != nil && req.AuditPayload.Compaction.Truncated {

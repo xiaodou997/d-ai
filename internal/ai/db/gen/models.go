@@ -91,106 +91,97 @@ type AiAsyncTaskDelivery struct {
 	CompletedAt    pgtype.Timestamptz `json:"completed_at"`
 }
 
-type AiAuditBlob struct {
-	Sha256      string             `json:"sha256"`
-	Content     []byte             `json:"content"`
-	ContentType string             `json:"content_type"`
-	SizeBytes   int32              `json:"size_bytes"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-}
-
-type AiAuditInbox struct {
-	ID          int64              `json:"id"`
-	RequestID   string             `json:"request_id"`
-	Payload     []byte             `json:"payload"`
-	Status      string             `json:"status"`
-	Attempts    int32              `json:"attempts"`
-	AvailableAt pgtype.Timestamptz `json:"available_at"`
-	LockedAt    pgtype.Timestamptz `json:"locked_at"`
-	LockedBy    pgtype.Text        `json:"locked_by"`
-	LastError   pgtype.Text        `json:"last_error"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	DeadAt      pgtype.Timestamptz `json:"dead_at"`
-}
-
-type AiBillingRequestAdmission struct {
-	RequestID         string             `json:"request_id"`
-	WindowID          string             `json:"window_id"`
-	LeaseID           string             `json:"lease_id"`
-	Status            string             `json:"status"`
-	RequestExpiresAt  pgtype.Timestamptz `json:"request_expires_at"`
-	ActualTenantMicro pgtype.Int8        `json:"actual_tenant_micro"`
-	ActualUserMicro   pgtype.Int8        `json:"actual_user_micro"`
-	CompletionSource  pgtype.Text        `json:"completion_source"`
-	CompletionNote    pgtype.Text        `json:"completion_note"`
-	CompletedAt       pgtype.Timestamptz `json:"completed_at"`
-	CreatedAt         pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
-}
-
-type AiBillingSettlementBatch struct {
-	BatchID              pgtype.UUID        `json:"batch_id"`
-	WindowID             string             `json:"window_id"`
-	LeaseID              string             `json:"lease_id"`
-	SettlementID         string             `json:"settlement_id"`
-	ActualTenantMicro    int64              `json:"actual_tenant_micro"`
-	ActualUserMicro      int64              `json:"actual_user_micro"`
-	Status               string             `json:"status"`
-	TenantDeductedMicro  int64              `json:"tenant_deducted_micro"`
-	UserDeductedMicro    int64              `json:"user_deducted_micro"`
-	TenantDebtAddedMicro int64              `json:"tenant_debt_added_micro"`
-	UserDebtAddedMicro   int64              `json:"user_debt_added_micro"`
-	AttemptCount         int32              `json:"attempt_count"`
-	LastErrorCode        pgtype.Text        `json:"last_error_code"`
-	LastErrorDetail      pgtype.Text        `json:"last_error_detail"`
-	DeliveredAt          pgtype.Timestamptz `json:"delivered_at"`
-	CreatedAt            pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
-}
-
-type AiBillingSettlementOutbox struct {
-	OutboxID        pgtype.UUID        `json:"outbox_id"`
-	BatchID         pgtype.UUID        `json:"batch_id"`
-	LeaseID         string             `json:"lease_id"`
-	SettlementID    string             `json:"settlement_id"`
-	Payload         []byte             `json:"payload"`
-	Status          string             `json:"status"`
-	AttemptCount    int32              `json:"attempt_count"`
-	AvailableAt     pgtype.Timestamptz `json:"available_at"`
-	LockedUntil     pgtype.Timestamptz `json:"locked_until"`
-	LastErrorCode   pgtype.Text        `json:"last_error_code"`
-	LastErrorDetail pgtype.Text        `json:"last_error_detail"`
-	DeliveredAt     pgtype.Timestamptz `json:"delivered_at"`
-	CreatedAt       pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
-}
-
-type AiBillingWindow struct {
-	WindowID             string             `json:"window_id"`
-	OwnerType            string             `json:"owner_type"`
-	TenantID             string             `json:"tenant_id"`
-	UserID               string             `json:"user_id"`
-	WantTenant           bool               `json:"want_tenant"`
-	WantUser             bool               `json:"want_user"`
-	LeaseID              pgtype.Text        `json:"lease_id"`
-	LeaseVersion         int64              `json:"lease_version"`
-	RequestedTenantMicro int64              `json:"requested_tenant_micro"`
-	RequestedUserMicro   int64              `json:"requested_user_micro"`
-	GrantedTenantMicro   int64              `json:"granted_tenant_micro"`
-	GrantedUserMicro     int64              `json:"granted_user_micro"`
-	AccruedTenantMicro   int64              `json:"accrued_tenant_micro"`
-	AccruedUserMicro     int64              `json:"accrued_user_micro"`
-	State                string             `json:"state"`
-	ExpiresAt            pgtype.Timestamptz `json:"expires_at"`
-	GraceUntil           pgtype.Timestamptz `json:"grace_until"`
-	MaxAgeAt             pgtype.Timestamptz `json:"max_age_at"`
-	LastAdmittedAt       pgtype.Timestamptz `json:"last_admitted_at"`
-	LastErrorCode        pgtype.Text        `json:"last_error_code"`
-	LastErrorDetail      pgtype.Text        `json:"last_error_detail"`
-	OpenedAt             pgtype.Timestamptz `json:"opened_at"`
-	SettledAt            pgtype.Timestamptz `json:"settled_at"`
-	CreatedAt            pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+type AiConsumptionProjection struct {
+	ID                                 pgtype.UUID        `json:"id"`
+	RequestID                          string             `json:"request_id"`
+	TraceID                            pgtype.Text        `json:"trace_id"`
+	ApiKeyID                           pgtype.UUID        `json:"api_key_id"`
+	KeyOwnerType                       string             `json:"key_owner_type"`
+	AuthMethod                         string             `json:"auth_method"`
+	RequestSource                      string             `json:"request_source"`
+	TenantID                           string             `json:"tenant_id"`
+	UserID                             pgtype.Text        `json:"user_id"`
+	ClientUserAgent                    string             `json:"client_user_agent"`
+	ExternalUserID                     pgtype.Text        `json:"external_user_id"`
+	GroupID                            pgtype.UUID        `json:"group_id"`
+	GroupNameSnapshot                  string             `json:"group_name_snapshot"`
+	BillingGroupLabelSnapshot          string             `json:"billing_group_label_snapshot"`
+	ModelCode                          string             `json:"model_code"`
+	RequestedModel                     string             `json:"requested_model"`
+	MatchedDispatchRuleID              pgtype.UUID        `json:"matched_dispatch_rule_id"`
+	MatchedDispatchRuleSummary         pgtype.Text        `json:"matched_dispatch_rule_summary"`
+	ResolvedLogicalModel               pgtype.Text        `json:"resolved_logical_model"`
+	ResolvedProviderFamily             pgtype.Text        `json:"resolved_provider_family"`
+	CapabilityType                     string             `json:"capability_type"`
+	GroupTargetID                      pgtype.UUID        `json:"group_target_id"`
+	UpstreamAccountID                  pgtype.UUID        `json:"upstream_account_id"`
+	EndpointID                         pgtype.UUID        `json:"endpoint_id"`
+	ProviderCode                       pgtype.Text        `json:"provider_code"`
+	UpstreamModel                      pgtype.Text        `json:"upstream_model"`
+	ProviderFormat                     pgtype.Text        `json:"provider_format"`
+	ConversationID                     pgtype.Text        `json:"conversation_id"`
+	Stream                             bool               `json:"stream"`
+	PromptTokens                       int32              `json:"prompt_tokens"`
+	CompletionTokens                   int32              `json:"completion_tokens"`
+	CacheWriteTokens                   int32              `json:"cache_write_tokens"`
+	CacheReadTokens                    int32              `json:"cache_read_tokens"`
+	ReasoningTokens                    int32              `json:"reasoning_tokens"`
+	ReasoningEffort                    pgtype.Text        `json:"reasoning_effort"`
+	TotalTokens                        int32              `json:"total_tokens"`
+	BillableUnitType                   string             `json:"billable_unit_type"`
+	BillableUnits                      int64              `json:"billable_units"`
+	CatalogBase                        int64              `json:"catalog_base"`
+	TenantPayable                      int64              `json:"tenant_payable"`
+	RetailBase                         int64              `json:"retail_base"`
+	UserPayable                        int64              `json:"user_payable"`
+	UserCharged                        int64              `json:"user_charged"`
+	ApiKeyQuotaCost                    int64              `json:"api_key_quota_cost"`
+	ServiceTier                        string             `json:"service_tier"`
+	BillingBreakdown                   []byte             `json:"billing_breakdown"`
+	BillingWindowID                    pgtype.Text        `json:"billing_window_id"`
+	SettlementBatchID                  pgtype.UUID        `json:"settlement_batch_id"`
+	SettledAt                          pgtype.Timestamptz `json:"settled_at"`
+	BillingStatus                      string             `json:"billing_status"`
+	SettlementError                    pgtype.Text        `json:"settlement_error"`
+	RefundStatus                       string             `json:"refund_status"`
+	RefundReason                       pgtype.Text        `json:"refund_reason"`
+	RefundOperatorID                   pgtype.Text        `json:"refund_operator_id"`
+	RefundedAt                         pgtype.Timestamptz `json:"refunded_at"`
+	RequestStatus                      string             `json:"request_status"`
+	HttpStatus                         pgtype.Int4        `json:"http_status"`
+	UpstreamStatus                     pgtype.Int4        `json:"upstream_status"`
+	LatencyMs                          pgtype.Int4        `json:"latency_ms"`
+	FirstTokenLatencyMs                pgtype.Int4        `json:"first_token_latency_ms"`
+	RequestTotalMs                     pgtype.Int4        `json:"request_total_ms"`
+	RequestSetupMs                     pgtype.Int4        `json:"request_setup_ms"`
+	FirstResponseByteMs                pgtype.Int4        `json:"first_response_byte_ms"`
+	ResponseTailMs                     pgtype.Int4        `json:"response_tail_ms"`
+	FinalAttemptHeaderMs               pgtype.Int4        `json:"final_attempt_header_ms"`
+	FinalAttemptTotalMs                pgtype.Int4        `json:"final_attempt_total_ms"`
+	ErrorCode                          pgtype.Text        `json:"error_code"`
+	ErrorMessage                       pgtype.Text        `json:"error_message"`
+	OauthCredentialID                  pgtype.UUID        `json:"oauth_credential_id"`
+	CredentialPoolID                   pgtype.UUID        `json:"credential_pool_id"`
+	AttemptsCount                      int32              `json:"attempts_count"`
+	FinalRouteID                       pgtype.UUID        `json:"final_route_id"`
+	ClientProtocol                     string             `json:"client_protocol"`
+	Resolution                         pgtype.Text        `json:"resolution"`
+	ProtocolConversionEnabled          bool               `json:"protocol_conversion_enabled"`
+	UpstreamModelMappingApplied        bool               `json:"upstream_model_mapping_applied"`
+	PublicResponseModel                pgtype.Text        `json:"public_response_model"`
+	UsageEstimated                     bool               `json:"usage_estimated"`
+	TokenUsageSource                   string             `json:"token_usage_source"`
+	ProviderTerminalState              string             `json:"provider_terminal_state"`
+	ClientDeliveryState                string             `json:"client_delivery_state"`
+	CancellationOrigin                 string             `json:"cancellation_origin"`
+	BillingReason                      string             `json:"billing_reason"`
+	ResponseSummaryState               string             `json:"response_summary_state"`
+	BillingSource                      string             `json:"billing_source"`
+	SubscriptionID                     pgtype.UUID        `json:"subscription_id"`
+	CreatedAt                          pgtype.Timestamptz `json:"created_at"`
+	GroupDefaultUserMultiplierSnapshot pgtype.Numeric     `json:"group_default_user_multiplier_snapshot"`
+	UserMultiplierOverrideSnapshot     pgtype.Numeric     `json:"user_multiplier_override_snapshot"`
+	EffectiveUserMultiplierSnapshot    pgtype.Numeric     `json:"effective_user_multiplier_snapshot"`
 }
 
 type AiContentModerationLog struct {
@@ -243,6 +234,16 @@ type AiCredentialPool struct {
 	Status            string             `json:"status"`
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
+type AiDebugSession struct {
+	ID        pgtype.UUID        `json:"id"`
+	TenantID  string             `json:"tenant_id"`
+	ApiKeyID  string             `json:"api_key_id"`
+	ModelCode string             `json:"model_code"`
+	CreatedBy string             `json:"created_by"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
 }
 
 type AiGroup struct {
@@ -402,37 +403,55 @@ type AiProxyNode struct {
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 }
 
-type AiRequestPayload struct {
-	ID                          pgtype.UUID        `json:"id"`
-	RequestID                   string             `json:"request_id"`
-	CreatedAt                   pgtype.Timestamptz `json:"created_at"`
-	ClientProtocol              string             `json:"client_protocol"`
-	ClientIp                    pgtype.Text        `json:"client_ip"`
-	UserAgent                   pgtype.Text        `json:"user_agent"`
-	RequestPath                 string             `json:"request_path"`
-	AuthMasked                  pgtype.Text        `json:"auth_masked"`
-	RequestModel                string             `json:"request_model"`
-	MatchedDispatchRuleID       pgtype.UUID        `json:"matched_dispatch_rule_id"`
-	MatchedDispatchRuleSummary  pgtype.Text        `json:"matched_dispatch_rule_summary"`
-	ResolvedLogicalModel        pgtype.Text        `json:"resolved_logical_model"`
-	ResolvedProviderFamily      pgtype.Text        `json:"resolved_provider_family"`
-	ProtocolConversionEnabled   bool               `json:"protocol_conversion_enabled"`
-	SelectedUpstreamProtocol    pgtype.Text        `json:"selected_upstream_protocol"`
-	SelectedUpstreamModel       pgtype.Text        `json:"selected_upstream_model"`
-	UpstreamModelMappingApplied bool               `json:"upstream_model_mapping_applied"`
-	PublicResponseModel         pgtype.Text        `json:"public_response_model"`
-	RequestMessages             []byte             `json:"request_messages"`
-	RequestParams               []byte             `json:"request_params"`
-	RequestHeaders              []byte             `json:"request_headers"`
-	ResponseMessage             []byte             `json:"response_message"`
-	ResponseHeaders             []byte             `json:"response_headers"`
-	MediaRefs                   []byte             `json:"media_refs"`
-	RequestStatus               string             `json:"request_status"`
-	HttpStatus                  pgtype.Int4        `json:"http_status"`
-	ErrorCode                   pgtype.Text        `json:"error_code"`
-	InternalErrorDetail         pgtype.Text        `json:"internal_error_detail"`
-	FailedStep                  pgtype.Text        `json:"failed_step"`
-	AttemptsDetail              []byte             `json:"attempts_detail"`
+type AiRequest struct {
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	RequestID     string             `json:"request_id"`
+	TenantID      string             `json:"tenant_id"`
+	UserID        string             `json:"user_id"`
+	ApiKeyID      string             `json:"api_key_id"`
+	ModelCode     string             `json:"model_code"`
+	RequestSource string             `json:"request_source"`
+	EndReason     string             `json:"end_reason"`
+	DeliveryState string             `json:"delivery_state"`
+	IsError       bool               `json:"is_error"`
+	CompletedAt   pgtype.Timestamptz `json:"completed_at"`
+	Facts         []byte             `json:"facts"`
+}
+
+type AiRequestAttempt struct {
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	RequestID string             `json:"request_id"`
+	Ordinal   int32              `json:"ordinal"`
+	Facts     []byte             `json:"facts"`
+}
+
+type AiRequestDebugPayload struct {
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	RequestID     string             `json:"request_id"`
+	SessionID     pgtype.UUID        `json:"session_id"`
+	ContentGzip   []byte             `json:"content_gzip"`
+	OriginalBytes int64              `json:"original_bytes"`
+	Truncated     bool               `json:"truncated"`
+}
+
+type AiRequestError struct {
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	RequestID      string             `json:"request_id"`
+	Origin         string             `json:"origin"`
+	Stage          string             `json:"stage"`
+	Code           string             `json:"code"`
+	Message        string             `json:"message"`
+	InternalDetail string             `json:"internal_detail"`
+}
+
+type AiRequestKey struct {
+	RequestID    string             `json:"request_id"`
+	RegisteredAt pgtype.Timestamptz `json:"registered_at"`
+	Epoch        pgtype.UUID        `json:"epoch"`
+	LeaseUntil   pgtype.Timestamptz `json:"lease_until"`
+	SealedAt     pgtype.Timestamptz `json:"sealed_at"`
+	TenantID     string             `json:"tenant_id"`
+	UserID       string             `json:"user_id"`
 }
 
 type AiRiskEvent struct {
@@ -645,6 +664,7 @@ type AiUpstreamResource struct {
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
 	TenantDisplayName string             `json:"tenant_display_name"`
 	TenantAccessMode  string             `json:"tenant_access_mode"`
+	Description       string             `json:"description"`
 }
 
 type AiUpstreamResourceTenantPolicy struct {
@@ -655,135 +675,6 @@ type AiUpstreamResourceTenantPolicy struct {
 	TenantMultiplierOverride pgtype.Numeric     `json:"tenant_multiplier_override"`
 	CreatedAt                pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt                pgtype.Timestamptz `json:"updated_at"`
-}
-
-type AiUsageLog struct {
-	ID                                 pgtype.UUID        `json:"id"`
-	RequestID                          string             `json:"request_id"`
-	TraceID                            pgtype.Text        `json:"trace_id"`
-	ApiKeyID                           pgtype.UUID        `json:"api_key_id"`
-	KeyOwnerType                       string             `json:"key_owner_type"`
-	AuthMethod                         string             `json:"auth_method"`
-	RequestSource                      string             `json:"request_source"`
-	TenantID                           string             `json:"tenant_id"`
-	UserID                             pgtype.Text        `json:"user_id"`
-	ClientUserAgent                    string             `json:"client_user_agent"`
-	ExternalUserID                     pgtype.Text        `json:"external_user_id"`
-	GroupID                            pgtype.UUID        `json:"group_id"`
-	GroupNameSnapshot                  string             `json:"group_name_snapshot"`
-	GroupDefaultUserMultiplierSnapshot pgtype.Numeric     `json:"group_default_user_multiplier_snapshot"`
-	UserMultiplierOverrideSnapshot     pgtype.Numeric     `json:"user_multiplier_override_snapshot"`
-	EffectiveUserMultiplierSnapshot    pgtype.Numeric     `json:"effective_user_multiplier_snapshot"`
-	BillingGroupLabelSnapshot          string             `json:"billing_group_label_snapshot"`
-	ModelCode                          string             `json:"model_code"`
-	RequestedModel                     string             `json:"requested_model"`
-	MatchedDispatchRuleID              pgtype.UUID        `json:"matched_dispatch_rule_id"`
-	MatchedDispatchRuleSummary         pgtype.Text        `json:"matched_dispatch_rule_summary"`
-	ResolvedLogicalModel               pgtype.Text        `json:"resolved_logical_model"`
-	ResolvedProviderFamily             pgtype.Text        `json:"resolved_provider_family"`
-	CapabilityType                     string             `json:"capability_type"`
-	GroupTargetID                      pgtype.UUID        `json:"group_target_id"`
-	UpstreamAccountID                  pgtype.UUID        `json:"upstream_account_id"`
-	EndpointID                         pgtype.UUID        `json:"endpoint_id"`
-	ProviderCode                       pgtype.Text        `json:"provider_code"`
-	UpstreamModel                      pgtype.Text        `json:"upstream_model"`
-	ProviderFormat                     pgtype.Text        `json:"provider_format"`
-	ConversationID                     pgtype.Text        `json:"conversation_id"`
-	Stream                             bool               `json:"stream"`
-	PromptTokens                       int32              `json:"prompt_tokens"`
-	CompletionTokens                   int32              `json:"completion_tokens"`
-	CacheWriteTokens                   int32              `json:"cache_write_tokens"`
-	CacheReadTokens                    int32              `json:"cache_read_tokens"`
-	ReasoningTokens                    int32              `json:"reasoning_tokens"`
-	ReasoningEffort                    pgtype.Text        `json:"reasoning_effort"`
-	TotalTokens                        int32              `json:"total_tokens"`
-	BillableUnitType                   string             `json:"billable_unit_type"`
-	BillableUnits                      int64              `json:"billable_units"`
-	CatalogBase                        int64              `json:"catalog_base"`
-	TenantPayable                      int64              `json:"tenant_payable"`
-	RetailBase                         int64              `json:"retail_base"`
-	UserPayable                        int64              `json:"user_payable"`
-	UserCharged                        int64              `json:"user_charged"`
-	ApiKeyQuotaCost                    int64              `json:"api_key_quota_cost"`
-	ServiceTier                        string             `json:"service_tier"`
-	BillingBreakdown                   []byte             `json:"billing_breakdown"`
-	BillingWindowID                    pgtype.Text        `json:"billing_window_id"`
-	SettlementBatchID                  pgtype.UUID        `json:"settlement_batch_id"`
-	SettledAt                          pgtype.Timestamptz `json:"settled_at"`
-	BillingStatus                      string             `json:"billing_status"`
-	SettlementError                    pgtype.Text        `json:"settlement_error"`
-	RefundStatus                       string             `json:"refund_status"`
-	RefundReason                       pgtype.Text        `json:"refund_reason"`
-	RefundOperatorID                   pgtype.Text        `json:"refund_operator_id"`
-	RefundedAt                         pgtype.Timestamptz `json:"refunded_at"`
-	RequestStatus                      string             `json:"request_status"`
-	HttpStatus                         pgtype.Int4        `json:"http_status"`
-	UpstreamStatus                     pgtype.Int4        `json:"upstream_status"`
-	LatencyMs                          pgtype.Int4        `json:"latency_ms"`
-	FirstTokenLatencyMs                pgtype.Int4        `json:"first_token_latency_ms"`
-	RequestTotalMs                     pgtype.Int4        `json:"request_total_ms"`
-	RequestSetupMs                     pgtype.Int4        `json:"request_setup_ms"`
-	FirstResponseByteMs                pgtype.Int4        `json:"first_response_byte_ms"`
-	ResponseTailMs                     pgtype.Int4        `json:"response_tail_ms"`
-	FinalAttemptHeaderMs               pgtype.Int4        `json:"final_attempt_header_ms"`
-	FinalAttemptTotalMs                pgtype.Int4        `json:"final_attempt_total_ms"`
-	ErrorCode                          pgtype.Text        `json:"error_code"`
-	ErrorMessage                       pgtype.Text        `json:"error_message"`
-	OauthCredentialID                  pgtype.UUID        `json:"oauth_credential_id"`
-	CredentialPoolID                   pgtype.UUID        `json:"credential_pool_id"`
-	AttemptsCount                      int32              `json:"attempts_count"`
-	FinalRouteID                       pgtype.UUID        `json:"final_route_id"`
-	ClientProtocol                     string             `json:"client_protocol"`
-	Resolution                         pgtype.Text        `json:"resolution"`
-	ProtocolConversionEnabled          bool               `json:"protocol_conversion_enabled"`
-	UpstreamModelMappingApplied        bool               `json:"upstream_model_mapping_applied"`
-	PublicResponseModel                pgtype.Text        `json:"public_response_model"`
-	UsageEstimated                     bool               `json:"usage_estimated"`
-	TokenUsageSource                   string             `json:"token_usage_source"`
-	ProviderTerminalState              string             `json:"provider_terminal_state"`
-	ClientDeliveryState                string             `json:"client_delivery_state"`
-	CancellationOrigin                 string             `json:"cancellation_origin"`
-	BillingReason                      string             `json:"billing_reason"`
-	ResponseSummaryState               string             `json:"response_summary_state"`
-	BillingSource                      string             `json:"billing_source"`
-	SubscriptionID                     pgtype.UUID        `json:"subscription_id"`
-	CreatedAt                          pgtype.Timestamptz `json:"created_at"`
-}
-
-type AiUsageRollupsHourly struct {
-	BucketStart                   pgtype.Timestamptz `json:"bucket_start"`
-	TenantID                      string             `json:"tenant_id"`
-	UserID                        string             `json:"user_id"`
-	ApiKeyID                      pgtype.UUID        `json:"api_key_id"`
-	RequestSource                 string             `json:"request_source"`
-	CapabilityType                string             `json:"capability_type"`
-	ModelCode                     string             `json:"model_code"`
-	ProviderCode                  string             `json:"provider_code"`
-	RequestStatus                 string             `json:"request_status"`
-	BillableUnitType              string             `json:"billable_unit_type"`
-	RequestCount                  int64              `json:"request_count"`
-	SuccessCount                  int64              `json:"success_count"`
-	FailedCount                   int64              `json:"failed_count"`
-	PromptTokens                  int64              `json:"prompt_tokens"`
-	CompletionTokens              int64              `json:"completion_tokens"`
-	CacheWriteTokens              int64              `json:"cache_write_tokens"`
-	CacheReadTokens               int64              `json:"cache_read_tokens"`
-	ReasoningTokens               int64              `json:"reasoning_tokens"`
-	TotalTokens                   int64              `json:"total_tokens"`
-	BillableUnits                 int64              `json:"billable_units"`
-	CatalogBase                   int64              `json:"catalog_base"`
-	TenantPayable                 int64              `json:"tenant_payable"`
-	RetailBase                    int64              `json:"retail_base"`
-	UserPayable                   int64              `json:"user_payable"`
-	UserCharged                   int64              `json:"user_charged"`
-	ApiKeyQuotaCost               int64              `json:"api_key_quota_cost"`
-	LatencySuccessSumMs           int64              `json:"latency_success_sum_ms"`
-	LatencySuccessCount           int64              `json:"latency_success_count"`
-	RequestTotalSuccessSumMs      int64              `json:"request_total_success_sum_ms"`
-	RequestTotalSuccessCount      int64              `json:"request_total_success_count"`
-	FirstResponseByteSuccessSumMs int64              `json:"first_response_byte_success_sum_ms"`
-	FirstResponseByteSuccessCount int64              `json:"first_response_byte_success_count"`
-	UpdatedAt                     pgtype.Timestamptz `json:"updated_at"`
 }
 
 type AiUserGroup struct {
@@ -942,19 +833,13 @@ type BillAccount struct {
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 }
 
-type BillChargeOutbox struct {
-	ID          int64              `json:"id"`
-	RequestID   string             `json:"request_id"`
-	TenantID    string             `json:"tenant_id"`
-	UserID      pgtype.Text        `json:"user_id"`
-	TenantMicro int64              `json:"tenant_micro"`
-	UserMicro   int64              `json:"user_micro"`
-	Description string             `json:"description"`
-	Status      string             `json:"status"`
-	Attempts    int32              `json:"attempts"`
-	LastError   pgtype.Text        `json:"last_error"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	SettledAt   pgtype.Timestamptz `json:"settled_at"`
+type BillCheckpoint struct {
+	AccountID string             `json:"account_id"`
+	Meter     string             `json:"meter"`
+	ThroughAt pgtype.Timestamptz `json:"through_at"`
+	Value     int64              `json:"value"`
+	Source    string             `json:"source"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
 type BillCreditLot struct {
@@ -971,6 +856,33 @@ type BillCreditLot struct {
 	RechargeOrderID    pgtype.Text        `json:"recharge_order_id"`
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+}
+
+type BillDailyTotal struct {
+	Day              pgtype.Date `json:"day"`
+	TenantID         string      `json:"tenant_id"`
+	UserID           string      `json:"user_id"`
+	Requests         int64       `json:"requests"`
+	Errors           int64       `json:"errors"`
+	Interruptions    int64       `json:"interruptions"`
+	PromptTokens     int64       `json:"prompt_tokens"`
+	CompletionTokens int64       `json:"completion_tokens"`
+	TenantCharged    int64       `json:"tenant_charged"`
+	UserCharged      int64       `json:"user_charged"`
+	TenantRefunded   int64       `json:"tenant_refunded"`
+	UserRefunded     int64       `json:"user_refunded"`
+}
+
+type BillJournal struct {
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	ID          pgtype.UUID        `json:"id"`
+	OperationID string             `json:"operation_id"`
+	AccountID   string             `json:"account_id"`
+	Meter       string             `json:"meter"`
+	Delta       int64              `json:"delta"`
+	BeforeValue int64              `json:"before_value"`
+	AfterValue  int64              `json:"after_value"`
+	Reason      string             `json:"reason"`
 }
 
 type BillRechargeOrder struct {
@@ -993,6 +905,14 @@ type BillRechargeOrder struct {
 	ReversedAmountMicro int64              `json:"reversed_amount_micro"`
 	LostAmountMicro     int64              `json:"lost_amount_micro"`
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+}
+
+type BillRecordControl struct {
+	Singleton    bool               `json:"singleton"`
+	Epoch        pgtype.UUID        `json:"epoch"`
+	Accepting    bool               `json:"accepting"`
+	ClosedBefore pgtype.Timestamptz `json:"closed_before"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 }
 
 type BillRefundReversalEffect struct {
@@ -1022,6 +942,37 @@ type BillRepairAudit struct {
 	BeforeState    []byte             `json:"before_state"`
 	AfterState     []byte             `json:"after_state"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
+type BillSettlement struct {
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	RequestID           string             `json:"request_id"`
+	TenantID            string             `json:"tenant_id"`
+	UserID              string             `json:"user_id"`
+	ApiKeyID            string             `json:"api_key_id"`
+	SubscriptionID      string             `json:"subscription_id"`
+	BillingSource       string             `json:"billing_source"`
+	SealedAt            pgtype.Timestamptz `json:"sealed_at"`
+	DeliveryInterrupted bool               `json:"delivery_interrupted"`
+	State               string             `json:"state"`
+	Reason              string             `json:"reason"`
+	TenantDue           int64              `json:"tenant_due"`
+	UserDue             int64              `json:"user_due"`
+	KeyDue              int64              `json:"key_due"`
+	SubscriptionDue     int64              `json:"subscription_due"`
+	TenantCharged       int64              `json:"tenant_charged"`
+	UserCharged         int64              `json:"user_charged"`
+	Evidence            []byte             `json:"evidence"`
+	Pricing             []byte             `json:"pricing"`
+	Dimensions          []byte             `json:"dimensions"`
+	SubscriptionWindows []byte             `json:"subscription_windows"`
+	Attempts            int32              `json:"attempts"`
+	AvailableAt         pgtype.Timestamptz `json:"available_at"`
+	LastError           string             `json:"last_error"`
+	PostedAt            pgtype.Timestamptz `json:"posted_at"`
+	RefundedAt          pgtype.Timestamptz `json:"refunded_at"`
+	RefundReason        string             `json:"refund_reason"`
+	RefundOperator      string             `json:"refund_operator"`
 }
 
 type BillingRechargeOrderProjection struct {
@@ -1126,38 +1077,6 @@ type IamUserLegalAcceptance struct {
 	DocumentVersion string             `json:"document_version"`
 	Source          string             `json:"source"`
 	AcceptedAt      pgtype.Timestamptz `json:"accepted_at"`
-}
-
-type LedgerCreditLease struct {
-	ID                   int64              `json:"id"`
-	LeaseID              string             `json:"lease_id"`
-	ClientID             string             `json:"client_id"`
-	ClientWindowID       string             `json:"client_window_id"`
-	TenantID             string             `json:"tenant_id"`
-	UserID               pgtype.Text        `json:"user_id"`
-	Description          pgtype.Text        `json:"description"`
-	RequestedTenantMicro int64              `json:"requested_tenant_micro"`
-	RequestedUserMicro   int64              `json:"requested_user_micro"`
-	GrantedTenantMicro   int64              `json:"granted_tenant_micro"`
-	GrantedUserMicro     int64              `json:"granted_user_micro"`
-	EscrowState          string             `json:"escrow_state"`
-	SettlementState      string             `json:"settlement_state"`
-	Version              int64              `json:"version"`
-	ExpiresAt            pgtype.Timestamptz `json:"expires_at"`
-	GraceUntil           pgtype.Timestamptz `json:"grace_until"`
-	SettlementID         pgtype.Text        `json:"settlement_id"`
-	ActualTenantMicro    pgtype.Int8        `json:"actual_tenant_micro"`
-	ActualUserMicro      pgtype.Int8        `json:"actual_user_micro"`
-	TenantDeductedMicro  int64              `json:"tenant_deducted_micro"`
-	UserDeductedMicro    int64              `json:"user_deducted_micro"`
-	TenantDebtAddedMicro int64              `json:"tenant_debt_added_micro"`
-	UserDebtAddedMicro   int64              `json:"user_debt_added_micro"`
-	AccountState         string             `json:"account_state"`
-	AllowFurtherUsage    bool               `json:"allow_further_usage"`
-	SettledAt            pgtype.Timestamptz `json:"settled_at"`
-	ReleasedAt           pgtype.Timestamptz `json:"released_at"`
-	CreatedAt            pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 }
 
 type PayCashLedger struct {
@@ -1439,7 +1358,7 @@ type TenantSelfOverviewProjection struct {
 
 type TenantUsageProjection struct {
 	TenantID      string             `json:"tenant_id"`
-	UserID        pgtype.Text        `json:"user_id"`
+	UserID        string             `json:"user_id"`
 	Username      interface{}        `json:"username"`
 	RequestSource string             `json:"request_source"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`

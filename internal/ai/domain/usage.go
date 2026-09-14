@@ -254,6 +254,7 @@ type DailyTrendRow struct {
 
 // UsageFilter scopes usage queries. Empty strings / nil times mean "no filter".
 type UsageFilter struct {
+	ErrorsOnly    bool // Explicit request errors; excludes client disconnects and recovered attempts.
 	TenantID      string
 	TenantName    string
 	UserID        string

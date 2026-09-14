@@ -20,12 +20,6 @@ function rechargeStatusTone(status: string): DsTagTone {
   return status === "reversed" ? "neutral" : "positive";
 }
 
-function aiStatusTone(status: string): DsTagTone {
-  if (status === "success") return "positive";
-  if (status === "failed" || status === "error") return "danger";
-  if (status === "pending") return "warning";
-  return "neutral";
-}
 </script>
 
 <template>
@@ -65,17 +59,17 @@ function aiStatusTone(status: string): DsTagTone {
 
       <DsEmpty v-if="!aiUsageLogs.length" :title="aiAvailable ? '暂无 AI 调用记录' : '当前租户未开通智能服务'" />
       <div v-else class="activity-list">
-        <div v-for="log in aiUsageLogs" :key="log.id" class="activity-item">
+        <div v-for="log in aiUsageLogs" :key="log.request_id" class="activity-item">
           <div class="activity-item-main">
             <div class="activity-item-title-row">
-              <strong class="activity-item-title">{{ log.model_code }}</strong>
+              <strong class="activity-item-title">{{ log.model }}</strong>
               <div class="activity-tag-row">
-                <DsTag :tone="aiStatusTone(log.request_status)">{{ log.request_status }}</DsTag>
-                <DsTag>${{ Number(log.user_charged_usd ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 }) }}</DsTag>
+
+                <DsTag>${{ Number((log.charge.user_charged_micro ?? 0) / 1_000_000).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 }) }}</DsTag>
               </div>
             </div>
             <p class="activity-item-meta">
-              {{ log.request_source }} · {{ formatNumber(log.total_tokens) }} tokens · {{ log.billing_group_label_snapshot || log.group_name_snapshot || "未命名分组" }}
+              {{ log.source }} · {{ formatNumber((log.tokens.input || 0) + (log.tokens.output || 0)) }} tokens · {{ log.request_id }}
             </p>
           </div>
           <span class="activity-item-time">{{ formatShortDateTime(log.created_at) }}</span>

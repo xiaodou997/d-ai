@@ -157,16 +157,23 @@ func (q *Queries) AddGroupTarget(ctx context.Context, arg AddGroupTargetParams) 
 
 const countUsageLogs = `-- name: CountUsageLogs :one
 SELECT COUNT(*) AS count
-FROM ai_usage_logs
+FROM ai_consumption_projection
 WHERE ($1::text IS NULL OR tenant_id = $1::text)
-  AND ($2::text IS NULL OR EXISTS (SELECT 1 FROM iam_tenants t WHERE t.tenant_id = ai_usage_logs.tenant_id AND t.tenant_name ILIKE '%' || $2::text || '%'))
+  AND ($2::text IS NULL OR EXISTS (SELECT 1 FROM iam_tenants t WHERE t.tenant_id = ai_consumption_projection.tenant_id AND t.tenant_name ILIKE '%' || $2::text || '%'))
   AND ($3::text IS NULL OR user_id = $3::text)
-  AND ($4::text IS NULL OR EXISTS (SELECT 1 FROM iam_accounts u WHERE u.user_id = ai_usage_logs.user_id AND u.tenant_id = ai_usage_logs.tenant_id AND u.user_type = 4 AND (u.username ILIKE '%' || $4::text || '%' OR u.nickname ILIKE '%' || $4::text || '%')))
+  AND ($4::text IS NULL OR EXISTS (SELECT 1 FROM iam_accounts u WHERE u.user_id = ai_consumption_projection.user_id AND u.tenant_id = ai_consumption_projection.tenant_id AND u.user_type = 4 AND (u.username ILIKE '%' || $4::text || '%' OR u.nickname ILIKE '%' || $4::text || '%')))
   AND ($5::text IS NULL OR model_code = $5::text)
   AND ($6::text IS NULL OR request_status = $6::text)
-  AND ($7::text IS NULL OR request_source = $7::text)
-  AND ($8::timestamptz IS NULL OR created_at >= $8::timestamptz)
-  AND ($9::timestamptz IS NULL OR created_at < $9::timestamptz)
+  AND (NOT $7::boolean OR (COALESCE(provider_terminal_state, '') = 'failed'
+    OR (COALESCE(http_status, 0) >= 400 AND http_status <> 499)
+    OR (COALESCE(request_status, '') <> 'success'
+      AND COALESCE(cancellation_origin, '') <> 'client'
+      AND COALESCE(error_code, '') NOT IN ('client_disconnected', 'stream_write_error')
+      AND COALESCE(http_status, 0) <> 499
+      AND (COALESCE(error_code, '') <> '' OR COALESCE(error_message, '') <> ''))))
+  AND ($8::text IS NULL OR request_source = $8::text)
+  AND ($9::timestamptz IS NULL OR created_at >= $9::timestamptz)
+  AND ($10::timestamptz IS NULL OR created_at < $10::timestamptz)
 `
 
 type CountUsageLogsParams struct {
@@ -176,6 +183,7 @@ type CountUsageLogsParams struct {
 	UserName      pgtype.Text        `json:"user_name"`
 	ModelCode     pgtype.Text        `json:"model_code"`
 	RequestStatus pgtype.Text        `json:"request_status"`
+	ErrorsOnly    bool               `json:"errors_only"`
 	RequestSource pgtype.Text        `json:"request_source"`
 	DateFrom      pgtype.Timestamptz `json:"date_from"`
 	DateTo        pgtype.Timestamptz `json:"date_to"`
@@ -189,6 +197,7 @@ func (q *Queries) CountUsageLogs(ctx context.Context, arg CountUsageLogsParams) 
 		arg.UserName,
 		arg.ModelCode,
 		arg.RequestStatus,
+		arg.ErrorsOnly,
 		arg.RequestSource,
 		arg.DateFrom,
 		arg.DateTo,
@@ -200,7 +209,7 @@ func (q *Queries) CountUsageLogs(ctx context.Context, arg CountUsageLogsParams) 
 
 const countUsageLogsByTenantUser = `-- name: CountUsageLogsByTenantUser :one
 SELECT COUNT(*) AS count
-FROM ai_usage_logs
+FROM ai_consumption_projection
 WHERE tenant_id = $1
   AND user_id = $2
   AND ($3::text IS NULL OR request_source = $3)
@@ -829,7 +838,7 @@ SELECT
   COALESCE(AVG(first_response_byte_ms) FILTER (WHERE request_status = 'success' AND first_response_byte_ms IS NOT NULL), 0)::double precision AS avg_first_response_byte_ms,
   COALESCE(percentile_cont(0.95) WITHIN GROUP (ORDER BY request_total_ms) FILTER (WHERE request_status = 'success' AND request_total_ms IS NOT NULL), 0)::double precision AS p95_request_total_ms,
   COALESCE(percentile_cont(0.95) WITHIN GROUP (ORDER BY first_response_byte_ms) FILTER (WHERE request_status = 'success' AND first_response_byte_ms IS NOT NULL), 0)::double precision AS p95_first_response_byte_ms
-FROM ai_usage_logs
+FROM ai_consumption_projection
 WHERE ($1::text IS NULL OR tenant_id = $1)
   AND ($4::text IS NULL OR user_id = $4)
   AND ($5::text IS NULL OR model_code = $5)
@@ -1030,8 +1039,8 @@ SELECT
   request_id,
   trace_id,
   api_key_id,
-  COALESCE((SELECT k.name::text FROM ai_api_keys k WHERE k.id = ai_usage_logs.api_key_id AND k.tenant_id = ai_usage_logs.tenant_id), '')::text AS api_key_name,
-  (SELECT k.last_four FROM ai_api_keys k WHERE k.id = ai_usage_logs.api_key_id AND k.tenant_id = ai_usage_logs.tenant_id) AS api_key_last_four,
+  COALESCE((SELECT k.name::text FROM ai_api_keys k WHERE k.id = ai_consumption_projection.api_key_id AND k.tenant_id = ai_consumption_projection.tenant_id), '')::text AS api_key_name,
+  (SELECT k.last_four FROM ai_api_keys k WHERE k.id = ai_consumption_projection.api_key_id AND k.tenant_id = ai_consumption_projection.tenant_id) AS api_key_last_four,
   key_owner_type,
   auth_method,
   request_source,
@@ -1039,8 +1048,8 @@ SELECT
   user_id,
   COALESCE((SELECT NULLIF(u.username, '')
             FROM iam_accounts u
-            WHERE u.user_id = ai_usage_logs.user_id
-              AND u.tenant_id = ai_usage_logs.tenant_id
+            WHERE u.user_id = ai_consumption_projection.user_id
+              AND u.tenant_id = ai_consumption_projection.tenant_id
               AND u.user_type = 4), '')::text AS username,
   client_user_agent,
   external_user_id,
@@ -1059,8 +1068,8 @@ SELECT
   capability_type,
   group_target_id,
   upstream_account_id,
-  COALESCE((SELECT a.name::text FROM ai_upstream_accounts a WHERE a.id = ai_usage_logs.upstream_account_id), '')::text AS upstream_account_name,
-  COALESCE((SELECT a.tenant_display_name::text FROM ai_upstream_accounts a WHERE a.id = ai_usage_logs.upstream_account_id), '')::text AS upstream_tenant_display_name,
+  COALESCE((SELECT a.name::text FROM ai_upstream_accounts a WHERE a.id = ai_consumption_projection.upstream_account_id), '')::text AS upstream_account_name,
+  COALESCE((SELECT a.tenant_display_name::text FROM ai_upstream_accounts a WHERE a.id = ai_consumption_projection.upstream_account_id), '')::text AS upstream_tenant_display_name,
   endpoint_id,
   credential_pool_id,
   provider_code,
@@ -1117,7 +1126,7 @@ SELECT
 	billing_reason,
 	response_summary_state,
 	  created_at
-FROM ai_usage_logs
+FROM ai_consumption_projection
 WHERE request_id = $1
 `
 
@@ -1535,13 +1544,19 @@ SELECT
   error_message,
   http_status,
   created_at
-FROM ai_usage_logs
+FROM ai_consumption_projection
 WHERE ($1::text IS NULL OR tenant_id = $1)
   AND ($2::text IS NULL OR user_id = $2)
   AND ($3::text IS NULL OR model_code = $3)
   AND ($4::timestamptz IS NULL OR created_at >= $4::timestamptz)
   AND ($5::timestamptz IS NULL OR created_at < $5::timestamptz)
-  AND request_status = 'failed'
+  AND (COALESCE(provider_terminal_state, '') = 'failed'
+    OR (COALESCE(http_status, 0) >= 400 AND http_status <> 499)
+    OR (COALESCE(request_status, '') <> 'success'
+      AND COALESCE(cancellation_origin, '') <> 'client'
+      AND COALESCE(error_code, '') NOT IN ('client_disconnected', 'stream_write_error')
+      AND COALESCE(http_status, 0) <> 499
+      AND (COALESCE(error_code, '') <> '' OR COALESCE(error_message, '') <> '')))
 ORDER BY created_at DESC
 LIMIT $6
 `
@@ -1622,7 +1637,7 @@ SELECT
   COUNT(*)::bigint AS request_count,
   COALESCE(SUM(total_tokens), 0)::bigint AS total_tokens,
   COALESCE(SUM(tenant_payable), 0)::bigint AS total_cost
-FROM ai_usage_logs
+FROM ai_consumption_projection
 WHERE ($1::text IS NULL OR tenant_id = $1)
   AND ($2::text IS NULL OR user_id = $2)
   AND ($3::text IS NULL OR model_code = $3)
@@ -1687,7 +1702,7 @@ SELECT
   COUNT(*)::bigint AS request_count,
   COALESCE(SUM(total_tokens), 0)::bigint AS total_tokens,
   COALESCE(SUM(tenant_payable), 0)::bigint AS total_cost
-FROM ai_usage_logs
+FROM ai_consumption_projection
 WHERE ($1::text IS NULL OR tenant_id = $1)
   AND ($2::text IS NULL OR user_id = $2)
   AND ($3::text IS NULL OR model_code = $3)
@@ -2247,8 +2262,8 @@ SELECT
   request_id,
   trace_id,
   api_key_id,
-  COALESCE((SELECT k.name::text FROM ai_api_keys k WHERE k.id = ai_usage_logs.api_key_id AND k.tenant_id = ai_usage_logs.tenant_id), '')::text AS api_key_name,
-  (SELECT k.last_four FROM ai_api_keys k WHERE k.id = ai_usage_logs.api_key_id AND k.tenant_id = ai_usage_logs.tenant_id) AS api_key_last_four,
+  COALESCE((SELECT k.name::text FROM ai_api_keys k WHERE k.id = ai_consumption_projection.api_key_id AND k.tenant_id = ai_consumption_projection.tenant_id), '')::text AS api_key_name,
+  (SELECT k.last_four FROM ai_api_keys k WHERE k.id = ai_consumption_projection.api_key_id AND k.tenant_id = ai_consumption_projection.tenant_id) AS api_key_last_four,
   key_owner_type,
   auth_method,
   request_source,
@@ -2256,8 +2271,8 @@ SELECT
   user_id,
   COALESCE((SELECT NULLIF(u.username, '')
             FROM iam_accounts u
-            WHERE u.user_id = ai_usage_logs.user_id
-              AND u.tenant_id = ai_usage_logs.tenant_id
+            WHERE u.user_id = ai_consumption_projection.user_id
+              AND u.tenant_id = ai_consumption_projection.tenant_id
               AND u.user_type = 4), '')::text AS username,
   client_user_agent,
   external_user_id,
@@ -2276,8 +2291,8 @@ SELECT
   capability_type,
   group_target_id,
   upstream_account_id,
-  COALESCE((SELECT a.name::text FROM ai_upstream_accounts a WHERE a.id = ai_usage_logs.upstream_account_id), '')::text AS upstream_account_name,
-  COALESCE((SELECT a.tenant_display_name::text FROM ai_upstream_accounts a WHERE a.id = ai_usage_logs.upstream_account_id), '')::text AS upstream_tenant_display_name,
+  COALESCE((SELECT a.name::text FROM ai_upstream_accounts a WHERE a.id = ai_consumption_projection.upstream_account_id), '')::text AS upstream_account_name,
+  COALESCE((SELECT a.tenant_display_name::text FROM ai_upstream_accounts a WHERE a.id = ai_consumption_projection.upstream_account_id), '')::text AS upstream_tenant_display_name,
   endpoint_id,
   credential_pool_id,
   provider_code,
@@ -2335,18 +2350,25 @@ SELECT
 	response_summary_state,
 	  billing_source,
 	  created_at
-FROM ai_usage_logs
+FROM ai_consumption_projection
 WHERE ($1::text IS NULL OR tenant_id = $1::text)
-  AND ($2::text IS NULL OR EXISTS (SELECT 1 FROM iam_tenants t WHERE t.tenant_id = ai_usage_logs.tenant_id AND t.tenant_name ILIKE '%' || $2::text || '%'))
+  AND ($2::text IS NULL OR EXISTS (SELECT 1 FROM iam_tenants t WHERE t.tenant_id = ai_consumption_projection.tenant_id AND t.tenant_name ILIKE '%' || $2::text || '%'))
   AND ($3::text IS NULL OR user_id = $3::text)
-  AND ($4::text IS NULL OR EXISTS (SELECT 1 FROM iam_accounts u WHERE u.user_id = ai_usage_logs.user_id AND u.tenant_id = ai_usage_logs.tenant_id AND u.user_type = 4 AND (u.username ILIKE '%' || $4::text || '%' OR u.nickname ILIKE '%' || $4::text || '%')))
+  AND ($4::text IS NULL OR EXISTS (SELECT 1 FROM iam_accounts u WHERE u.user_id = ai_consumption_projection.user_id AND u.tenant_id = ai_consumption_projection.tenant_id AND u.user_type = 4 AND (u.username ILIKE '%' || $4::text || '%' OR u.nickname ILIKE '%' || $4::text || '%')))
   AND ($5::text IS NULL OR model_code = $5::text)
   AND ($6::text IS NULL OR request_status = $6::text)
-  AND ($7::text IS NULL OR request_source = $7::text)
-  AND ($8::timestamptz IS NULL OR created_at >= $8::timestamptz)
-  AND ($9::timestamptz IS NULL OR created_at < $9::timestamptz)
+  AND (NOT $7::boolean OR (COALESCE(provider_terminal_state, '') = 'failed'
+    OR (COALESCE(http_status, 0) >= 400 AND http_status <> 499)
+    OR (COALESCE(request_status, '') <> 'success'
+      AND COALESCE(cancellation_origin, '') <> 'client'
+      AND COALESCE(error_code, '') NOT IN ('client_disconnected', 'stream_write_error')
+      AND COALESCE(http_status, 0) <> 499
+      AND (COALESCE(error_code, '') <> '' OR COALESCE(error_message, '') <> ''))))
+  AND ($8::text IS NULL OR request_source = $8::text)
+  AND ($9::timestamptz IS NULL OR created_at >= $9::timestamptz)
+  AND ($10::timestamptz IS NULL OR created_at < $10::timestamptz)
 ORDER BY created_at DESC
-LIMIT $11 OFFSET $10
+LIMIT $12 OFFSET $11
 `
 
 type ListUsageLogsParams struct {
@@ -2356,6 +2378,7 @@ type ListUsageLogsParams struct {
 	UserName      pgtype.Text        `json:"user_name"`
 	ModelCode     pgtype.Text        `json:"model_code"`
 	RequestStatus pgtype.Text        `json:"request_status"`
+	ErrorsOnly    bool               `json:"errors_only"`
 	RequestSource pgtype.Text        `json:"request_source"`
 	DateFrom      pgtype.Timestamptz `json:"date_from"`
 	DateTo        pgtype.Timestamptz `json:"date_to"`
@@ -2465,6 +2488,7 @@ func (q *Queries) ListUsageLogs(ctx context.Context, arg ListUsageLogsParams) ([
 		arg.UserName,
 		arg.ModelCode,
 		arg.RequestStatus,
+		arg.ErrorsOnly,
 		arg.RequestSource,
 		arg.DateFrom,
 		arg.DateTo,
@@ -2619,7 +2643,7 @@ SELECT
 	  error_code,
 	  error_message,
 	  created_at
-FROM ai_usage_logs
+FROM ai_consumption_projection
 WHERE tenant_id = $1
   AND user_id = $2
   AND ($4::text IS NULL OR request_source = $4)
@@ -2757,7 +2781,7 @@ SELECT
 	COALESCE(SUM(user_payable), 0)::bigint AS total_user_payable,
   COALESCE(SUM(user_charged), 0)::bigint AS total_user_charged,
   COALESCE(SUM(api_key_quota_cost), 0)::bigint AS total_quota_cost
-FROM ai_usage_logs
+FROM ai_consumption_projection
 WHERE ($1::text IS NULL OR tenant_id = $1)
   AND ($2::text IS NULL OR user_id = $2)
   AND ($3::text IS NULL OR model_code = $3)
@@ -2841,24 +2865,22 @@ func (q *Queries) ListUsageSummary(ctx context.Context, arg ListUsageSummaryPara
 }
 
 const listUsageSummaryByTenantUser = `-- name: ListUsageSummaryByTenantUser :one
-SELECT
-  COALESCE(SUM(request_count), 0)::bigint AS request_count,
-  COALESCE(SUM(success_count), 0)::bigint AS success_requests,
-  COALESCE(SUM(failed_count), 0)::bigint AS failed_requests,
-  COALESCE(SUM(total_tokens), 0)::bigint AS total_tokens,
-  COALESCE(SUM(prompt_tokens), 0)::bigint AS total_prompt_tokens,
-  COALESCE(SUM(completion_tokens), 0)::bigint AS total_completion_tokens,
-	COALESCE(SUM(user_charged), 0)::bigint AS total_user_charged,
-  COALESCE(SUM(latency_success_sum_ms)::double precision / NULLIF(SUM(latency_success_count), 0), 0)::double precision AS avg_latency_ms
-FROM ai_usage_rollups_hourly
-WHERE tenant_id = $1
-  AND user_id = $2
-  AND ($3::text IS NULL OR request_source = $3)
+SELECT count(*)::bigint AS request_count,
+ count(*) FILTER(WHERE request_status='success')::bigint AS success_requests,
+ count(*) FILTER(WHERE request_status='failed')::bigint AS failed_requests,
+ COALESCE(sum(total_tokens),0)::bigint AS total_tokens,
+ COALESCE(sum(prompt_tokens),0)::bigint AS total_prompt_tokens,
+ COALESCE(sum(completion_tokens),0)::bigint AS total_completion_tokens,
+ COALESCE(sum(user_charged),0)::bigint AS total_user_charged,
+ COALESCE(avg(latency_ms),0)::double precision AS avg_latency_ms
+FROM ai_consumption_projection
+WHERE tenant_id=$1 AND user_id=$2
+ AND ($3::text IS NULL OR request_source=$3)
 `
 
 type ListUsageSummaryByTenantUserParams struct {
 	TenantID      string      `json:"tenant_id"`
-	UserID        string      `json:"user_id"`
+	UserID        pgtype.Text `json:"user_id"`
 	RequestSource pgtype.Text `json:"request_source"`
 }
 
@@ -2899,7 +2921,7 @@ SELECT
   COALESCE(SUM(retail_base), 0)::bigint AS total_retail_base,
 	COALESCE(SUM(user_payable), 0)::bigint AS total_user_payable,
   COALESCE(SUM(user_charged), 0)::bigint AS total_user_charged
-FROM ai_usage_logs
+FROM ai_consumption_projection
 WHERE ($1::text IS NULL OR tenant_id = $1)
   AND ($2::text IS NULL OR user_id = $2)
   AND ($3::text IS NULL OR model_code = $3)

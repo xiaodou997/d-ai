@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"time"
+	"xiaodou/dai/internal/ai/domain"
 )
 
 // ResultStatus is the coarse category of an upstream call outcome. Used by
@@ -149,29 +150,32 @@ func (o Outcome) CountsAsHealthFailure() bool {
 // CredentialID/ErrorMsg must never reach the client — they identify internal
 // upstream accounts and may contain raw transport error text.
 type AttemptRecord struct {
-	Sequence           int `json:"-"` // Request-local order shared by calls and execution skips; planning precedes both.
-	RouteID            string
-	GroupID            string
-	RoutePolicy        string
-	GroupRank          int
-	TargetPriority     int // 分组内人工优先级（越小越优先，100 = 默认平级），用于 attempts_detail 展示
-	SelectionReason    string
-	TargetID           string // deployment_id or credential_id (legacy/opaque; kept for existing consumers)
-	ProviderCode       string
-	UpstreamModel      string
-	EndpointID         string // ai_upstream_account_endpoints.id; empty for pool routes
-	PoolID             string // ai_credential_pools.id; empty for account routes
-	CredentialID       string // OAuth credential actually used this attempt; empty when not pool-based
-	ProfileRevision    string // fixed-client profile frozen for this attempt
-	UpstreamRequestID  string // admin-only correlation from the upstream response
-	HTTPStatus         int
-	Outcome            ResultStatus
-	StartedAt          time.Time `json:"-"`
-	TransportStartedAt time.Time `json:"-"`
-	CompletedAt        time.Time `json:"-"`
-	LatencyMs          int       // connect phase: request sent → response headers
-	FirstByteMs        int       // request sent → first committed byte (0 when not committed)
-	TotalMs            int
-	ErrorMsg           string
-	Score              float64 // scorer probability from softmax (0 when scorer unavailable)
+	UsageEvidence         domain.UsageEvidence         `json:"usage_evidence"`
+	ProviderTerminalState domain.ProviderTerminalState `json:"provider_terminal_state"`
+	PricingSnapshot       domain.BillingSnapshot       `json:"pricing_snapshot"`
+	Sequence              int                          `json:"-"` // Request-local order shared by calls and execution skips; planning precedes both.
+	RouteID               string
+	GroupID               string
+	RoutePolicy           string
+	GroupRank             int
+	TargetPriority        int // 分组内人工优先级（越小越优先，100 = 默认平级），用于 attempts_detail 展示
+	SelectionReason       string
+	TargetID              string // deployment_id or credential_id (legacy/opaque; kept for existing consumers)
+	ProviderCode          string
+	UpstreamModel         string
+	EndpointID            string // ai_upstream_account_endpoints.id; empty for pool routes
+	PoolID                string // ai_credential_pools.id; empty for account routes
+	CredentialID          string // OAuth credential actually used this attempt; empty when not pool-based
+	ProfileRevision       string // fixed-client profile frozen for this attempt
+	UpstreamRequestID     string // admin-only correlation from the upstream response
+	HTTPStatus            int
+	Outcome               ResultStatus
+	StartedAt             time.Time `json:"-"`
+	TransportStartedAt    time.Time `json:"-"`
+	CompletedAt           time.Time `json:"-"`
+	LatencyMs             int       // connect phase: request sent → response headers
+	FirstByteMs           int       // request sent → first committed byte (0 when not committed)
+	TotalMs               int
+	ErrorMsg              string
+	Score                 float64 // scorer probability from softmax (0 when scorer unavailable)
 }

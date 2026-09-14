@@ -32,13 +32,13 @@ func TestReportedUsageControlsRetryAndResetsAttemptState(t *testing.T) {
 		if err := step.Execute(context.Background(), req); err != nil {
 			t.Fatal(err)
 		}
-		if metered {
-			if transport.calls != 1 || req.TokenUsage.PromptTokens != 6 || req.RequestStatus != domain.RequestFailed {
-				t.Fatalf("metered attempt replayed: calls=%d usage=%+v status=%s", transport.calls, req.TokenUsage, req.RequestStatus)
-			}
-		} else if transport.calls != 2 || req.TokenUsage.PromptTokens != 3 || req.RequestStatus != domain.RequestSuccess || req.UpstreamErrorCode != "" || req.InternalErrorDetail != "" {
-			t.Fatalf("retry state leaked: calls=%d usage=%+v status=%s error=%s", transport.calls, req.TokenUsage, req.RequestStatus, req.InternalErrorDetail)
+		if transport.calls != 2 || req.TokenUsage.PromptTokens != 3 || req.RequestStatus != domain.RequestSuccess || req.UpstreamErrorCode != "" || req.InternalErrorDetail != "" {
+			t.Fatalf("retry state leaked: calls=%d usage=%+v status=%s", transport.calls, req.TokenUsage, req.RequestStatus)
 		}
+		if metered && req.Attempts[0].UsageEvidence.Fields["input_tokens"] != 6 {
+			t.Fatal("prior attempt usage evidence lost")
+		}
+
 	}
 }
 
@@ -50,10 +50,10 @@ func TestReportedStreamSub2APIFailures(t *testing.T) {
 			precommit     bool
 		}{
 			{"incident", `data: {"type":"response.failed","response":{"status":"failed","error":{"code":"upstream_timeout","message":"timed out"}}}` + "\n\n", 0, 0, true},
-			{"top_level_usage", `data: {"type":"response.failed","error":{"code":"content_policy","message":"blocked"},"usage":{"input_tokens":6,"output_tokens":0}}` + "\n\n", 6, 0, false},
-			{"error_pair", "event: error\ndata: {\"type\":\"error\",\"error\":{\"message\":\"failed\"}}\n\n" + `event: response.failed` + "\n" + `data: {"type":"response.failed","response":{"status":"failed","error":{"message":"failed"},"usage":{"input_tokens":9,"output_tokens":2}}}` + "\n\ndata: [DONE]\n\n", 9, 2, false},
-			{"error_metadata_failure", "event: error\ndata: {\"error\":{\"message\":\"failed\"}}\n\n" + "event: response.in_progress\ndata: {\"response\":{\"status\":\"in_progress\"}}\n\n" + "event: response.failed\ndata: {\"response\":{\"status\":\"failed\",\"usage\":{\"input_tokens\":9,\"output_tokens\":2}}}\n\n", 9, 2, false},
-			{"error_then_success", "event: error\ndata: {\"error\":{\"message\":\"failed\"},\"usage\":{\"input_tokens\":9,\"output_tokens\":2}}\n\n" + "event: response.completed\ndata: {\"response\":{\"status\":\"completed\"}}\n\ndata: [DONE]\n\n", 9, 2, false},
+			{"top_level_usage", `data: {"type":"response.failed","error":{"code":"content_policy","message":"blocked"},"usage":{"input_tokens":6,"output_tokens":0}}` + "\n\n", 6, 0, true},
+			{"error_pair", "event: error\ndata: {\"type\":\"error\",\"error\":{\"message\":\"failed\"}}\n\n" + `event: response.failed` + "\n" + `data: {"type":"response.failed","response":{"status":"failed","error":{"message":"failed"},"usage":{"input_tokens":9,"output_tokens":2}}}` + "\n\ndata: [DONE]\n\n", 9, 2, true},
+			{"error_metadata_failure", "event: error\ndata: {\"error\":{\"message\":\"failed\"}}\n\n" + "event: response.in_progress\ndata: {\"response\":{\"status\":\"in_progress\"}}\n\n" + "event: response.failed\ndata: {\"response\":{\"status\":\"failed\",\"usage\":{\"input_tokens\":9,\"output_tokens\":2}}}\n\n", 9, 2, true},
+			{"error_then_success", "event: error\ndata: {\"error\":{\"message\":\"failed\"},\"usage\":{\"input_tokens\":9,\"output_tokens\":2}}\n\n" + "event: response.completed\ndata: {\"response\":{\"status\":\"completed\"}}\n\ndata: [DONE]\n\n", 9, 2, true},
 			{"metadata_then_failure", `data: {"type":"response.created","response":{"model":"upstream-model"}}` + "\n\n" + `data: {"type":"response.failed","response":{"status":"failed","error":{"message":"failed"}}}` + "\n\n", 0, 0, true},
 		} {
 			t.Run(string(client)+"/"+tc.name, func(t *testing.T) {
@@ -85,7 +85,7 @@ func TestReportedStreamSub2APIFailures(t *testing.T) {
 				if req.FirstTokenMs != 0 {
 					t.Fatalf("error counted as first token: %d", req.FirstTokenMs)
 				}
-				if ShouldVoidBilling(req) != tc.precommit {
+				if !ShouldVoidBilling(req) {
 					t.Fatalf("wrong chargeability: %+v", req.UsageEvidence)
 				}
 			})
@@ -108,8 +108,8 @@ func TestReportedStreamEOFAndInterruptedUsage(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if req.RequestStatus != domain.RequestFailed || req.ProviderTerminalState != domain.ProviderTerminalIncomplete || ShouldVoidBilling(req) {
-			t.Fatalf("EOF treated as success/void: %+v", req)
+		if req.RequestStatus != domain.RequestFailed || req.ProviderTerminalState != domain.ProviderTerminalIncomplete || !ShouldVoidBilling(req) {
+			t.Fatalf("EOF must be incomplete and waived: %+v", req)
 		}
 		if req.TokenUsage.PromptTokens != 10 || req.TokenUsage.CompletionTokens != 2 {
 			t.Fatalf("lost progressive usage: %+v", req.TokenUsage)

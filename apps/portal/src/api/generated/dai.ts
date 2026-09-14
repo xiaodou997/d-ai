@@ -554,24 +554,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/admin/modules/request-recording/config": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 读取请求记录设置 */
-        get: operations["admin-get-request-recording"];
-        /** 保存请求记录设置 */
-        put: operations["admin-update-request-recording"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/admin/modules/{name}": {
         parameters: {
             query?: never;
@@ -3305,26 +3287,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/tenants/me/usage-logs": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * 租户自助用量日志列表
-         * @description 按当前租户 token 返回本租户可见的用量日志分页与同过滤条件下的聚合统计；包含用户名称和 API key 的非敏感标识，不含上游/供应商内部字段。
-         */
-        get: operations["ai-list-tenant-self-usage-logs"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/tenants/me/usage-summary": {
         parameters: {
             query?: never;
@@ -4067,46 +4029,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/usage-logs": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * 用量日志列表
-         * @description 返回 AI 网关用量日志分页，以及同过滤条件下的聚合统计。
-         */
-        get: operations["ai-list-usage-logs"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/usage-logs/{requestID}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * 用量日志详情
-         * @description 返回单次请求的调度链路和请求载荷摘要。
-         */
-        get: operations["ai-get-usage-log-detail"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/usage-ranking/users": {
         parameters: {
             query?: never;
@@ -4219,26 +4141,6 @@ export interface paths {
          * @description 按当前用户 token 返回本用户可用的模型（租户默认公开分组 ∪ 用户例外分组）。价格表只提供计价，不扩大可用范围。
          */
         get: operations["ai-list-user-self-model-grants"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/user-usage-logs": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * 终端用户自助用量日志列表
-         * @description 按当前用户 token 返回本用户的用量日志。
-         */
-        get: operations["ai-list-user-self-usage-logs"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4710,6 +4612,159 @@ export interface paths {
         head?: never;
         /** 启用/停用终端用户 */
         patch: operations["admin-update-end-user-status"];
+        trace?: never;
+    };
+    "/api/v2/billing/settlements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 请求与独立消费记录 */
+        get: operations["ai-v2-settlements"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/billing/settlements/{requestID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 请求与费用详情 */
+        get: operations["ai-v2-settlement-detail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/billing/settlements/{requestID}/refund": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 全额退回实际费用与计费额度 */
+        post: operations["ai-v2-refund-settlement"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/request-debug-sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 限时开启指定范围的完整内容记录 */
+        post: operations["ai-v2-debug-session"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/request-errors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 请求与独立消费记录 */
+        get: operations["ai-v2-request-errors"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/request-summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 用量与实际扣款日汇总 */
+        get: operations["ai-v2-record-summary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 请求与独立消费记录 */
+        get: operations["ai-v2-requests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/requests/{requestID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 请求与费用详情 */
+        get: operations["ai-v2-request-detail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/requests/{requestID}/debug": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 管理员读取限时调试内容 */
+        get: operations["ai-v2-debug-payload"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/public/jwks.json": {
@@ -6224,8 +6279,6 @@ export interface components {
             provider_api_format?: string;
             /** @description 请求 ID */
             request_id: string;
-            /** @description 请求状态 */
-            request_status: string;
             /** @description 客户端请求模型名 */
             requested_model?: string;
             /** @description 调度后的逻辑模型 */
@@ -6462,6 +6515,33 @@ export interface components {
             owner_type: string;
             /** @enum {string} */
             service_state: "active" | "blocked_debt";
+        };
+        DebugSession: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/DebugSession.json
+             */
+            readonly $schema?: string;
+            /** Format: date-time */
+            expires_at: string;
+            id: string;
+        };
+        DebugSessionInput: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/DebugSessionInput.json
+             */
+            readonly $schema?: string;
+            api_key_id: string;
+            /**
+             * Format: int64
+             * @default 1
+             */
+            hours: number;
+            model: string;
+            tenant_id: string;
         };
         DeleteAPIKeyOutputBody: {
             /**
@@ -7125,7 +7205,7 @@ export interface components {
             name: string;
             retail_price_book_id: string;
             /**
-             * @description 分组路由策略；为空默认智能均衡
+             * @description 分组路由策略；创建时为空默认智能均衡
              * @enum {string}
              */
             route_policy?: "balanced" | "cost" | "latency" | "stability";
@@ -8616,6 +8696,30 @@ export interface components {
             userId: string;
             username: string;
         };
+        RecordCharge: {
+            /** Format: int64 */
+            api_key_used_micro: number;
+            /** Format: date-time */
+            posted_at?: string;
+            processing_detail?: string;
+            reason: string;
+            /** Format: int64 */
+            reference_cost_micro?: number;
+            /** Format: date-time */
+            refunded_at?: string;
+            source: string;
+            state: string;
+            /** Format: int64 */
+            subscription_used_micro: number;
+            /** Format: int64 */
+            tenant_charged_micro?: number;
+            /** Format: int64 */
+            tenant_due_micro?: number;
+            /** Format: int64 */
+            user_charged_micro: number;
+            /** Format: int64 */
+            user_due_micro: number;
+        };
         RecordCompletedRefundInputBody: {
             /**
              * Format: uri
@@ -8632,16 +8736,77 @@ export interface components {
             /** Format: int64 */
             refundedAt: number;
         };
-        RecordingSettings: {
+        RecordError: {
+            code: string;
+            message: string;
+            origin: string;
+            stage: string;
+        };
+        RecordPage: {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/RecordingSettings.json
+             * @example https://example.com/schemas/RecordPage.json
              */
             readonly $schema?: string;
-            /** @enum {string} */
-            level: "basic" | "headers" | "full";
-            sensitive_headers: string[] | null;
+            next_cursor?: string;
+            records: components["schemas"]["RequestRecord"][] | null;
+        };
+        RecordRefundInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/RecordRefundInputBody.json
+             */
+            readonly $schema?: string;
+            reason: string;
+        };
+        RecordRefundOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/RecordRefundOutputBody.json
+             */
+            readonly $schema?: string;
+            refunded: boolean;
+        };
+        RecordSummary: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/RecordSummary.json
+             */
+            readonly $schema?: string;
+            /** Format: int64 */
+            errors: number;
+            /** Format: int64 */
+            input_tokens: number;
+            /** Format: int64 */
+            interruptions: number;
+            /** Format: int64 */
+            output_tokens: number;
+            /** Format: int64 */
+            requests: number;
+            /** Format: int64 */
+            tenant_charged_micro?: number;
+            /** Format: int64 */
+            tenant_refunded_micro?: number;
+            /** Format: int64 */
+            user_charged_micro: number;
+            /** Format: int64 */
+            user_refunded_micro: number;
+        };
+        RecordTokens: {
+            /** Format: int64 */
+            cache_read: number | null;
+            /** Format: int64 */
+            cache_write: number | null;
+            /** Format: int64 */
+            input: number | null;
+            /** Format: int64 */
+            output: number | null;
+            /** Format: int64 */
+            reasoning: number | null;
         };
         ReplaceGroupTargetsRequest: {
             /**
@@ -8677,6 +8842,43 @@ export interface components {
             eligibleRows: number;
             /** Format: int64 */
             occupiedBytes: number;
+        };
+        RequestRecord: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/RequestRecord.json
+             */
+            readonly $schema?: string;
+            attempts?: unknown[] | null;
+            charge: components["schemas"]["RecordCharge"];
+            /** Format: date-time */
+            created_at: string;
+            delivery: string;
+            diagnostics_available: boolean;
+            end_reason: string;
+            error?: components["schemas"]["RecordError"];
+            evidence?: unknown;
+            execution_available: boolean;
+            /** Format: int64 */
+            first_token_ms: number | null;
+            /** Format: int64 */
+            http_status: number | null;
+            internal_detail?: string;
+            is_error: boolean;
+            media_unit_type?: string;
+            /** Format: double */
+            media_units?: number;
+            model: string;
+            pricing?: unknown;
+            request_id: string;
+            source: string;
+            stream: boolean;
+            tenant_id?: string;
+            tokens: components["schemas"]["RecordTokens"];
+            /** Format: int64 */
+            total_ms: number | null;
+            user_id?: string;
         };
         ResolutionUSDDTO: {
             /**
@@ -9919,8 +10121,6 @@ export interface components {
             request_id: string;
             /** @description 请求来源 */
             request_source: string;
-            /** @description 请求状态 */
-            request_status: string;
             /**
              * Format: int32
              * @description 请求总耗时，毫秒
@@ -9963,18 +10163,6 @@ export interface components {
             user_payable_usd: number;
             /** @description 用户名称 */
             username?: string;
-        };
-        TenantUsageLogsOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/TenantUsageLogsOutputBody.json
-             */
-            readonly $schema?: string;
-            records: components["schemas"]["TenantUsageLogDTO"][] | null;
-            stats: components["schemas"]["UsageStatsDTO"];
-            /** Format: int64 */
-            total: number;
         };
         TenantWorkspaceOverviewOutputBody: {
             /**
@@ -10726,442 +10914,6 @@ export interface components {
             /** Format: int64 */
             total: number;
         };
-        UsageLogDTO: {
-            /** @description API key ID */
-            api_key_id?: string;
-            /**
-             * Format: double
-             * @description API key 配额USD 金额
-             */
-            api_key_quota_usd: number;
-            /**
-             * Format: int32
-             * @description 路由尝试次数（含重试）
-             */
-            attempts_count: number;
-            /** @description 认证方式 */
-            auth_method: string;
-            /** @description 计费单位类型 */
-            billable_unit_type: string;
-            /**
-             * Format: int64
-             * @description 计费单位数
-             */
-            billable_units: number;
-            /** @description 请求时分组展示标签快照 */
-            billing_group_label_snapshot?: string;
-            /** @description 计费判定原因 */
-            billing_reason?: string;
-            /** @description 计费来源：payg=按量 / subscription=订阅内 */
-            billing_source: string;
-            /** @description 计费状态 */
-            billing_status: string;
-            /**
-             * Format: int32
-             * @description 缓存读 token 数
-             */
-            cache_read_tokens: number;
-            /**
-             * Format: int32
-             * @description 缓存写 token 数
-             */
-            cache_write_tokens: number;
-            /** @description 取消来源 */
-            cancellation_origin: string;
-            /** @description 能力类型 */
-            capability_type: string;
-            /**
-             * Format: double
-             * @description 按命中上游资源价格表计算的参考成本
-             */
-            catalog_base_usd: number;
-            /** @description 客户端交付状态 */
-            client_delivery_state: string;
-            /** @description 客户端 User-Agent 摘要 */
-            client_user_agent?: string;
-            /**
-             * Format: int32
-             * @description 输出 token 数
-             */
-            completion_tokens: number;
-            /** @description 会话 ID */
-            conversation_id?: string;
-            /**
-             * Format: int64
-             * @description 创建时间，Unix 毫秒
-             */
-            created_at?: number;
-            /**
-             * Format: double
-             * @description 请求时最终倍率快照
-             */
-            effective_user_multiplier_snapshot?: number;
-            /** @description 供应商端点 ID */
-            endpoint_id?: string;
-            /** @description 错误码 */
-            error_code?: string;
-            /** @description 错误信息 */
-            error_message?: string;
-            /** @description 外部用户 ID */
-            external_user_id?: string;
-            /**
-             * Format: int32
-             * @description 最终一次上游尝试拿到响应头的耗时，毫秒
-             */
-            final_attempt_header_ms?: number;
-            /**
-             * Format: int32
-             * @description 最终一次上游尝试总耗时，毫秒
-             */
-            final_attempt_total_ms?: number;
-            /**
-             * Format: int32
-             * @description 首个响应字节耗时，毫秒
-             */
-            first_response_byte_ms?: number;
-            /**
-             * Format: int32
-             * @description 首 token 延迟，毫秒
-             */
-            first_token_latency_ms?: number;
-            /**
-             * Format: double
-             * @description 请求时分组默认倍率快照
-             */
-            group_default_user_multiplier_snapshot?: number;
-            /** @description 命中分组 ID */
-            group_id?: string;
-            /** @description 请求时分组名称快照 */
-            group_name_snapshot?: string;
-            /** @description 命中的分组上游目标 ID */
-            group_target_id?: string;
-            /**
-             * Format: int32
-             * @description HTTP 状态码
-             */
-            http_status?: number;
-            /** @description 用量日志 ID */
-            id: string;
-            /** @description Key 所属主体类型 */
-            key_owner_type: string;
-            /**
-             * Format: int32
-             * @description 请求延迟，毫秒
-             */
-            latency_ms?: number;
-            /** @description 命中的分组调度规则 ID */
-            matched_dispatch_rule_id?: string;
-            /** @description 命中的分组调度规则摘要 */
-            matched_dispatch_rule_summary?: string;
-            /** @description 模型编码 */
-            model_code: string;
-            /**
-             * Format: int32
-             * @description 输入 token 数
-             */
-            prompt_tokens: number;
-            /** @description 分组是否允许协议转换 */
-            protocol_conversion_enabled: boolean;
-            /** @description 供应商编码 */
-            provider_code?: string;
-            /** @description 上游终态：unknown/completed/failed/cancelled/incomplete */
-            provider_terminal_state: string;
-            /** @description 对客户端暴露的响应模型名 */
-            public_response_model?: string;
-            /** @description 客户端请求推理强度（归一化：low/medium/high/xhigh/max） */
-            reasoning_effort?: string;
-            /**
-             * Format: int32
-             * @description 推理 token 数
-             */
-            reasoning_tokens: number;
-            /** @description 退款操作人 */
-            refund_operator_id?: string;
-            /** @description 退款原因 */
-            refund_reason?: string;
-            /** @description 退款状态：none/refunded */
-            refund_status: string;
-            /**
-             * Format: int64
-             * @description 退款时间，Unix 毫秒
-             */
-            refunded_at?: number;
-            /** @description 请求 ID */
-            request_id: string;
-            /**
-             * Format: int32
-             * @description 网关准备耗时，毫秒
-             */
-            request_setup_ms?: number;
-            /** @description 请求来源 */
-            request_source: string;
-            /** @description 请求状态 */
-            request_status: string;
-            /**
-             * Format: int32
-             * @description 请求总耗时，毫秒
-             */
-            request_total_ms?: number;
-            /** @description 客户端请求模型名 */
-            requested_model?: string;
-            /** @description 图片/视频规格，例如 1024x1024 / 720p */
-            resolution?: string;
-            /** @description 调度后的逻辑模型 */
-            resolved_logical_model?: string;
-            /** @description 最终实际选中的上游协议家族 */
-            resolved_provider_family?: string;
-            /** @description 响应摘要状态 */
-            response_summary_state: string;
-            /**
-             * Format: int32
-             * @description 首个响应字节之后到请求结束的耗时，毫秒
-             */
-            response_tail_ms?: number;
-            /**
-             * Format: double
-             * @description 分组零售价格表原价
-             */
-            retail_base_usd: number;
-            /** @description 服务档位：standard/fast */
-            service_tier: string;
-            /**
-             * Format: int64
-             * @description 结算时间，Unix 毫秒
-             */
-            settled_at?: number;
-            /** @description 结算失败原因 */
-            settlement_error?: string;
-            /** @description 是否流式请求 */
-            stream: boolean;
-            /** @description 租户 ID */
-            tenant_id: string;
-            /**
-             * Format: double
-             * @description 平台向租户应收：上游参考成本乘租户结算倍率
-             */
-            tenant_payable_usd: number;
-            /** @description token 用量来源：upstream=上游报告 / missing=缺失用量未计费 / mixed=历史或媒体部分估算 / estimated=历史或媒体完全估算 */
-            token_usage_source: string;
-            /**
-             * Format: int32
-             * @description 总 token 数
-             */
-            total_tokens: number;
-            /** @description Trace ID */
-            trace_id?: string;
-            /** @description 命中的上游账号 ID */
-            upstream_account_id?: string;
-            /** @description 命中的上游账号名称 */
-            upstream_account_name?: string;
-            /** @description 上游模型 */
-            upstream_model?: string;
-            /** @description 是否发生了上游模型名映射 */
-            upstream_model_mapping_applied: boolean;
-            /**
-             * Format: int32
-             * @description 上游状态码
-             */
-            upstream_status?: number;
-            /** @description 上游账号租户侧展示名称 */
-            upstream_tenant_display_name?: string;
-            /** @description 是否估算用量 */
-            usage_estimated: boolean;
-            /**
-             * Format: double
-             * @description 用户实际扣款；订阅覆盖时为零
-             */
-            user_charged_usd: number;
-            /** @description 用户 ID */
-            user_id?: string;
-            /**
-             * Format: double
-             * @description 请求时用户侧覆盖倍率快照
-             */
-            user_multiplier_override_snapshot?: number;
-            /**
-             * Format: double
-             * @description 用户零售应收：零售原价乘有效用户倍率
-             */
-            user_payable_usd: number;
-        };
-        UsageLogDetailDTO: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/UsageLogDetailDTO.json
-             */
-            readonly $schema?: string;
-            api_key_id?: string;
-            /**
-             * Format: double
-             * @description API key 配额USD 金额
-             */
-            api_key_quota_usd: number;
-            /**
-             * Format: int32
-             * @description 路由尝试次数（含重试）
-             */
-            attempts_count: number;
-            /** @description 仅管理员可见：本次请求每次候选路由（上游账号/凭据）重试的明细 */
-            attempts_detail?: unknown;
-            auth_method?: string;
-            billing_breakdown?: unknown;
-            billing_group_label_snapshot?: string;
-            billing_reason?: string;
-            /** @description 计费来源 */
-            billing_source?: string;
-            billing_status: string;
-            /** Format: int32 */
-            cache_read_tokens: number;
-            /** Format: int32 */
-            cache_write_tokens: number;
-            cancellation_origin: string;
-            /**
-             * Format: double
-             * @description 上游目录基准价USD 金额
-             */
-            catalog_base_usd: number;
-            /** @description 客户端 API 格式 */
-            client_api_format: string;
-            client_delivery_state: string;
-            client_ip?: string;
-            /** Format: int32 */
-            completion_tokens: number;
-            /**
-             * Format: int64
-             * @description 创建时间，Unix 毫秒
-             */
-            created_at?: number;
-            /** Format: double */
-            effective_user_multiplier_snapshot?: number;
-            endpoint_id?: string;
-            error_code?: string;
-            error_message?: string;
-            external_user_id?: string;
-            /** @description 仅管理员可见：触发失败的调用链路阶段 */
-            failed_step?: string;
-            /** Format: int32 */
-            final_attempt_header_ms?: number;
-            /** Format: int32 */
-            final_attempt_total_ms?: number;
-            /** Format: int32 */
-            first_response_byte_ms?: number;
-            /** Format: int32 */
-            first_token_latency_ms?: number;
-            /** Format: double */
-            group_default_user_multiplier_snapshot?: number;
-            group_id?: string;
-            group_name_snapshot?: string;
-            /** Format: int32 */
-            http_status?: number;
-            id?: string;
-            /** @description 仅管理员可见：未脱敏/未截断的真实底层错误（Go 错误链或上游原始报文） */
-            internal_error_detail?: string;
-            key_owner_type?: string;
-            /** Format: int32 */
-            latency_ms?: number;
-            matched_dispatch_rule_id?: string;
-            matched_dispatch_rule_summary?: string;
-            media_refs?: unknown;
-            /** @description 模型编码 */
-            model_code?: string;
-            /** Format: int32 */
-            prompt_tokens: number;
-            protocol_conversion_enabled: boolean;
-            /** @description 最终上游 API 格式 */
-            provider_api_format?: string;
-            provider_terminal_state: string;
-            public_response_model?: string;
-            /** @description 客户端请求推理强度（归一化） */
-            reasoning_effort?: string;
-            /** Format: int32 */
-            reasoning_tokens: number;
-            refund_operator_id?: string;
-            refund_reason?: string;
-            refund_status: string;
-            /** Format: int64 */
-            refunded_at?: number;
-            request_headers?: unknown;
-            request_id: string;
-            request_messages?: unknown;
-            request_params?: unknown;
-            request_path?: string;
-            /** Format: int32 */
-            request_setup_ms?: number;
-            request_source?: string;
-            request_status: string;
-            /** Format: int32 */
-            request_total_ms?: number;
-            requested_model: string;
-            /** @description 图片/视频规格，例如 1024x1024 / 720p */
-            resolution?: string;
-            resolved_logical_model?: string;
-            resolved_provider_family?: string;
-            response_headers?: unknown;
-            response_message?: unknown;
-            response_summary_state: string;
-            /** Format: int32 */
-            response_tail_ms?: number;
-            /**
-             * Format: double
-             * @description 零售价格表原价USD 金额
-             */
-            retail_base_usd: number;
-            selected_upstream_model?: string;
-            selected_upstream_target_type?: string;
-            service_tier: string;
-            /** Format: int64 */
-            settled_at?: number;
-            settlement_error?: string;
-            /** @description 是否流式请求 */
-            stream: boolean;
-            tenant_id?: string;
-            tenant_name?: string;
-            /**
-             * Format: double
-             * @description 租户扣除积分，即平台与租户之间的结算USD 金额
-             */
-            tenant_payable_usd: number;
-            /** @description 用量来源：upstream=上游报告 / missing=缺失用量未计费 / mixed、estimated=历史或媒体估算 */
-            token_usage_source?: string;
-            /** Format: int32 */
-            total_tokens: number;
-            trace_id?: string;
-            upstream_account_id?: string;
-            /** @description 上游模型 */
-            upstream_model?: string;
-            upstream_model_mapping_applied: boolean;
-            /** Format: int32 */
-            upstream_status?: number;
-            user_agent?: string;
-            /**
-             * Format: double
-             * @description 用户实际扣除积分USD 金额
-             */
-            user_charged_usd: number;
-            user_id?: string;
-            /** Format: double */
-            user_multiplier_override_snapshot?: number;
-            /**
-             * Format: double
-             * @description 用户应付USD 金额
-             */
-            user_payable_usd: number;
-            username?: string;
-        };
-        UsageLogsOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/UsageLogsOutputBody.json
-             */
-            readonly $schema?: string;
-            included: components["schemas"]["IdentityIncludedDTO"];
-            records: components["schemas"]["UsageLogDTO"][] | null;
-            stats: components["schemas"]["UsageStatsDTO"];
-            /** Format: int64 */
-            total: number;
-        };
         UsageRefundInputBody: {
             /**
              * Format: uri
@@ -11171,78 +10923,6 @@ export interface components {
             readonly $schema?: string;
             reason?: string;
             requestId: string;
-        };
-        UsageStatsDTO: {
-            /**
-             * Format: double
-             * @description 平均首个响应字节耗时，毫秒
-             */
-            avg_first_response_byte_ms: number;
-            /**
-             * Format: double
-             * @description 平均延迟，毫秒
-             */
-            avg_latency_ms: number;
-            /**
-             * Format: double
-             * @description 平均总耗时，毫秒
-             */
-            avg_request_total_ms: number;
-            /**
-             * Format: int64
-             * @description 缓存读 token 数
-             */
-            cache_read_tokens?: number;
-            /**
-             * Format: int64
-             * @description 缓存写 token 数
-             */
-            cache_write_tokens?: number;
-            /**
-             * Format: int64
-             * @description 失败请求数
-             */
-            failed_count: number;
-            /**
-             * Format: int64
-             * @description 成功请求数
-             */
-            success_count: number;
-            /**
-             * Format: double
-             * @description 目录基准价USD 金额（倍率1，谁都不付这个数）
-             */
-            total_catalog_base_usd: number;
-            /**
-             * Format: int64
-             * @description 输出 token 数
-             */
-            total_completion_tokens?: number;
-            /**
-             * Format: int64
-             * @description 输入 token 数
-             */
-            total_prompt_tokens?: number;
-            /**
-             * Format: int64
-             * @description 请求总数
-             */
-            total_requests: number;
-            /**
-             * Format: double
-             * @description 平台向租户应收USD 金额
-             */
-            total_tenant_payable_usd: number;
-            /**
-             * Format: int64
-             * @description 总 token 数
-             */
-            total_tokens: number;
-            /**
-             * Format: double
-             * @description 用户实际扣款USD 金额；租户自有 key 与订阅覆盖流量为 0
-             */
-            total_user_charged_usd: number;
         };
         UsageSummaryOutputBody: {
             /**
@@ -11733,8 +11413,6 @@ export interface components {
             request_id: string;
             /** @description 请求来源 */
             request_source: string;
-            /** @description 请求状态 */
-            request_status: string;
             /** @description 响应摘要状态 */
             response_summary_state: string;
             /** @description 服务档位：standard/fast */
@@ -11757,17 +11435,6 @@ export interface components {
             user_charged_usd: number;
             /** @description 用户 ID */
             user_id?: string;
-        };
-        UserUsageLogsOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/UserUsageLogsOutputBody.json
-             */
-            readonly $schema?: string;
-            items: components["schemas"]["UserUsageLogDTO"][] | null;
-            /** Format: int64 */
-            total: number;
         };
         UserUsageSummaryDTO: {
             /**
@@ -13295,68 +12962,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PreviewPIIConfigOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "admin-get-request-recording": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RecordingSettings"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "admin-update-request-recording": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RecordingSettings"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RecordingSettings"];
                 };
             };
             /** @description Error */
@@ -19872,52 +19477,6 @@ export interface operations {
             };
         };
     };
-    "ai-list-tenant-self-usage-logs": {
-        parameters: {
-            query?: {
-                /** @description 用户 ID 过滤；为空表示本租户全部用户 */
-                user_id?: string;
-                /** @description 模型编码过滤 */
-                model_code?: string;
-                /** @description 请求状态过滤 */
-                request_status?: string;
-                /** @description 请求来源过滤 */
-                request_source?: string;
-                /** @description 开始时间，RFC3339 */
-                date_from?: string;
-                /** @description 结束时间，RFC3339 */
-                date_to?: string;
-                /** @description 返回条数；默认 20，最大 100 */
-                limit?: number;
-                /** @description 偏移量；默认 0 */
-                offset?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TenantUsageLogsOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
     "ai-list-tenant-self-usage-summary": {
         parameters: {
             query?: {
@@ -19925,8 +19484,6 @@ export interface operations {
                 user_id?: string;
                 /** @description 模型编码过滤 */
                 model_code?: string;
-                /** @description 请求状态过滤 */
-                request_status?: string;
                 /** @description 请求来源过滤 */
                 request_source?: string;
                 /** @description 开始时间，RFC3339 */
@@ -21773,90 +21330,6 @@ export interface operations {
             };
         };
     };
-    "ai-list-usage-logs": {
-        parameters: {
-            query?: {
-                /** @description 租户 ID；为空表示全部租户 */
-                tenant_id?: string;
-                /** @description 租户名称模糊过滤 */
-                tenant_name?: string;
-                /** @description 用户 ID；为空表示全部用户 */
-                user_id?: string;
-                /** @description 用户名模糊过滤 */
-                user_name?: string;
-                /** @description 模型编码过滤 */
-                model_code?: string;
-                /** @description 请求状态过滤 */
-                request_status?: string;
-                /** @description 请求来源过滤 */
-                request_source?: string;
-                /** @description 开始时间，RFC3339 */
-                date_from?: string;
-                /** @description 结束时间，RFC3339 */
-                date_to?: string;
-                /** @description 返回条数；默认 20，最大 100 */
-                limit?: number;
-                /** @description 偏移量；默认 0 */
-                offset?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UsageLogsOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "ai-get-usage-log-detail": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description 请求 ID */
-                requestID: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UsageLogDetailDTO"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
     "ai-list-usage-user-ranking": {
         parameters: {
             query?: {
@@ -21866,8 +21339,6 @@ export interface operations {
                 user_id?: string;
                 /** @description 模型编码过滤 */
                 model_code?: string;
-                /** @description 请求状态过滤 */
-                request_status?: string;
                 /** @description 请求来源过滤 */
                 request_source?: string;
                 /** @description 开始时间，RFC3339 */
@@ -21912,8 +21383,6 @@ export interface operations {
                 user_id?: string;
                 /** @description 模型编码过滤 */
                 model_code?: string;
-                /** @description 请求状态过滤 */
-                request_status?: string;
                 /** @description 请求来源过滤 */
                 request_source?: string;
                 /** @description 开始时间，RFC3339 */
@@ -21956,8 +21425,6 @@ export interface operations {
                 user_id?: string;
                 /** @description 模型编码过滤 */
                 model_code?: string;
-                /** @description 请求状态过滤 */
-                request_status?: string;
                 /** @description 请求来源过滤 */
                 request_source?: string;
                 /** @description 开始时间，RFC3339 */
@@ -22000,8 +21467,6 @@ export interface operations {
                 user_id?: string;
                 /** @description 模型编码过滤 */
                 model_code?: string;
-                /** @description 请求状态过滤 */
-                request_status?: string;
                 /** @description 请求来源过滤 */
                 request_source?: string;
                 /** @description 开始时间，RFC3339 */
@@ -22080,40 +21545,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UserAvailableModelsOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "ai-list-user-self-usage-logs": {
-        parameters: {
-            query?: {
-                /** @description 请求来源过滤 */
-                request_source?: string;
-                /** @description 返回条数；默认 100，最大 100 */
-                limit?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UserUsageLogsOutputBody"];
                 };
             };
             /** @description Error */
@@ -23108,6 +22539,319 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MessageOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "ai-v2-settlements": {
+        parameters: {
+            query?: {
+                tenant_id?: string;
+                user_id?: string;
+                model?: string;
+                source?: string;
+                from?: string;
+                to?: string;
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordPage"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "ai-v2-settlement-detail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                requestID: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestRecord"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "ai-v2-refund-settlement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                requestID: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecordRefundInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordRefundOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "ai-v2-debug-session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DebugSessionInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DebugSession"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "ai-v2-request-errors": {
+        parameters: {
+            query?: {
+                tenant_id?: string;
+                user_id?: string;
+                model?: string;
+                source?: string;
+                from?: string;
+                to?: string;
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordPage"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "ai-v2-record-summary": {
+        parameters: {
+            query?: {
+                tenant_id?: string;
+                user_id?: string;
+                model?: string;
+                source?: string;
+                from?: string;
+                to?: string;
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordSummary"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "ai-v2-requests": {
+        parameters: {
+            query?: {
+                tenant_id?: string;
+                user_id?: string;
+                model?: string;
+                source?: string;
+                from?: string;
+                to?: string;
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordPage"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "ai-v2-request-detail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                requestID: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestRecord"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "ai-v2-debug-payload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                requestID: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Error */

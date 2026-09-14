@@ -110,7 +110,6 @@ func (s *ExecuteStep) executeReportedStream(dc *deadlineController, req *Request
 	sanitizer := egress.NewSanitizer(publicEgressPolicy(req, req.Candidate))
 	var pending []upstreamSSEEvent
 	pendingSize := 0
-	sawData := false
 	commit := func() {
 		if req.ResponseCommitted {
 			return
@@ -128,8 +127,16 @@ func (s *ExecuteStep) executeReportedStream(dc *deadlineController, req *Request
 		ms, _ := req.FirstResponseByteDurationMs()
 		zap.L().Info("stream started", requestLogFields(req, zap.Bool("converted", convert), zap.Int("first_byte_ms", ms))...)
 	}
+	var pendingFinish *corebridge.StreamFrame
+	completionSealed := false
+	completionPersisted := false
 	emit := func(frames []corebridge.StreamFrame) error {
 		for _, frame := range frames {
+			if frame.Event == corebridge.EvFinish && !completionSealed {
+				copy := frame
+				pendingFinish = &copy
+				continue
+			}
 			frame.Text = string(s.restorePII(req, []byte(frame.Text)))
 			if frame.Model != "" {
 				frame.Model = req.PublicModel()
@@ -177,15 +184,23 @@ func (s *ExecuteStep) executeReportedStream(dc *deadlineController, req *Request
 		}
 		return emit(frames)
 	}
+	choices := newStreamChoiceTracker(req)
 	var readErr error
 	var terminalFailure *upstreamSSEEvent
 	for {
+		if err := dc.ctx.Err(); err != nil {
+			readErr = err
+			break
+		}
 		ev, err := readUpstreamEvent(reader)
+		if cancelErr := dc.ctx.Err(); cancelErr != nil {
+			readErr = cancelErr
+			break
+		}
 		if len(ev.raw) > 0 {
 			dc.chunkReceived()
 		}
 		if len(ev.data) > 0 {
-			sawData = true
 			normalized := s.Bridge.NormalizeResponseBody(req, ev.data)
 			if !bytes.Equal(normalized, ev.data) {
 				ev.raw = ev.withData(normalized)
@@ -194,6 +209,27 @@ func (s *ExecuteStep) executeReportedStream(dc *deadlineController, req *Request
 			observeReportedUsage(req, ev.data, ev.event)
 			observeProviderStreamFrame(req, ev.data, ev.event)
 			outcome := formats.InspectStreamOutcome(ev.data, ev.event)
+			choices.observe(ev.data, req.Candidate.Protocol)
+			finalEvent := providerFinalEvent(req.Candidate.Protocol, ev.data, ev.event)
+			if req.Candidate.Protocol == domain.ProtocolGeminiGenerate {
+				finalEvent = choices.complete()
+			}
+			if finalEvent && req.Candidate.Protocol == domain.ProtocolGeminiGenerate {
+				markProviderTerminal(req, domain.ProviderTerminalCompleted)
+			}
+			if req.Candidate.Protocol == domain.ProtocolOpenAIChat && choices.complete() {
+				markProviderTerminal(req, domain.ProviderTerminalCompleted)
+			}
+			if finalEvent && choices.incomplete(req.Candidate.Protocol) {
+				markProviderTerminal(req, domain.ProviderTerminalIncomplete)
+			}
+			if finalEvent && req.ProviderTerminalState == domain.ProviderTerminalCompleted {
+				req.HTTPStatus = http.StatusOK
+				if err := s.sealCompletion(req); err != nil {
+					return err
+				}
+				completionPersisted = true
+			}
 			if outcome.Event == "[DONE]" && req.Candidate.Protocol == domain.ProtocolOpenAIResponses && req.ProviderTerminalState != domain.ProviderTerminalCompleted {
 				if err != nil {
 					readErr = err
@@ -217,7 +253,9 @@ func (s *ExecuteStep) executeReportedStream(dc *deadlineController, req *Request
 				readErr = err
 				break
 			}
-			acc.AddChunk(s.restorePII(req, ev.data))
+			if req.CaptureBody {
+				acc.AddChunk(s.restorePII(req, ev.data))
+			}
 			semantic := streamChunkStartsToken(string(ev.data), ev.event, req.Candidate.Protocol)
 			if semantic && req.FirstTokenMs == 0 {
 				req.FirstTokenMs = max(1, int(time.Since(start).Milliseconds()))
@@ -246,6 +284,10 @@ func (s *ExecuteStep) executeReportedStream(dc *deadlineController, req *Request
 				break
 			}
 		}
+		if (providerFinalEvent(req.Candidate.Protocol, ev.data, ev.event) || (req.Candidate.Protocol == domain.ProtocolGeminiGenerate && choices.complete())) && req.ProviderTerminalState == domain.ProviderTerminalCompleted {
+			readErr = io.EOF
+			break
+		}
 		if err != nil {
 			readErr = err
 			break
@@ -262,12 +304,8 @@ func (s *ExecuteStep) executeReportedStream(dc *deadlineController, req *Request
 			req.InternalErrorDetail = RedactInternalErrorDetail(readErr.Error())
 		}
 	}
-	if req.ProviderTerminalState == domain.ProviderTerminalUnknown {
-		if readErr == io.EOF && sawData && req.Candidate.Protocol != domain.ProtocolOpenAIResponses {
-			markProviderTerminal(req, domain.ProviderTerminalCompleted)
-		} else {
-			markProviderTerminal(req, domain.ProviderTerminalIncomplete)
-		}
+	if req.ProviderTerminalState == domain.ProviderTerminalUnknown || (readErr == io.EOF && choices.incomplete(req.Candidate.Protocol)) {
+		markProviderTerminal(req, domain.ProviderTerminalIncomplete)
 	}
 	if req.ProviderTerminalState != domain.ProviderTerminalCompleted || req.CancellationOrigin == domain.CancellationClient {
 		if req.RequestStatus != domain.RequestCancelled {
@@ -294,10 +332,13 @@ func (s *ExecuteStep) executeReportedStream(dc *deadlineController, req *Request
 			req.CancellationOrigin = domain.CancellationProvider
 			req.BillingReason = "provider_cancelled"
 		}
-		if !req.ResponseCommitted && !req.UsageEvidence.HasTokens() {
+		if !req.ResponseCommitted {
 			return &precommitError{cause: errUpstreamErrorBody, httpStatus: resp.StatusCode, message: req.ErrorMessage}
 		}
 		if req.CancellationOrigin != domain.CancellationClient {
+			if err := s.sealCompletion(req); err != nil {
+				return err
+			}
 			commit()
 			frame := s.reportedStreamErrorFrame(req)
 			if !convert && terminalFailure != nil {
@@ -317,7 +358,20 @@ func (s *ExecuteStep) executeReportedStream(dc *deadlineController, req *Request
 	if !req.ResponseCommitted {
 		return precommitFromNoFrame(resp.StatusCode, nil, readErr)
 	}
+	// EOF with all choices finished is also a valid Chat terminal. Seal it
+	// before releasing any bridge-generated terminal, even without [DONE].
+	if !completionPersisted {
+		if err := s.sealCompletion(req); err != nil {
+			return err
+		}
+	}
+	completionSealed = true
 	if convert {
+		if pendingFinish != nil {
+			if err := emit([]corebridge.StreamFrame{*pendingFinish}); err != nil {
+				return streamClientWriteError(req, err)
+			}
+		}
 		frames, err := provider.Finish()
 		if err != nil {
 			return err

@@ -34,7 +34,7 @@ type Report struct {
 	InvariantsChecked    int
 	AccountsChecked      int
 	LotsChecked          int
-	OutboxChecked        int
+	SettlementsChecked   int
 	OrdersChecked        int
 	SubscriptionsChecked int
 	Violations           []Violation
@@ -65,7 +65,7 @@ func Check(ctx context.Context, q Querier) (Report, error) {
 		checkAccountLotConservation,
 		checkLotStates,
 		checkRechargeOrders,
-		checkOutboxLinkage,
+		checkSettlementJournalLinks,
 		checkRefundEffects,
 		checkSubscriptionOrders,
 		checkSubscriptionQuotas,
@@ -179,41 +179,26 @@ func checkRechargeOrders(ctx context.Context, q Querier, report *Report) error {
 	return rows.Err()
 }
 
-func checkOutboxLinkage(ctx context.Context, q Querier, report *Report) error {
-	rows, err := q.Query(ctx, `
-		SELECT o.request_id, o.status, o.tenant_id, COALESCE(o.user_id, ''),
-		       o.tenant_micro, o.user_micro,
-		       COALESCE(u.tenant_payable, 0), COALESCE(u.user_charged, 0),
-		       COALESCE(u.billing_status, '')
-		FROM bill_charge_outbox o
-		LEFT JOIN ai_usage_logs u ON u.request_id = o.request_id
-		WHERE u.request_id IS NULL
-		   OR o.tenant_micro < 0 OR o.user_micro < 0
-		   OR (o.tenant_micro = 0 AND o.user_micro = 0)
-		   OR (o.user_micro > 0 AND COALESCE(o.user_id, '') = '')
-		   OR o.tenant_micro <> COALESCE(u.tenant_payable, 0)
-		   OR o.user_micro <> COALESCE(u.user_charged, 0)
-		   OR (o.status = 'done' AND u.billing_status <> 'settled')
-		   OR (o.status = 'failed' AND u.billing_status <> 'failed')
-		   OR (o.status = 'pending' AND u.billing_status <> 'pending')
-		ORDER BY o.request_id
-	`)
+func checkSettlementJournalLinks(ctx context.Context, q Querier, report *Report) error {
+	rows, err := q.Query(ctx, `SELECT s.request_id,s.state,s.tenant_due,s.user_due,s.tenant_charged,s.user_charged
+ FROM bill_settlements s WHERE
+ (s.state IN ('posted','refunded') AND (s.tenant_due<>s.tenant_charged OR s.user_due<>s.user_charged)) OR
+ (s.state NOT IN ('posted','refunded') AND (s.tenant_charged<>0 OR s.user_charged<>0)) OR
+ (s.state IN ('posted','refunded') AND (
+  COALESCE((SELECT -sum(delta) FROM bill_journal j WHERE j.operation_id=s.request_id AND j.account_id=s.tenant_id AND j.meter='balance'),0)<>s.tenant_charged OR
+  COALESCE((SELECT -sum(delta) FROM bill_journal j WHERE j.operation_id=s.request_id AND j.account_id=s.user_id AND j.meter='balance'),0)<>s.user_charged))`)
 	if err != nil {
-		return fmt.Errorf("check outbox linkage: %w", err)
+		return fmt.Errorf("check settlements: %w", err)
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var requestID, status, tenantID, userID, usageStatus string
-		var tenantMicro, userMicro, usageTenant, usageUser int64
-		if err := rows.Scan(&requestID, &status, &tenantID, &userID, &tenantMicro, &userMicro, &usageTenant, &usageUser, &usageStatus); err != nil {
-			return fmt.Errorf("scan outbox linkage: %w", err)
+		var id, state string
+		var td, ud, tc, uc int64
+		if err = rows.Scan(&id, &state, &td, &ud, &tc, &uc); err != nil {
+			return err
 		}
-		report.OutboxChecked++
-		report.Violations = append(report.Violations, Violation{
-			Invariant: "outbox_usage_linkage",
-			Subject:   requestID,
-			Detail:    fmt.Sprintf("status=%s tenant=%s user=%s charge=(%d,%d) usage=(%d,%d,%s)", status, tenantID, userID, tenantMicro, userMicro, usageTenant, usageUser, usageStatus),
-		})
+		report.SettlementsChecked++
+		report.Violations = append(report.Violations, Violation{Invariant: "settlement_journal_conservation", Subject: id, Detail: fmt.Sprintf("state=%s due=%d/%d actual=%d/%d", state, td, ud, tc, uc)})
 	}
 	return rows.Err()
 }

@@ -9,3 +9,121 @@ sql:
         out: "gen"
         sql_package: "pgx/v5"
         emit_json_tags: true
+
+        overrides:
+          - column: "ai_consumption_projection.trace_id"
+            go_type:
+              import: "github.com/jackc/pgx/v5/pgtype"
+              type: "Text"
+          - column: "ai_consumption_projection.user_id"
+            go_type:
+              import: "github.com/jackc/pgx/v5/pgtype"
+              type: "Text"
+          - column: "ai_consumption_projection.external_user_id"
+            go_type:
+              import: "github.com/jackc/pgx/v5/pgtype"
+              type: "Text"
+          - column: "ai_consumption_projection.matched_dispatch_rule_summary"
+            go_type:
+              import: "github.com/jackc/pgx/v5/pgtype"
+              type: "Text"
+          - column: "ai_consumption_projection.resolved_logical_model"
+            go_type:
+              import: "github.com/jackc/pgx/v5/pgtype"
+              type: "Text"
+          - column: "ai_consumption_projection.resolved_provider_family"
+            go_type:
+              import: "github.com/jackc/pgx/v5/pgtype"
+              type: "Text"
+          - column: "ai_consumption_projection.provider_code"
+            go_type:
+              import: "github.com/jackc/pgx/v5/pgtype"
+              type: "Text"
+          - column: "ai_consumption_projection.upstream_model"
+            go_type:
+              import: "github.com/jackc/pgx/v5/pgtype"
+              type: "Text"
+          - column: "ai_consumption_projection.provider_format"
+            go_type:
+              import: "github.com/jackc/pgx/v5/pgtype"
+              type: "Text"
+          - column: "ai_consumption_projection.conversation_id"
+            go_type:
+              import: "github.com/jackc/pgx/v5/pgtype"
+              type: "Text"
+          - column: "ai_consumption_projection.reasoning_effort"
+            go_type:
+              import: "github.com/jackc/pgx/v5/pgtype"
+              type: "Text"
+          - column: "ai_consumption_projection.billing_window_id"
+            go_type:
+              import: "github.com/jackc/pgx/v5/pgtype"
+              type: "Text"
+          - column: "ai_consumption_projection.settlement_error"
+            go_type:
+              import: "github.com/jackc/pgx/v5/pgtype"
+              type: "Text"
+          - column: "ai_consumption_projection.refund_reason"
+            go_type:
+              import: "github.com/jackc/pgx/v5/pgtype"
+              type: "Text"
+          - column: "ai_consumption_projection.refund_operator_id"
+            go_type:
+              import: "github.com/jackc/pgx/v5/pgtype"
+              type: "Text"
+          - column: "ai_consumption_projection.http_status"
+            go_type:
+              import: "github.com/jackc/pgx/v5/pgtype"
+              type: "Int4"
+          - column: "ai_consumption_projection.upstream_status"
+            go_type:
+              import: "github.com/jackc/pgx/v5/pgtype"
+              type: "Int4"
+          - column: "ai_consumption_projection.latency_ms"
+            go_type:
+              import: "github.com/jackc/pgx/v5/pgtype"
+              type: "Int4"
+          - column: "ai_consumption_projection.first_token_latency_ms"
+            go_type:
+              import: "github.com/jackc/pgx/v5/pgtype"
+              type: "Int4"
+          - column: "ai_consumption_projection.request_total_ms"
+            go_type:
+              import: "github.com/jackc/pgx/v5/pgtype"
+              type: "Int4"
+          - column: "ai_consumption_projection.request_setup_ms"
+            go_type:
+              import: "github.com/jackc/pgx/v5/pgtype"
+              type: "Int4"
+          - column: "ai_consumption_projection.first_response_byte_ms"
+            go_type:
+              import: "github.com/jackc/pgx/v5/pgtype"
+              type: "Int4"
+          - column: "ai_consumption_projection.response_tail_ms"
+            go_type:
+              import: "github.com/jackc/pgx/v5/pgtype"
+              type: "Int4"
+          - column: "ai_consumption_projection.final_attempt_header_ms"
+            go_type:
+              import: "github.com/jackc/pgx/v5/pgtype"
+              type: "Int4"
+          - column: "ai_consumption_projection.final_attempt_total_ms"
+            go_type:
+              import: "github.com/jackc/pgx/v5/pgtype"
+              type: "Int4"
+          - column: "ai_consumption_projection.error_code"
+            go_type:
+              import: "github.com/jackc/pgx/v5/pgtype"
+              type: "Text"
+          - column: "ai_consumption_projection.error_message"
+            go_type:
+              import: "github.com/jackc/pgx/v5/pgtype"
+              type: "Text"
+          - column: "ai_consumption_projection.resolution"
+            go_type:
+              import: "github.com/jackc/pgx/v5/pgtype"
+              type: "Text"
+          - column: "ai_consumption_projection.public_response_model"
+            go_type:
+              import: "github.com/jackc/pgx/v5/pgtype"
+              type: "Text"

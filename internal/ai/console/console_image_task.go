@@ -125,6 +125,7 @@ func (h *consoleImageTaskHandler) Execute(ctx context.Context, task asynctask.Ta
 		}, nil
 	}
 	replay.RequestID = task.RequestID
+	replay.BillingOriginAt = task.CreatedAt
 	replay.ExecutionMode = coreruntime.ExecutionModeAsync
 	result := h.replayer.Replay(ctx, replay)
 	if err := ctx.Err(); err != nil {

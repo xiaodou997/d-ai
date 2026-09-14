@@ -41,6 +41,8 @@ import (
 // the Execute step can retry across multiple upstream attempts without
 // re-allocating the request object.
 type Request struct {
+	// BillingOriginAt preserves the financial age of trusted task replays.
+	BillingOriginAt time.Time
 	// Envelope owns the HTTP transport for this request. Steps that need to
 	// read the inbound request (AuthN) or write a response (Execute via Relay)
 	// reach into the envelope. It is populated by the HTTP handler before the
@@ -148,6 +150,7 @@ type Request struct {
 	AuditPayload *audit.Payload
 
 	// Filled by Execute step
+	MediaUsageConfirmed  bool
 	TokenUsage           domain.TokenUsage
 	UsageEvidence        domain.UsageEvidence
 	UpstreamErrorCode    string
@@ -209,9 +212,14 @@ type Request struct {
 	FailedStep          string
 
 	// Internal timestamps
-	StartedAt time.Time
-	RequestID string
-	TraceID   string
+	RecordRegistrationRejected bool
+	RecordLeaseContext         context.Context
+	RecordDebugSessionID       string
+	CaptureBody                bool
+	RecordLeaseStop            context.CancelFunc
+	StartedAt                  time.Time
+	RequestID                  string
+	TraceID                    string
 }
 
 func (r *Request) RuntimeSubject() *coreidentity.Subject {

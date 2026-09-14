@@ -145,7 +145,6 @@ export interface DashboardRecentErrorDTO {
   provider_api_format?: string;
   upstream_model?: string;
   protocol_conversion_enabled: boolean;
-  request_status: string;
   tenant_id?: string;
   user_id?: string;
   created_at?: number;

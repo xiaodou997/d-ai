@@ -214,6 +214,10 @@ func (s *Gateway) ExecuteRuntime(
 		ServiceTier:    string(serviceTier),
 		ReceivedAt:     time.Now(),
 	}
+	if identity, ok := r.Context().Value(trustedRequestIDKey{}).(trustedRequestIdentity); ok {
+		runtimeReq.BillingOriginAt = identity.OriginAt
+	}
+	w.Header().Set("X-Request-Id", runtimeReq.RequestID)
 	r.Body = io.NopCloser(bytes.NewReader(body))
 	r.ContentLength = int64(len(body))
 	if override.ClientPath != "" && r.URL != nil {
@@ -476,10 +480,17 @@ func firstUserTurn(items []json.RawMessage) json.RawMessage {
 	return items[0]
 }
 
-// newRequestID returns the X-Request-Id header value, or generates a random hex ID.
+// trustedRequestIDKey is only set by an internal replay, never by HTTP headers.
+type trustedRequestIDKey struct{}
+type trustedRequestIdentity struct {
+	ID       string
+	OriginAt time.Time
+}
+
+// newRequestID allocates financial identity independently of caller correlation IDs.
 func newRequestID(r *http.Request) string {
-	if id := r.Header.Get("X-Request-Id"); id != "" {
-		return id
+	if identity, ok := r.Context().Value(trustedRequestIDKey{}).(trustedRequestIdentity); ok && identity.ID != "" {
+		return identity.ID
 	}
 	b := make([]byte, 16)
 	_, _ = rand.Read(b)

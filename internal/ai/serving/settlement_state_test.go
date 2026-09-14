@@ -67,8 +67,8 @@ func TestUpstreamCancellationIsNotClientCancellation(t *testing.T) {
 	if req.RequestStatus != domain.RequestFailed || req.CancellationOrigin != domain.CancellationProvider {
 		t.Fatalf("upstream cancellation state = %s/%s", req.RequestStatus, req.CancellationOrigin)
 	}
-	if ShouldVoidBilling(req) {
-		t.Fatal("upstream cancellation must not be treated as a customer disconnect")
+	if !ShouldVoidBilling(req) {
+		t.Fatal("upstream cancellation must waive charges even with reported usage")
 	}
 }
 

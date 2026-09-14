@@ -318,7 +318,6 @@ export interface TenantAiDashboardTopModelsOutputBody {
 export interface TenantAiDashboardRecentError {
   request_id: string;
   model_code: string;
-  request_status: string;
   error_code?: string | null;
   error_message?: string | null;
   http_status?: number | null;

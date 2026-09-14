@@ -103,6 +103,8 @@ type Prepared struct {
 
 // Task is the persisted row handed to Execute.
 type Task struct {
+	// CreatedAt is persisted at submission and never refreshed by a retry.
+	CreatedAt time.Time
 	ID        string
 	Type      string
 	ModelCode string
@@ -116,10 +118,8 @@ type Task struct {
 	Subject identity.Subject
 
 	// RequestID is pre-allocated by the engine and stable within this attempt.
-	// A handler that replays the runtime pipeline must pass it through as
-	// X-Request-Id, so the ai_usage_logs row the attempt produces joins back to
-	// this task. The reaper relies on that join to refuse retrying an attempt
-	// that already reached billing.
+	// A handler must pass it with CreatedAt through the trusted Replay input.
+	// Together they fence duplicates and prevent reopening retired billing periods.
 	RequestID string
 }
 

@@ -47,3 +47,5 @@ coverage/
 e2e/test-results/
 playwright-report/
 *.test
+
+/test-results/

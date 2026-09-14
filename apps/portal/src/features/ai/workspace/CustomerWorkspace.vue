@@ -59,7 +59,6 @@ const logColumns: DsTableColumn[] = [
   { key: "cost", title: "消费（USD）", width: 110, align: "right" },
   { key: "tokens", title: "Token" },
   { key: "effort", title: "推理强度", width: 92 },
-  { key: "status", title: "状态", width: 90 },
   { key: "source", title: "来源", width: 100 },
   { key: "request_id", title: "请求 ID", mono: true },
   { key: "created_at", title: "时间", width: 170 }
@@ -113,8 +112,8 @@ const last7DayKeys = () => {
 const modelDistribution = computed(() => {
   const grouped = new Map<string, number>();
   for (const row of usageLogs.value) {
-    const modelCode = row.model_code || "unknown";
-    const cost = Number(row.user_charged_usd) || 0;
+    const modelCode = row.model || "unknown";
+    const cost = Number((row.charge.user_charged_micro / 1_000_000)) || 0;
     grouped.set(modelCode, (grouped.get(modelCode) || 0) + cost);
   }
   return Array.from(grouped.entries())
@@ -143,9 +142,9 @@ const groupByDay = (pick: (row: CustomerUsageLog) => number) => {
   return timelineDayKeys.value.map((dayKey) => grouped.get(dayKey) || 0);
 };
 
-const timelineValues = computed(() => groupByDay((row) => Number(row.user_charged_usd)));
-const timelinePromptTokens = computed(() => groupByDay((row) => Number(row.prompt_tokens)));
-const timelineCompletionTokens = computed(() => groupByDay((row) => Number(row.completion_tokens)));
+const timelineValues = computed(() => groupByDay((row) => Number((row.charge.user_charged_micro / 1_000_000))));
+const timelinePromptTokens = computed(() => groupByDay((row) => Number(row.tokens.input)));
+const timelineCompletionTokens = computed(() => groupByDay((row) => Number(row.tokens.output)));
 
 const recentSessionRows = computed(() => recentSessions.value.slice(0, 6));
 const recentJobRows = computed(() => recentJobs.value.slice(0, 6));
@@ -463,10 +462,10 @@ function isAbortError(error: unknown) {
         { label: '额度余额', value: formatDisplayUSD(balanceInfo.totalUsd) },
         { label: '可用额度', value: formatDisplayUSD(balanceInfo.availableUsd) },
         { label: '当前透支', value: formatDisplayUSD(balanceInfo.outstandingDebtUsd) },
-        { label: '总消耗', value: formatDisplayUSD(summary?.total_user_charged_usd || 0) },
-        { label: '输入 Token', value: formatNumber(summary?.total_prompt_tokens || 0) },
-        { label: '输出 Token', value: formatNumber(summary?.total_completion_tokens || 0) },
-        { label: '总请求次数', value: String(summary?.request_count || 0) }
+        { label: '总消耗', value: formatDisplayUSD((summary?.user_charged_micro || 0) / 1_000_000 || 0) },
+        { label: '输入 Token', value: formatNumber(summary?.input_tokens || 0) },
+        { label: '输出 Token', value: formatNumber(summary?.output_tokens || 0) },
+        { label: '总请求次数', value: String(summary?.requests || 0) }
       ]"
     />
 
@@ -534,29 +533,26 @@ function isAbortError(error: unknown) {
         empty-title="暂无调用记录"
       >
         <template #cell-model="{ row }">
-          {{ row.model_code || "-" }}
+          {{ row.model || "-" }}
         </template>
         <template #cell-cost="{ row }">
-          <UsageCostCell :amount-u-s-d="row.user_charged_usd" />
+          <UsageCostCell :amount-u-s-d="(row.charge.user_charged_micro / 1_000_000)" />
         </template>
         <template #cell-tokens="{ row }">
           <UsageTokenCell
             dense
-            :prompt="row.prompt_tokens"
-            :completion="row.completion_tokens"
-            :cache-read="row.cache_read_tokens"
-            :cache-write="row.cache_write_tokens"
-            :reasoning="row.reasoning_tokens"
+            :prompt="row.tokens.input"
+            :completion="row.tokens.output"
+            :cache-read="row.tokens.cache_read"
+            :cache-write="row.tokens.cache_write"
+            :reasoning="row.tokens.reasoning"
           />
         </template>
         <template #cell-effort="{ row }">
-          <UsageTag kind="effort" :value="row.reasoning_effort" />
-        </template>
-        <template #cell-status="{ row }">
-          <UsageTag kind="status" :value="row.request_status" />
+          <UsageTag kind="effort" :value="''" />
         </template>
         <template #cell-source="{ row }">
-          <UsageTag kind="source" :value="row.request_source" />
+          <UsageTag kind="source" :value="row.source" />
         </template>
         <template #cell-created_at="{ row }">{{ formatDate(row.created_at) }}</template>
       </DsTable>

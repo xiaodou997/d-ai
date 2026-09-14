@@ -77,9 +77,9 @@ describe("SystemModulesWorkspace", () => {
     expect(api.list).toHaveBeenCalledOnce();
     expect(api.getCleanupPolicy).toHaveBeenCalledOnce();
     expect(api.previewCleanup).toHaveBeenCalledOnce();
-    expect(api.getRequestRecordingSettings).toHaveBeenCalledOnce();
+    expect(api.getRequestRecordingSettings).not.toHaveBeenCalled();
     expect(wrapper.text()).toContain("公告服务");
-    expect(wrapper.text()).toContain("请求记录");
+    expect(wrapper.text()).toContain("限时请求调试");
     expect(wrapper.text()).toContain("数据生命周期");
     expect(wrapper.text()).toContain("立即清空请求体");
     expect(wrapper.text()).toContain("预计处理 2 条");

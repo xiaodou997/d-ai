@@ -113,7 +113,7 @@ type dashboardRecentErrorDTO struct {
 	ProviderAPIFormat          *string `json:"provider_api_format,omitempty" doc:"最终上游 API 格式"`
 	UpstreamModel              *string `json:"upstream_model,omitempty" doc:"最终上游模型"`
 	ProtocolConversionEnabled  bool    `json:"protocol_conversion_enabled" doc:"分组是否允许协议转换"`
-	RequestStatus              string  `json:"request_status" doc:"请求状态"`
+	RequestStatus              string  `json:"-" doc:"请求状态"`
 	ErrorCode                  *string `json:"error_code,omitempty" doc:"错误码"`
 	ErrorMessage               *string `json:"error_message,omitempty" doc:"错误信息"`
 	HTTPStatus                 *int32  `json:"http_status,omitempty" doc:"上游 HTTP 状态码"`
