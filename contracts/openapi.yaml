@@ -23251,6 +23251,26 @@ paths:
       parameters:
         - explode: false
           in: query
+          name: tenant_name
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: user_name
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: group
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: api_key_name
+          schema:
+            type: string
+        - explode: false
+          in: query
           name: tenant_id
           schema:
             type: string
@@ -23396,6 +23416,26 @@ paths:
       parameters:
         - explode: false
           in: query
+          name: tenant_name
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: user_name
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: group
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: api_key_name
+          schema:
+            type: string
+        - explode: false
+          in: query
           name: tenant_id
           schema:
             type: string
@@ -23460,6 +23500,26 @@ paths:
       parameters:
         - explode: false
           in: query
+          name: tenant_name
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: user_name
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: group
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: api_key_name
+          schema:
+            type: string
+        - explode: false
+          in: query
           name: tenant_id
           schema:
             type: string
@@ -23522,6 +23582,26 @@ paths:
     get:
       operationId: ai-v2-requests
       parameters:
+        - explode: false
+          in: query
+          name: tenant_name
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: user_name
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: group
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: api_key_name
+          schema:
+            type: string
         - explode: false
           in: query
           name: tenant_id

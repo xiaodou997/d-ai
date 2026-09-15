@@ -5,7 +5,7 @@ export type RequestRecord = NonNullable<OperationResponse<"ai-v2-requests">["rec
 export type RecordPage = OperationResponse<"ai-v2-requests">;
 export type RecordSummary = OperationResponse<"ai-v2-record-summary">;
 export type RecordKind = "requests" | "errors" | "settlements";
-export interface RecordQuery { tenant_id?: string; user_id?: string; model?: string; source?: string; from?: string; to?: string; cursor?: string; limit?: number; }
+export interface RecordQuery { tenant_name?: string; user_name?: string; group?: string; api_key_name?: string; tenant_id?: string; user_id?: string; model?: string; source?: string; from?: string; to?: string; cursor?: string; limit?: number; }
 const request = createTypedOperationRequest(authenticatedRequest());
 const common = { headers: apiHeaders, baseUrl: apiBaseUrl };
 export const recordsApi = {

@@ -22805,6 +22805,10 @@ export interface operations {
     "ai-v2-settlements": {
         parameters: {
             query?: {
+                tenant_name?: string;
+                user_name?: string;
+                group?: string;
+                api_key_name?: string;
                 tenant_id?: string;
                 user_id?: string;
                 model?: string;
@@ -22942,6 +22946,10 @@ export interface operations {
     "ai-v2-request-errors": {
         parameters: {
             query?: {
+                tenant_name?: string;
+                user_name?: string;
+                group?: string;
+                api_key_name?: string;
                 tenant_id?: string;
                 user_id?: string;
                 model?: string;
@@ -22980,6 +22988,10 @@ export interface operations {
     "ai-v2-record-summary": {
         parameters: {
             query?: {
+                tenant_name?: string;
+                user_name?: string;
+                group?: string;
+                api_key_name?: string;
                 tenant_id?: string;
                 user_id?: string;
                 model?: string;
@@ -23018,6 +23030,10 @@ export interface operations {
     "ai-v2-requests": {
         parameters: {
             query?: {
+                tenant_name?: string;
+                user_name?: string;
+                group?: string;
+                api_key_name?: string;
                 tenant_id?: string;
                 user_id?: string;
                 model?: string;

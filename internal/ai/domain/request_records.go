@@ -15,13 +15,17 @@ type RecordScope struct {
 }
 type RecordQuery struct {
 	RecordScope
-	Kind   string
-	Model  string
-	Source string
-	From   *time.Time
-	To     *time.Time
-	Cursor string
-	Limit  int
+	TenantName string
+	UserName   string
+	Group      string
+	APIKeyName string
+	Kind       string
+	Model      string
+	Source     string
+	From       *time.Time
+	To         *time.Time
+	Cursor     string
+	Limit      int
 }
 type RecordError struct {
 	Origin  string `json:"origin"`

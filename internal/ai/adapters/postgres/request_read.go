@@ -47,6 +47,18 @@ func (s *RequestStore) Record(ctx context.Context, scope domain.RecordScope, id 
 	}
 	return r, nil
 }
+
+// Shared by the record list and totals; name lookups always correlate to the
+// settlement tenant so they cannot widen the authenticated record scope.
+func recordSearchSQL(first int) string {
+	return fmt.Sprintf(`
+ AND ($%[1]d='' OR EXISTS (SELECT 1 FROM iam_tenants t WHERE t.tenant_id=s.tenant_id AND strpos(lower(t.tenant_name),lower($%[1]d))>0))
+ AND ($%[2]d='' OR EXISTS (SELECT 1 FROM iam_accounts u WHERE u.tenant_id=s.tenant_id AND u.user_id=s.user_id AND (strpos(lower(u.username),lower($%[2]d))>0 OR strpos(lower(COALESCE(u.nickname,'')),lower($%[2]d))>0)))
+ AND ($%[3]d='' OR s.dimensions->>'group_id'=$%[3]d OR strpos(lower(COALESCE(s.dimensions->>'group_name_snapshot','')),lower($%[3]d))>0 OR EXISTS (SELECT 1 FROM ai_groups g WHERE g.tenant_id=s.tenant_id AND g.id::text=s.dimensions->>'group_id' AND strpos(lower(g.name),lower($%[3]d))>0))
+ AND ($%[4]d='' OR EXISTS (SELECT 1 FROM ai_api_keys k WHERE k.tenant_id=s.tenant_id AND k.id::text=s.api_key_id AND strpos(lower(k.name),lower($%[4]d))>0))
+ `, first, first+1, first+2, first+3)
+}
+
 func (s *RequestStore) readRecords(ctx context.Context, q domain.RecordQuery, id string) (domain.RecordPage, error) {
 	out := domain.RecordPage{Records: []domain.RequestRecord{}}
 	if q.Limit <= 0 {
@@ -84,7 +96,7 @@ func (s *RequestStore) readRecords(ctx context.Context, q domain.RecordQuery, id
  AND ($7::timestamptz IS NULL OR (s.created_at,s.request_id)<($7,$8))
  AND ($9='settlements' OR ($9='errors' AND e.request_id IS NOT NULL) OR ($9='requests' AND r.request_id IS NOT NULL AND NOT r.is_error))
  AND ($10='' OR s.request_id=$10)
- ORDER BY s.created_at DESC,s.request_id DESC LIMIT $11`, q.TenantID, q.UserID, q.Model, q.Source, q.From, q.To, cursorAt, cursorID, q.Kind, id, q.Limit+1)
+ `+recordSearchSQL(12)+` ORDER BY s.created_at DESC,s.request_id DESC LIMIT $11`, q.TenantID, q.UserID, q.Model, q.Source, q.From, q.To, cursorAt, cursorID, q.Kind, id, q.Limit+1, q.TenantName, q.UserName, q.Group, q.APIKeyName)
 	if err != nil {
 		return out, err
 	}
@@ -205,7 +217,7 @@ func (s *RequestStore) RecordSummary(ctx context.Context, q domain.RecordQuery) 
  COALESCE(sum(s.tenant_charged),0),COALESCE(sum(s.user_charged),0),COALESCE(sum(s.tenant_charged) FILTER(WHERE s.state='refunded'),0),COALESCE(sum(s.user_charged) FILTER(WHERE s.state='refunded'),0)
  FROM bill_settlements s LEFT JOIN ai_requests r ON r.request_id=s.request_id AND r.created_at=s.created_at
  WHERE ($1='' OR s.tenant_id=$1) AND ($2='' OR s.user_id=$2) AND ($3::timestamptz IS NULL OR s.created_at >= $3) AND ($4::timestamptz IS NULL OR s.created_at<$4)
- AND ($5='' OR s.dimensions->>'model_code'=$5) AND ($6='' OR s.dimensions->>'request_source'=$6)`, q.TenantID, q.UserID, q.From, q.To, q.Model, q.Source).Scan(&r.Requests, &r.Errors, &r.Interruptions, &r.InputTokens, &r.OutputTokens, &tc, &r.UserCharged, &tr, &r.UserRefunded)
+ AND ($5='' OR s.dimensions->>'model_code'=$5) AND ($6='' OR s.dimensions->>'request_source'=$6)`+recordSearchSQL(7), q.TenantID, q.UserID, q.From, q.To, q.Model, q.Source, q.TenantName, q.UserName, q.Group, q.APIKeyName).Scan(&r.Requests, &r.Errors, &r.Interruptions, &r.InputTokens, &r.OutputTokens, &tc, &r.UserCharged, &tr, &r.UserRefunded)
 	if err != nil {
 		return r, fmt.Errorf("record summary: %w", err)
 	}

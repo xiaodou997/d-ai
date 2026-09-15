@@ -6,7 +6,9 @@ import { ScrollText } from "lucide-vue-next";
 import { useAuthStore } from "@/stores/auth";
 import { PortalPagePanel, PortalMetricGrid } from "@/platform";
 import { DsTabs, DsTable, DsDrawer, DsFilterBar, DsTag, type DsTableColumn } from "@/shared/ui";
-import { recordsApi, chargeReason, chargeLabel, microUSD, tokenCount, type RequestRecord, type RecordKind, type RecordSummary } from "./recordsApi";
+import { recordsApi, chargeReason, chargeLabel, microUSD, tokenCount, type RequestRecord, type RecordKind, type RecordSummary, type RecordQuery } from "./recordsApi";
+
+import { WORKBENCH_RANGE_OPTIONS, buildWorkbenchRangeWindow, getWorkbenchRangeOption, type WorkbenchRangeId } from "@/components/workbench/workbenchRanges";
 
 const props = withDefaults(defineProps<{ initialTab?: RecordKind; requestId?: string; userId?: string }>(), { initialTab: "requests" });
 const auth = useAuthStore();
@@ -16,7 +18,14 @@ const customer = computed(() => Number(auth.userInfo?.userType) === 4);
 const tab = ref<RecordKind>(props.initialTab);
 const model = ref("");
 const source = ref("");
-const days = ref(30);
+const tenantName = ref("");
+const userName = ref("");
+const group = ref("");
+const apiKeyName = ref("");
+const range = ref<WorkbenchRangeId>("today");
+const customRange = ref<[Date, Date] | null>(null);
+const appliedQuery = ref<RecordQuery>({});
+const appliedRangeLabel = ref("今天");
 const rows = ref<RequestRecord[]>([]);
 const summary = ref<RecordSummary | null>(null);
 const busy = ref(false);
@@ -61,21 +70,47 @@ const columns = computed<DsTableColumn[]>(() => [
   { key: "detail", title: "详情", width: 70 }
 ]);
 const metrics = computed(() => [
-  { label: "请求次数", value: (summary.value?.requests || 0).toLocaleString(), hint: `近 ${days.value} 天` },
+  { label: "请求次数", value: (summary.value?.requests || 0).toLocaleString(), hint: appliedRangeLabel.value },
   { label: "明确错误", value: (summary.value?.errors || 0).toLocaleString(), hint: "请求报错免收费用" },
   { label: "客户端中断", value: (summary.value?.interruptions || 0).toLocaleString(), hint: "按取消前用量结算" },
   { label: "实际扣款", value: microUSD(customer.value ? summary.value?.user_charged_micro : summary.value?.tenant_charged_micro), hint: `已退款 ${microUSD(customer.value ? summary.value?.user_refunded_micro : summary.value?.tenant_refunded_micro)}` }
 ]);
-function query() {
-  const from = new Date(); from.setUTCHours(0, 0, 0, 0); from.setUTCDate(from.getUTCDate() - days.value + 1);
-  const to = new Date(); to.setUTCHours(0, 0, 0, 0); to.setUTCDate(to.getUTCDate() + 1);
-  return { user_id: props.userId, model: model.value || undefined, source: source.value || undefined, from: from.toISOString(), to: to.toISOString(), limit: 20 };
+function query(): RecordQuery | null {
+  const option = getWorkbenchRangeOption(range.value);
+  const window = buildWorkbenchRangeWindow(option);
+  if (range.value === "custom" && (!customRange.value || customRange.value[0] >= customRange.value[1])) {
+    ElMessage.warning("请选择有效的起止时间");
+    return null;
+  }
+  return {
+    user_id: props.userId,
+    model: model.value.trim() || undefined,
+    tenant_name: admin.value ? tenantName.value.trim() || undefined : undefined,
+    user_name: !customer.value && !props.userId ? userName.value.trim() || undefined : undefined,
+    group: group.value.trim() || undefined,
+    api_key_name: apiKeyName.value.trim() || undefined,
+    source: source.value || undefined,
+    from: range.value === "custom" ? customRange.value![0].toISOString() : window.date_from,
+    to: range.value === "custom" ? customRange.value![1].toISOString() : window.date_to,
+    limit: 20
+  };
+}
+function resetFilters() {
+  model.value = source.value = tenantName.value = userName.value = group.value = apiKeyName.value = "";
+  range.value = "today"; customRange.value = null;
+  void load(true);
 }
 async function load(reset = false) {
+  if (reset || !appliedQuery.value.from) {
+    const nextQuery = query();
+    if (!nextQuery) return;
+    appliedQuery.value = nextQuery;
+    appliedRangeLabel.value = getWorkbenchRangeOption(range.value).label;
+  }
   if (reset) { cursor.value = undefined; history.value = []; }
   controller?.abort(); const active = new AbortController(); controller = active; busy.value = true;
   try {
-    const [page, total] = await Promise.all([recordsApi.list(tab.value, { ...query(), cursor: cursor.value }, active.signal), recordsApi.summary(query(), active.signal)]);
+    const [page, total] = await Promise.all([recordsApi.list(tab.value, { ...appliedQuery.value, cursor: cursor.value }, active.signal), recordsApi.summary(appliedQuery.value, active.signal)]);
     if (active.signal.aborted) return;
     rows.value = page.records || []; nextCursor.value = page.next_cursor; summary.value = total;
   } catch (error) { if (!active.signal.aborted) ElMessage.error(error instanceof Error ? error.message : "读取记录失败"); }
@@ -113,15 +148,20 @@ onBeforeUnmount(() => { controller?.abort(); detailController?.abort(); });
 
 <template>
   <PortalPagePanel fill :icon="ScrollText" :breadcrumbs="[{ label: '智能服务' }, { label: '请求与费用' }]" description="查看调用用量、明确错误与实际费用">
-    <template #actions><el-button :loading="busy" @click="load()">刷新</el-button></template>
+    <template #actions><el-button :loading="busy" @click="load(true)">刷新</el-button></template>
     <div class="records-workspace">
       <PortalMetricGrid :metrics="metrics" min-col-width="170px" />
       <DsTabs :tabs="tabs" :model-value="tab" @update:model-value="changeTab" />
       <DsFilterBar>
-        <el-input v-model="model" clearable placeholder="模型编码" @keyup.enter="load(true)" />
-        <el-select v-model="source" clearable placeholder="全部来源"><el-option label="API" value="api_key" /><el-option label="网页对话" value="web_chat" /><el-option label="网页生图" value="web_image" /></el-select>
-        <el-select v-model="days"><el-option :value="7" label="近 7 天" /><el-option :value="30" label="近 30 天" /><el-option :value="90" label="近 90 天" /><el-option v-if="tab === 'settlements'" :value="365" label="近 1 年" /></el-select>
-        <template #actions><el-button type="primary" @click="load(true)">查询</el-button></template>
+        <el-input v-model="model" clearable placeholder="模型 ID（完整编码）" aria-label="模型 ID" @keyup.enter="load(true)" />
+        <el-input v-if="admin" v-model="tenantName" clearable placeholder="租户名" aria-label="租户名" @keyup.enter="load(true)" />
+        <el-input v-if="!customer && !props.userId" v-model="userName" clearable placeholder="用户名 / 昵称" aria-label="用户名" @keyup.enter="load(true)" />
+        <el-input v-model="group" clearable placeholder="分组名称 / ID" aria-label="分组" @keyup.enter="load(true)" />
+        <el-input v-model="apiKeyName" clearable placeholder="API Key 名称" aria-label="API Key 名称" @keyup.enter="load(true)" />
+        <el-select v-model="source" clearable placeholder="全部来源"><el-option label="API" value="api_key" /><el-option label="网页对话" value="web_chat" /><el-option label="网页生图" value="web_image" /><el-option label="网页视频" value="web_video" /></el-select>
+        <el-select v-model="range" aria-label="时间范围"><el-option v-for="option in WORKBENCH_RANGE_OPTIONS" :key="option.id" :value="option.id" :label="option.label" /></el-select>
+        <el-date-picker v-if="range === 'custom'" v-model="customRange" type="datetimerange" start-placeholder="开始时间" end-placeholder="结束时间" range-separator="至" />
+        <template #actions><el-button @click="resetFilters">重置</el-button><el-button type="primary" :loading="busy" @click="load(true)">查询</el-button></template>
       </DsFilterBar>
       <p v-if="tab === 'errors'" class="records-note">这里只包含明确报错的请求，费用与计费额度均免收。错误诊断保留 30 天。</p>
       <DsTable :columns="columns" :rows="rows" row-key="request_id" :loading="busy" :frame="false" empty-title="当前范围没有记录">
@@ -171,6 +211,7 @@ onBeforeUnmount(() => { controller?.abort(); detailController?.abort(); });
 <style scoped>
 .records-workspace, .record-detail { display: grid; gap: 20px; padding: 20px; min-width: 0; }
 .records-workspace :deep(.ds-filter-bar > .el-input), .records-workspace :deep(.ds-filter-bar > .el-select) { flex: 1 1 180px; width: auto; min-width: 140px; max-width: 260px; }
+.records-workspace :deep(.el-date-editor--datetimerange) { flex: 1 1 360px; max-width: 100%; min-width: 0; }
 .record-detail { padding: 0; }
 .record-detail > .ds-tag { justify-self: start; }
 .records-workspace small, .record-detail small { display: block; color: var(--ds-muted); font-size: 12px; overflow-wrap: anywhere; }

@@ -6,18 +6,23 @@ import (
 	"errors"
 	"github.com/danielgtaylor/huma/v2"
 	"net/http"
+	"strings"
 	"xiaodou/dai/internal/ai/domain"
 )
 
 type recordListInput struct {
-	TenantID string `query:"tenant_id"`
-	UserID   string `query:"user_id"`
-	Model    string `query:"model"`
-	Source   string `query:"source"`
-	From     string `query:"from"`
-	To       string `query:"to"`
-	Cursor   string `query:"cursor"`
-	Limit    int    `query:"limit" default:"20" minimum:"1" maximum:"100"`
+	TenantName string `query:"tenant_name"`
+	UserName   string `query:"user_name"`
+	Group      string `query:"group"`
+	APIKeyName string `query:"api_key_name"`
+	TenantID   string `query:"tenant_id"`
+	UserID     string `query:"user_id"`
+	Model      string `query:"model"`
+	Source     string `query:"source"`
+	From       string `query:"from"`
+	To         string `query:"to"`
+	Cursor     string `query:"cursor"`
+	Limit      int    `query:"limit" default:"20" minimum:"1" maximum:"100"`
 }
 type recordListOutput struct{ Body domain.RecordPage }
 type recordDetailInput struct {
@@ -68,7 +73,7 @@ func recordQuery(ctx context.Context, in *recordListInput, kind string) (domain.
 	if err != nil {
 		return domain.RecordQuery{}, err
 	}
-	return domain.RecordQuery{RecordScope: scope, Kind: kind, Model: in.Model, Source: in.Source, From: from, To: to, Cursor: in.Cursor, Limit: in.Limit}, nil
+	return domain.RecordQuery{RecordScope: scope, Kind: kind, TenantName: strings.TrimSpace(in.TenantName), UserName: strings.TrimSpace(in.UserName), Group: strings.TrimSpace(in.Group), APIKeyName: strings.TrimSpace(in.APIKeyName), Model: strings.TrimSpace(in.Model), Source: in.Source, From: from, To: to, Cursor: in.Cursor, Limit: in.Limit}, nil
 }
 func registerRequestRecords(api huma.API, d UsageHTTPDeps) {
 	registerRecordDebug(api, d)

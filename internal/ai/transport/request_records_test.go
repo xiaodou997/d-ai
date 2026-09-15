@@ -41,3 +41,17 @@ func TestLegacyRequestListRoutesAreRemoved(t *testing.T) {
 		}
 	}
 }
+
+func TestRecordQuerySearchKeepsScopeAndTrimsNames(t *testing.T) {
+	ctx := context.WithValue(context.Background(), authClaimsContextKey{}, &auth.Claims{UserType: 4, TenantID: "own-tenant", UserID: "own-user"})
+	q, err := recordQuery(ctx, &recordListInput{TenantID: "foreign", UserID: "foreign", TenantName: " Acme ", UserName: " Alice ", Group: " premium ", APIKeyName: " production ", Model: " model-id ", From: "2026-09-01T00:00:00+08:00", To: "2026-10-01T00:00:00+08:00"}, "requests")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if q.TenantID != "own-tenant" || q.UserID != "own-user" || !q.EndUser || q.TenantName != "Acme" || q.UserName != "Alice" || q.Group != "premium" || q.APIKeyName != "production" || q.Model != "model-id" {
+		t.Fatalf("query=%+v", q)
+	}
+	if q.From == nil || q.To == nil || !q.From.Before(*q.To) {
+		t.Fatalf("invalid time window: %+v", q)
+	}
+}
