@@ -28,17 +28,21 @@ func TestStreamChunkStartsTokenOpenAIChat(t *testing.T) {
 	}
 }
 
-func TestFirstOutputIncludesPriorAttemptsWithoutInflatingUpstreamLatency(t *testing.T) {
+func TestFirstOutputExcludesPriorAttemptsWhileTotalIncludesThem(t *testing.T) {
 	start := time.Now()
 	attempt := start.Add(55 * time.Second)
 	req := &Request{StartedAt: start, Attempts: []AttemptRecord{{TransportStartedAt: start}, {TransportStartedAt: attempt}}}
 	req.MarkFirstOutput(start.Add(66*time.Second), attempt)
-	if req.FirstTokenMs != 66000 || req.Attempts[1].FirstOutputMs != 11000 || req.Attempts[0].FirstOutputMs != 0 {
+	if req.FirstTokenMs != 11000 || req.Attempts[1].FirstOutputMs != 11000 || req.Attempts[0].FirstOutputMs != 0 {
 		t.Fatalf("request=%d attempts=%+v", req.FirstTokenMs, req.Attempts)
 	}
 	req.MarkFirstOutput(start.Add(70*time.Second), attempt)
-	if req.FirstTokenMs != 66000 || req.Attempts[1].FirstOutputMs != 11000 {
+	if req.FirstTokenMs != 11000 || req.Attempts[1].FirstOutputMs != 11000 {
 		t.Fatal("first output overwritten")
+	}
+	req.MarkCompleted(start.Add(70 * time.Second))
+	if total, ok := req.RequestTotalMs(); !ok || total != 70000 {
+		t.Fatalf("total=%d available=%v, want 70000 including prior attempts", total, ok)
 	}
 }
 
