@@ -158,7 +158,7 @@ async function resume() {
     <el-alert
       v-if="detail?.state_error"
       title="运行状态暂不可读取"
-      description="成功率、失败次数和调用明细仍可用；冷却与恢复信息将在运行状态服务恢复后更新。"
+      description="运行状态依赖 Redis 中的可用性状态，当前读取失败；成功率、失败次数和调用明细仍可用，冷却与恢复信息将在服务恢复后更新。"
       type="warning"
       :closable="false"
     />

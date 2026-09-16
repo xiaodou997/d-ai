@@ -12,7 +12,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, Download, Edit, Plus, Refresh, Upload, VideoPlay } from '@element-plus/icons-vue'
 import { Database } from 'lucide-vue-next'
 import { PortalContentCard, PortalPagePanel } from '@/platform'
-import { DsEmpty, DsNumberInput, DsTable, DsTag, type DsTableColumn } from '@/shared/ui'
+import { DsEmpty, DsNumberInput, DsTable, DsTabs, DsTag, type DsTableColumn } from '@/shared/ui'
 import { formatMultiplier } from '@/platform/ai/utils'
 import { aiAdminApi } from '@/api/aiAdmin'
 import type {
@@ -67,6 +67,13 @@ const selectedAccountId = shallowRef('')
 const selectedExportAccountIds = shallowRef<string[]>([])
 const updatingAccountStatusId = shallowRef('')
 const accountContentScroll = ref<HTMLElement | null>(null)
+const activeAccountTab = shallowRef('stability')
+const accountDetailTabs = [
+  { key: 'stability', label: '运行稳定性' },
+  { key: 'overview', label: '账号概览' },
+  { key: 'endpoints', label: '请求端点' },
+  { key: 'models', label: '模型绑定' }
+]
 
 const activePriceBookId = computed(() => firstActivePriceBookId(priceBooks.value))
 const selectedAccount = computed(() => accounts.value.find((account) => account.id === selectedAccountId.value))
@@ -604,6 +611,7 @@ function selectAccount(id: string) {
 
 // 详情区是独立滚动容器。切换账号时回到详情顶部，避免沿用上一个账号的滚动位置。
 watch(selectedAccountId, () => {
+  activeAccountTab.value = 'stability'
   void nextTick(() => accountContentScroll.value?.scrollTo?.({ top: 0, behavior: 'auto' }))
 })
 
@@ -849,7 +857,7 @@ onBeforeUnmount(() => {
           <el-alert
             v-else-if="stabilityStateError"
             title="运行状态服务暂不可用"
-            description="成功率和样本统计仍可用；冷却、恢复及账号可用性状态暂时不显示。"
+            description="运行状态依赖 Redis 中的可用性状态，当前读取失败；成功率和样本统计仍可用，冷却、恢复及账号可用性状态暂时不显示。"
             type="warning"
             :closable="false"
           />
@@ -919,82 +927,95 @@ onBeforeUnmount(() => {
       <el-col :span="17" class="account-content-column">
         <div ref="accountContentScroll" class="account-content-scroll">
           <div v-if="selectedAccount" class="account-content-stack">
-            <UpstreamStabilityPanel kind="direct_upstream" :resource-id="selectedAccount.id" />
-            <PortalContentCard title="账号概览" :description="`当前账号:${selectedAccount.name}`">
-              <template #actions>
-                <el-button
-                  size="small"
-                  type="success"
-                  plain
-                  :icon="VideoPlay"
-                  @click="openTestDialog(selectedAccount)"
-                >测试连通</el-button>
-                <el-button size="small" :icon="Edit" @click="openAccountEdit(selectedAccount)">编辑账号</el-button>
-                <el-button size="small" type="danger" plain :icon="Delete" @click="removeAccount(selectedAccount)">删除</el-button>
-              </template>
-              <el-descriptions :key="selectedAccountId" :column="2" size="small" border>
-                <el-descriptions-item label="请求端点">{{ selectedAccount.endpoints?.length || 0 }} 个</el-descriptions-item>
-                <el-descriptions-item label="API 格式">
-                  {{ accountAPIFormats(selectedAccount) }}
-                </el-descriptions-item>
-                <el-descriptions-item label="最大并发">{{ selectedAccount.concurrency_limit ? `${selectedAccount.concurrency_limit} 并发` : '不限制' }}</el-descriptions-item>
-                <el-descriptions-item label="配置状态">
-                  <DsTag :tone="statusTone(selectedAccount.status)">
-                    {{ upstreamAccountStatusLabel(selectedAccount.status) }}
-                  </DsTag>
-                </el-descriptions-item>
-                <el-descriptions-item label="租户可见性">{{ selectedAccount.tenant_access_mode === 'restricted' ? '专属' : '公开' }}</el-descriptions-item>
-                <el-descriptions-item label="账号描述" :span="2">
-                  <span :class="{ 'account-overview-description-empty': !selectedAccount.description }">
-                    {{ selectedAccount.description || '暂无描述' }}
-                  </span>
-                </el-descriptions-item>
-                <el-descriptions-item label="价格表">{{ priceBookName(selectedAccount.price_book_id) }}</el-descriptions-item>
-                <el-descriptions-item label="租户倍率">{{ formatMultiplier(selectedAccount.tenant_multiplier) }}</el-descriptions-item>
-                <el-descriptions-item v-if="selectedAccount.status === 'invalid'" label="失效原因" :span="2">
-                  {{ selectedAccount.invalid_reason || '上游拒绝了账号凭据' }}
-                </el-descriptions-item>
-              </el-descriptions>
-            </PortalContentCard>
+            <div class="account-detail-tabs">
+              <div class="account-detail-tabs__meta">
+                <div class="account-detail-tabs__title">
+                  <strong>账号详情</strong>
+                  <span>{{ selectedAccount.name }} · 按模块查看配置与运行信息</span>
+                </div>
+                <div class="account-detail-tabs__actions">
+                  <el-button size="small" type="success" plain :icon="VideoPlay" @click="openTestDialog(selectedAccount)">测试连通</el-button>
+                  <el-button size="small" :icon="Edit" @click="openAccountEdit(selectedAccount)">编辑账号</el-button>
+                  <el-button size="small" type="danger" plain :icon="Delete" @click="removeAccount(selectedAccount)">删除</el-button>
+                </div>
+              </div>
+              <DsTabs v-model="activeAccountTab" :tabs="accountDetailTabs" />
+            </div>
 
-            <PortalContentCard title="请求端点" description="声明该账号真正支持的请求格式。每种 API 格式只能配置一个 Base URL。">
-              <template #actions>
-                <el-button size="small" type="primary" :icon="Plus" @click="openEndpointCreate">添加端点</el-button>
-              </template>
-              <el-table :key="selectedAccount.id" :data="selectedAccount.endpoints || []" border stripe>
-                <el-table-column label="API 格式" min-width="190">
-                  <template #default="{ row }">{{ upstreamAPIFormatLabel(row.api_format) }}</template>
-                </el-table-column>
-                <el-table-column prop="base_url" label="Base URL" min-width="220" show-overflow-tooltip />
-                <el-table-column prop="path_override" label="路径覆盖" min-width="150" show-overflow-tooltip>
-                  <template #default="{ row }">{{ row.path_override || '使用格式默认路径' }}</template>
-                </el-table-column>
-                <el-table-column label="状态" width="105">
-                  <template #default="{ row }">
-                    <DsTag :tone="row.status === 'active' ? (row.health_status === 'unhealthy' ? 'danger' : 'positive') : 'info'">
-                      {{ row.status === 'active' ? (row.health_status === 'unhealthy' ? '异常' : '启用') : '停用' }}
+            <div v-show="activeAccountTab === 'stability'" class="account-detail-pane">
+              <UpstreamStabilityPanel kind="direct_upstream" :resource-id="selectedAccount.id" />
+            </div>
+
+            <div v-show="activeAccountTab === 'overview'" class="account-detail-pane">
+              <PortalContentCard title="账号概览" :description="`当前账号:${selectedAccount.name}`">
+                <el-descriptions :key="selectedAccountId" :column="2" size="small" border>
+                  <el-descriptions-item label="请求端点">{{ selectedAccount.endpoints?.length || 0 }} 个</el-descriptions-item>
+                  <el-descriptions-item label="API 格式">
+                    {{ accountAPIFormats(selectedAccount) }}
+                  </el-descriptions-item>
+                  <el-descriptions-item label="最大并发">{{ selectedAccount.concurrency_limit ? `${selectedAccount.concurrency_limit} 并发` : '不限制' }}</el-descriptions-item>
+                  <el-descriptions-item label="配置状态">
+                    <DsTag :tone="statusTone(selectedAccount.status)">
+                      {{ upstreamAccountStatusLabel(selectedAccount.status) }}
                     </DsTag>
-                  </template>
-                </el-table-column>
-                <el-table-column label="操作" width="130" fixed="right">
-                  <template #default="{ row }">
-                    <el-button link type="primary" @click="openEndpointEdit(row)">编辑</el-button>
-                    <el-button link type="danger" @click="removeEndpoint(row)">删除</el-button>
-                  </template>
-                </el-table-column>
-              </el-table>
-            </PortalContentCard>
+                  </el-descriptions-item>
+                  <el-descriptions-item label="租户可见性">{{ selectedAccount.tenant_access_mode === 'restricted' ? '专属' : '公开' }}</el-descriptions-item>
+                  <el-descriptions-item label="账号描述" :span="2">
+                    <span :class="{ 'account-overview-description-empty': !selectedAccount.description }">
+                      {{ selectedAccount.description || '暂无描述' }}
+                    </span>
+                  </el-descriptions-item>
+                  <el-descriptions-item label="价格表">{{ priceBookName(selectedAccount.price_book_id) }}</el-descriptions-item>
+                  <el-descriptions-item label="租户倍率">{{ formatMultiplier(selectedAccount.tenant_multiplier) }}</el-descriptions-item>
+                  <el-descriptions-item v-if="selectedAccount.status === 'invalid'" label="失效原因" :span="2">
+                    {{ selectedAccount.invalid_reason || '上游拒绝了账号凭据' }}
+                  </el-descriptions-item>
+                </el-descriptions>
+              </PortalContentCard>
+            </div>
 
-            <UpstreamModelBindingsPanel
-              target-kind="account"
-              :target-id="selectedAccount.id"
-              title="上游账号显式模型绑定"
-              description="声明这个账号可用的模型；API 格式由上方请求端点统一提供。"
-              empty-text="当前账号暂无显式模型绑定。可先从上游发现模型，再补充精细化编辑。"
-              import-button-label="发现上游模型"
-              import-dialog-title="发现上游模型"
-              import-alert-title="从上游 /v1/models 拉取，勾选后创建该账号的显式上游模型绑定。"
-            />
+            <div v-show="activeAccountTab === 'endpoints'" class="account-detail-pane">
+              <PortalContentCard title="请求端点" description="声明该账号真正支持的请求格式。每种 API 格式只能配置一个 Base URL。">
+                <template #actions>
+                  <el-button size="small" type="primary" :icon="Plus" @click="openEndpointCreate">添加端点</el-button>
+                </template>
+                <el-table :key="selectedAccount.id" :data="selectedAccount.endpoints || []" border stripe>
+                  <el-table-column label="API 格式" min-width="190">
+                    <template #default="{ row }">{{ upstreamAPIFormatLabel(row.api_format) }}</template>
+                  </el-table-column>
+                  <el-table-column prop="base_url" label="Base URL" min-width="220" show-overflow-tooltip />
+                  <el-table-column prop="path_override" label="路径覆盖" min-width="150" show-overflow-tooltip>
+                    <template #default="{ row }">{{ row.path_override || '使用格式默认路径' }}</template>
+                  </el-table-column>
+                  <el-table-column label="状态" width="105">
+                    <template #default="{ row }">
+                      <DsTag :tone="row.status === 'active' ? (row.health_status === 'unhealthy' ? 'danger' : 'positive') : 'info'">
+                        {{ row.status === 'active' ? (row.health_status === 'unhealthy' ? '异常' : '启用') : '停用' }}
+                      </DsTag>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="操作" width="130" fixed="right">
+                    <template #default="{ row }">
+                      <el-button link type="primary" @click="openEndpointEdit(row)">编辑</el-button>
+                      <el-button link type="danger" @click="removeEndpoint(row)">删除</el-button>
+                    </template>
+                  </el-table-column>
+                </el-table>
+              </PortalContentCard>
+            </div>
+
+            <div v-show="activeAccountTab === 'models'" class="account-detail-pane">
+              <UpstreamModelBindingsPanel
+                target-kind="account"
+                :target-id="selectedAccount.id"
+                title="上游账号显式模型绑定"
+                description="声明这个账号可用的模型；API 格式由上方请求端点统一提供。"
+                empty-text="当前账号暂无显式模型绑定。可先从上游发现模型，再补充精细化编辑。"
+                import-button-label="发现上游模型"
+                import-dialog-title="发现上游模型"
+                import-alert-title="从上游 /v1/models 拉取，勾选后创建该账号的显式上游模型绑定。"
+              />
+            </div>
           </div>
         </div>
       </el-col>
@@ -1431,6 +1452,13 @@ onBeforeUnmount(() => {
   padding: 0 2px 2px 0;
 }
 .account-content-stack { display: flex; flex-direction: column; gap: 16px; min-height: 100%; }
+.account-detail-tabs { padding: 14px; border: 1px solid var(--ds-line); border-radius: var(--ds-radius-panel); background: var(--ds-panel); }
+.account-detail-tabs__meta { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 12px; }
+.account-detail-tabs__title { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.account-detail-tabs__title strong { color: var(--ds-ink); font-size: 14px; }
+.account-detail-tabs__title span { color: var(--ds-muted); font-size: 12px; line-height: 1.5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-detail-tabs__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.account-detail-pane { min-width: 0; }
 .hint { color: var(--ds-faint); font-size: 12px; margin-left: 8px; }
 .endpoint-drafts { display: flex; flex-direction: column; gap: 12px; margin: 8px 0 18px; }
 .endpoint-drafts-head, .endpoint-draft-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
@@ -1455,6 +1483,8 @@ onBeforeUnmount(() => {
 @media (max-width: 768px) {
   .runtime-filter-grid { grid-template-columns: 1fr; }
   .runtime-filter-field--wide { grid-column: auto; }
+  .account-detail-tabs__meta { flex-direction: column; }
+  .account-detail-tabs__actions { justify-content: flex-start; }
 }
 
 /* 主从布局：限制在页面剩余高度内，左右两栏各自滚动，避免列表把整个页面向下撑开。 */

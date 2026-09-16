@@ -253,6 +253,30 @@ describe('UpstreamAccountsWorkspace', () => {
     expect(wrapper.find('.table-base-url').text()).toBe('https://b.example.com')
   })
 
+  it('switches account detail sections with tabs instead of stacking them', async () => {
+    api.listUpstreamAccounts.mockResolvedValue({
+      items: [{
+        id: 'account-tabbed',
+        name: 'Tabbed account',
+        endpoints: [{ id: 'endpoint-tabbed', api_format: 'openai_responses', base_url: 'https://tabbed.example.com', status: 'active' }],
+        status: 'active'
+      }]
+    })
+    const wrapper = mount(AccountsView, { global })
+    await flushPromises()
+
+    const panes = wrapper.findAll('.account-detail-pane')
+    expect(panes).toHaveLength(4)
+    expect(panes[0]!.attributes('style')).not.toBe('display: none;')
+    expect(panes[2]!.attributes('style')).toBe('display: none;')
+
+    const endpointTab = wrapper.findAll('[role="tab"]').find((tab) => tab.text() === '请求端点')!
+    await endpointTab.trigger('click')
+
+    expect(panes[0]!.attributes('style')).toBe('display: none;')
+    expect(panes[2]!.attributes('style')).not.toBe('display: none;')
+  })
+
   it('defaults a new account endpoint to OpenAI Responses', async () => {
     api.listUpstreamAccounts.mockResolvedValue({
       items: [{
