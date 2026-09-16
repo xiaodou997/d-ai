@@ -99,7 +99,7 @@ describe("AI admin risk-control generated operation facade", () => {
       .mockResolvedValueOnce({ ...riskEvent, status: "resolved", resolution_note: "reviewed" });
 
     await expect(aiAdminApi.testRiskControlModeration("bad text")).resolves.toMatchObject({ flagged: true, matched_keyword: "bad" });
-    await expect(aiAdminApi.listRiskControlLogs({ tenant_id: "tenant-1", flagged: "true", limit: 100 })).resolves.toEqual({ items: [], total: 0 });
+    await expect(aiAdminApi.listRiskControlLogs({ tenant_id: "tenant-1", flagged: "true", limit: 20, offset: 20 })).resolves.toEqual({ items: [], total: 0 });
     await expect(aiAdminApi.listRiskControlEvents({ status: "open", limit: 100 })).resolves.toMatchObject({
       items: [{ id: "event-1", severity: "high", status: "open", detail: { category: "violence" } }],
       total: 1
@@ -108,7 +108,7 @@ describe("AI admin risk-control generated operation facade", () => {
 
     expect(mocks.request.mock.calls[0]?.[0]).toMatchObject({ body: { text: "bad text" } });
     expect(mocks.request.mock.calls[1]?.[0]).toMatchObject({
-      query: { tenant_id: "tenant-1", flagged: "true", limit: 100 }
+      query: { tenant_id: "tenant-1", flagged: "true", limit: 20, offset: 20 }
     });
     expect(mocks.request.mock.calls[3]?.[0]).toMatchObject({
       path: "/api/v1/risk-control/events/event%2F1/resolve",

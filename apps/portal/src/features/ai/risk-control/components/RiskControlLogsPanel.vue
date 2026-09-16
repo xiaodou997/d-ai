@@ -1,17 +1,26 @@
 <!--
   风控审核日志列表 — 风控中心「审核日志」Tab 内容。
   重构：el-table 迁移至 DsTable(:frame="false"),筛选改为 DsFilterBar/DsFilterField,
-       结果 el-tag 换成 DsTag(success→positive 等 tone 映射);接口仅支持 limit 不支持分页,
-       故不接 DsPagination,保留「共 N 条」计数;业务逻辑与请求参数不变。
+       结果 el-tag 换成 DsTag(success→positive 等 tone 映射),服务端分页接入 DsPagination。
 -->
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
-import { DsFilterBar, DsFilterField, DsTable, DsTag, type DsTableColumn } from '@/shared/ui'
+import { DsFilterBar, DsFilterField, DsPagination, DsTable, DsTag, type DsTableColumn } from '@/shared/ui'
 
 import { useRiskControlLogs } from '../composables/useRiskControlLogs'
 
-const { fetchLogs, logFilters, logs, logsLoading, logsTotal } = useRiskControlLogs()
+const {
+  changePage,
+  changePageSize,
+  fetchLogs,
+  logFilters,
+  logs,
+  logsLoading,
+  logsTotal,
+  page,
+  pageSize
+} = useRiskControlLogs()
 
 const columns: DsTableColumn[] = [
   { key: 'created_at', title: '时间', width: 170 },
@@ -74,7 +83,6 @@ onMounted(fetchLogs)
         </el-select>
       </DsFilterField>
       <template #actions>
-        <span class="result-count">共 {{ logsTotal }} 条</span>
         <el-button type="primary" :icon="Refresh" :loading="logsLoading" @click="fetchLogs">刷新</el-button>
       </template>
     </DsFilterBar>
@@ -96,12 +104,31 @@ onMounted(fetchLogs)
         <span v-if="row.highest_score != null">（{{ row.highest_score.toFixed(2) }}）</span>
       </template>
     </DsTable>
+
+    <div class="risk-logs-pager">
+      <DsPagination
+        :page="page"
+        :page-size="pageSize"
+        :total="logsTotal"
+        :page-sizes="[10, 20, 50, 100]"
+        @update:page="changePage"
+        @update:page-size="changePageSize"
+      />
+    </div>
   </div>
 </template>
 
 <style scoped>
+.risk-logs-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .risk-logs-filters {
   margin-bottom: 16px;
+  flex-shrink: 0;
 }
 
 .filter-input {
@@ -115,9 +142,23 @@ onMounted(fetchLogs)
   width: 160px;
 }
 
-.result-count {
-  font-size: 12.5px;
-  color: var(--ds-muted);
-  white-space: nowrap;
+.risk-logs-panel :deep(.ds-table) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.risk-logs-panel :deep(.ds-table__empty) {
+  flex: 1;
+  justify-content: center;
+}
+
+.risk-logs-pager {
+  display: flex;
+  align-items: center;
+  padding-top: 12px;
+  border-top: 1px solid var(--ds-line);
+  flex-shrink: 0;
 }
 </style>

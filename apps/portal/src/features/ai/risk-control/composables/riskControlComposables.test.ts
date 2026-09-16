@@ -103,7 +103,7 @@ describe('risk control composables', () => {
     expect(dependencies.messages.success).toHaveBeenCalledWith('风控配置已保存')
   })
 
-  it('maps empty log filters to undefined and keeps the query limit at 100', async () => {
+  it('maps empty log filters and requests the first page', async () => {
     const listRiskControlLogs = vi.fn(async () => ({ items: [], total: 0 }))
     const state = useRiskControlLogs(createApi({ listRiskControlLogs }))
     state.logFilters.tenant_id = 'tenant-1'
@@ -116,8 +116,23 @@ describe('risk control composables', () => {
       mode: undefined,
       action: undefined,
       flagged: undefined,
-      limit: 100
+      limit: 20,
+      offset: 0
     })
+  })
+
+  it('uses offset pagination and resets to the first page when page size changes', async () => {
+    const listRiskControlLogs = vi.fn(async () => ({ items: [], total: 45 }))
+    const state = useRiskControlLogs(createApi({ listRiskControlLogs }))
+
+    await state.fetchLogs()
+    await state.changePage(3)
+    expect(listRiskControlLogs).toHaveBeenLastCalledWith(expect.objectContaining({ limit: 20, offset: 40 }))
+
+    await state.changePageSize(50)
+    expect(state.page.value).toBe(1)
+    expect(state.pageSize.value).toBe(50)
+    expect(listRiskControlLogs).toHaveBeenLastCalledWith(expect.objectContaining({ limit: 50, offset: 0 }))
   })
 
   it('closes the dialog and refreshes events after resolving an event', async () => {

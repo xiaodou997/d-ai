@@ -12,6 +12,8 @@ export function useRiskControlLogs(api: RiskControlApi = riskControlApi) {
   const logsLoading = shallowRef(false)
   const logs = shallowRef<RiskControlLogDTO[]>([])
   const logsTotal = shallowRef(0)
+  const page = shallowRef(1)
+  const pageSize = shallowRef(20)
   const logFilters = reactive<RiskControlLogFilters>({
     tenant_id: '',
     user_id: '',
@@ -29,7 +31,8 @@ export function useRiskControlLogs(api: RiskControlApi = riskControlApi) {
         mode: logFilters.mode || undefined,
         action: logFilters.action || undefined,
         flagged: logFilters.flagged || undefined,
-        limit: 100
+        limit: pageSize.value,
+        offset: (page.value - 1) * pageSize.value
       })
       logs.value = result.items || []
       logsTotal.value = result.total || 0
@@ -40,5 +43,28 @@ export function useRiskControlLogs(api: RiskControlApi = riskControlApi) {
     }
   }
 
-  return { fetchLogs, logFilters, logs, logsLoading, logsTotal }
+  async function changePage(nextPage: number) {
+    if (nextPage === page.value) return
+    page.value = nextPage
+    await fetchLogs()
+  }
+
+  async function changePageSize(nextPageSize: number) {
+    if (nextPageSize === pageSize.value) return
+    pageSize.value = nextPageSize
+    page.value = 1
+    await fetchLogs()
+  }
+
+  return {
+    changePage,
+    changePageSize,
+    fetchLogs,
+    logFilters,
+    logs,
+    logsLoading,
+    logsTotal,
+    page,
+    pageSize
+  }
 }

@@ -37,6 +37,7 @@ export interface RiskControlLogQuery {
   action?: RiskControlLogAction
   flagged?: RiskControlFlaggedFilter
   limit: number
+  offset?: number
 }
 
 export interface RiskControlEventQuery {
