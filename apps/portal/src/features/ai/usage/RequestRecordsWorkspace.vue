@@ -34,7 +34,7 @@ function show(row: RequestRecord) {
       <RecordFilters v-model="filters" :role="role" :fixed-user="Boolean(userId)" :busy="busy" @search="search" @reset="reset" @refresh="refresh" />
       <p v-if="failure" class="records-failure" role="alert">{{ failure }} <el-button link type="primary" @click="refresh">重试</el-button></p>
       <p v-if="tab === 'errors'" class="records-note">明确报错的请求，费用与计费额度均免收；诊断记录按现有保留策略查询。</p>
-      <RecordTable :role="role" :errors="tab === 'errors'" :rows="rows" :busy="busy" :fixed-user="Boolean(userId)" @detail="show" />
+      <RecordTable :role="role" :errors="tab === 'errors'" :rows="rows" :busy="busy" :fixed-user="Boolean(userId)" :fill="!embedded" @detail="show" />
       <div class="records-pager"><span>第 {{ history.length + 1 }} 页</span><el-select :model-value="pageSize" aria-label="每页条数" @update:model-value="changePageSize"><el-option v-for="size in [20, 50, 100]" :key="size" :value="size" :label="`${size} 条 / 页`" /></el-select><el-button :disabled="busy || !history.length" @click="previous">上一页</el-button><el-button :disabled="busy || !nextCursor" @click="next">下一页</el-button></div>
       <p class="records-note">统计基于可查询的结算记录。执行记录、错误诊断与财务记录保留期不同，历史统计总量可能大于当前可浏览记录数。</p>
     </div>
@@ -43,8 +43,10 @@ function show(row: RequestRecord) {
 </template>
 <style scoped>
 .record-page-root { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; }
-.records-workspace { display: flex; flex-direction: column; gap: 18px; padding: 22px; min-width: 0; }
+.records-workspace { display: flex; flex: 1; flex-direction: column; gap: 18px; padding: 22px; min-width: 0; min-height: 0; }
 .records-workspace--embedded { padding: 0; }
+.records-workspace--embedded { flex: none; min-height: auto; }
+.records-workspace:not(.records-workspace--embedded) > :deep(.record-table--fill) { flex: 1 1 0; min-height: 220px; }
 .records-workspace .record-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .records-workspace .record-metrics--customer { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 @media (min-width: 1700px) { .records-workspace .record-metrics:not(.records-workspace .record-metrics--customer) { grid-template-columns: repeat(6, minmax(0, 1fr)); } }

@@ -3,13 +3,13 @@ import { computed } from "vue";
 import { DsTable, DsTag } from "@/shared/ui";
 import { microUSD, type RequestRecord } from "../recordsApi";
 import { compactCount, compactMs, copyRecordText, multiplier, recordColumns, sourceLabel, type RecordRole } from "../recordPresentation";
-const props = defineProps<{ role: RecordRole; errors: boolean; rows: RequestRecord[]; busy: boolean; fixedUser?: boolean }>();
+const props = defineProps<{ role: RecordRole; errors: boolean; rows: RequestRecord[]; busy: boolean; fixedUser?: boolean; fill?: boolean }>();
 defineEmits<{ detail: [row: RequestRecord] }>();
 const columns = computed(() => recordColumns(props.role, props.errors, props.fixedUser));
 const positive = (value?: number | null) => value != null && value > 0;
 </script>
 <template>
-  <DsTable class="record-table" :style="{ '--record-table-width': `${columns.reduce((sum, col) => sum + Number(col.width || 150), 0)}px` }" :columns="columns" :rows="rows" row-key="request_id" :loading="busy" :frame="false" empty-title="当前范围没有记录" empty-description="请调整时间或筛选条件；历史执行记录可能已过保留期">
+  <DsTable class="record-table" :class="{ 'record-table--fill': fill }" :style="{ '--record-table-width': `${columns.reduce((sum, col) => sum + Number(col.width || 150), 0)}px` }" :columns="columns" :rows="rows" row-key="request_id" :loading="busy" :frame="false" empty-title="当前范围没有记录" empty-description="请调整时间或筛选条件；历史执行记录可能已过保留期">
     <template #cell-time="{ row }"><strong>{{ new Date(row.created_at).toLocaleTimeString('zh-CN', { hour12: false }) }}</strong><small>{{ new Date(row.created_at).toLocaleDateString('zh-CN') }}</small></template>
     <template #cell-subject="{ row }"><button v-if="role === 'admin'" class="record-copy" :title="`复制租户 ID：${row.tenant_id}`" @click="copyRecordText(row.tenant_id)">{{ row.profile?.tenant_name || row.tenant_id }}</button><button v-if="row.user_id" class="record-copy" :title="`复制用户 ID：${row.user_id}`" @click="copyRecordText(row.user_id)">{{ row.profile?.user_name || row.user_id }}</button><small v-else>租户调用</small></template>
     <template #cell-model="{ row }">
@@ -28,6 +28,7 @@ const positive = (value?: number | null) => value != null && value > 0;
 </template>
 <style scoped>
 .record-table { max-height: 540px; overflow: auto; scrollbar-width: thin; scrollbar-color: var(--ds-muted) var(--ds-panel-muted); scrollbar-gutter: stable; overscroll-behavior: contain; }
+.record-table--fill { max-height: none; }
 .record-table :deep(td) { vertical-align: top; }
 .record-table :deep(table) { table-layout: fixed; width: max(100%, var(--record-table-width)); }
 .record-table::-webkit-scrollbar { width: 10px; height: 10px; }
