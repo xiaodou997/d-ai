@@ -1159,16 +1159,21 @@ function escapeRegExp(value: string) {
 }
 
 for (const role of [roles[0], roles[2], roles[3]]) {
-  test(`request ledger ${role.theme}: separates interruption, error and actual fees`, async ({ page }) => {
+  test(`request ledger ${role.theme}: separates interruption, error and actual fees`, async ({ page }, testInfo) => {
     test.skip(!useMockApi, "Controlled billing evidence fixture; never issue production refunds");
     const errors = watchBrowserErrors(page);
     const path = role.theme === "admin" ? "/admin/ai/usage" : role.theme === "tenant" ? "/tenant/ai/usage" : "/customer/usage";
     await loginAs(page, role);
-    const row = { request_id: "request-ledger-demo", created_at: "2026-09-14T08:00:00Z", tenant_id: "tenant-demo", user_id: "user-demo", model: "gpt-5.6-sol", source: "api_key", end_reason: "client_interrupted", delivery: "disconnected", stream: true, http_status: 200, first_token_ms: 1240, total_ms: 61000, tokens: { input: 60880, output: 230, cache_read: 3330, cache_write: null, reasoning: null }, is_error: false, execution_available: true, diagnostics_available: true, charge: { state: "posted", reason: "reported_usage_before_disconnect", source: "payg", tenant_due_micro: 35559, tenant_charged_micro: 35559, user_due_micro: 44449, user_charged_micro: 44449, subscription_used_micro: 0, api_key_used_micro: 44449 } };
+    const row = { request_id: "request-ledger-demo", created_at: "2026-09-14T08:00:00Z", tenant_id: "tenant-demo", user_id: "user-demo", model: "gpt-5.6-sol", source: "api_key", end_reason: "client_interrupted", delivery: "disconnected", stream: true, http_status: 200, first_token_ms: 1240, total_ms: 61000, tokens: { total: 61110, protocol: "openai_chat", input: 60880, output: 230, cache_read: 3330, cache_write: null, reasoning: null }, is_error: false, execution_available: true, diagnostics_available: true, charge: { state: "posted", reason: "reported_usage_before_disconnect", source: "payg", tenant_due_micro: 35559, tenant_charged_micro: 35559, user_due_micro: 44449, user_charged_micro: 44449, subscription_used_micro: 0, api_key_used_micro: 44449 } };
+    Object.assign(row, {
+      profile: { tenant_name: "星河科技", user_name: "张小明", requested_model: "gpt-5.6-sol", group_name_snapshot: "标准服务组", group_id: "group-demo", api_key_name: "生产应用", api_key_id: "key-demo", api_key_last_four: "3a8f", key_owner_type: "user", effective_user_multiplier_snapshot: 0.3, group_default_user_multiplier_snapshot: 0.5 },
+      ...(role.theme === "admin" ? { admin_context: { upstream_account_name: "OpenAI 主账号", provider_code: "openai", upstream_model: "gpt-5.6-sol", resolved_logical_model: "gpt-5.6-sol", request_setup_ms: 16, final_attempt_header_ms: 850, first_response_byte_ms: 1240, response_tail_ms: 24 } } : {}),
+      pricing: { retail_price: { TokenPriceTiers: [{ up_to_input_tokens: null, input_per_token: 0.000005, output_per_token: 0.00003, cache_read_per_token: 0.0000005, cache_write_per_token: 0.00000625 }] }, user_multiplier: 0.3, ...(role.theme !== "customer" ? { tenant_multiplier: 0.27 } : {}) }
+    });
     const failed = { ...row, request_id: "request-ledger-error", is_error: true, end_reason: "request_error", error: { origin: "upstream", stage: "execute", code: "stream_idle_timeout", message: "上游流响应超时" }, charge: { ...row.charge, state: "waived", reason: "request_error_waived", user_charged_micro: 0, tenant_charged_micro: 0, user_due_micro: 0, tenant_due_micro: 0, api_key_used_micro: 0 } };
     await page.route("**/api/v2/**", route => {
       const endpoint = new URL(route.request().url()).pathname;
-      if (endpoint === "/api/v2/request-summary") return fulfillJson(route, { requests: 2, errors: 1, interruptions: 1, input_tokens: 121760, output_tokens: 460, user_charged_micro: 44449, tenant_charged_micro: 35559, user_refunded_micro: 0, tenant_refunded_micro: 0 });
+      if (endpoint === "/api/v2/request-summary") return fulfillJson(route, { requests: 2, errors: 1, interruptions: 1, input_tokens: 121760, output_tokens: 460, total_tokens: 122220, token_samples: 2, cache_read_tokens: 6660, cache_write_tokens: 0, avg_total_ms: 61000, avg_first_token_ms: 1240, timing_samples: 2, first_token_samples: 2, user_charged_micro: 44449, tenant_charged_micro: 35559, user_refunded_micro: 0, tenant_refunded_micro: 0 });
       if (endpoint.endsWith("/request-ledger-demo")) return fulfillJson(route, row);
       if (endpoint.endsWith("/request-ledger-error")) return fulfillJson(route, failed);
       return fulfillJson(route, { records: endpoint === "/api/v2/request-errors" ? [failed] : [row] });
@@ -1177,10 +1182,28 @@ for (const role of [roles[0], roles[2], roles[3]]) {
     await expect(page.getByText("gpt-5.6-sol", { exact: true })).toBeVisible();
     await expect(page.getByText("失败阶段", { exact: false })).toHaveCount(0);
     await expect(page.getByText("成功率", { exact: false })).toHaveCount(0);
-    await page.getByRole("button", { name: "查看", exact: true }).click();
+    await expect(page.getByRole("columnheader", { name: "结果", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("tab", { name: "费用明细", exact: true })).toHaveCount(0);
+    await expect(page.getByText("生产应用", { exact: true })).toBeVisible();
+    if (role.theme !== "customer") {
+      await expect(page.getByText("租户实际扣款", { exact: true })).toBeVisible();
+      await expect(page.getByText("用户实际扣款", { exact: true })).toBeVisible();
+    } else await expect(page.getByText("租户实际扣款", { exact: true })).toHaveCount(0);
+    await page.screenshot({ path: testInfo.outputPath(`records-${role.theme}.png`), fullPage: true, animations: "disabled" });
+    await page.getByRole("button", { name: "查看详情", exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`${path}/request-ledger-demo`));
     await expect(page.getByText("客户端连接中断，仅结算取消前已报告用量", { exact: true })).toBeVisible();
-    await expect(page.locator(".ds-drawer-enter-active")).toHaveCount(0);
-    await page.screenshot({ path: `test-results/request-ledger-${role.theme}.png`, fullPage: true });
+    await expect(page.locator(".ds-drawer")).toHaveCount(0);
+    await page.reload();
+    await expect(page.getByRole("heading", { name: "请求概览", exact: true })).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath(`detail-${role.theme}.png`), fullPage: true, animations: "disabled" });
+    await page.getByRole("button", { name: "返回列表", exact: true }).click();
+    await page.getByRole("tab", { name: "错误请求", exact: true }).click();
+    await expect(page.getByText("上游流响应超时", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "查看详情", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "错误与诊断", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "返回列表", exact: true }).click();
+    await expect(page.getByRole("tab", { name: "错误请求", exact: true })).toHaveAttribute("aria-selected", "true");
     expect(errors).toEqual([]);
   });
 }

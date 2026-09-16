@@ -7324,6 +7324,57 @@ components:
         - tenantName
         - createdTime
       type: object
+    RecordAdminContext:
+      additionalProperties: false
+      properties:
+        cancellation_origin:
+          type: string
+        client_protocol:
+          type: string
+        client_user_agent:
+          type: string
+        endpoint_id:
+          type: string
+        final_attempt_header_ms:
+          format: int64
+          type: integer
+        first_response_byte_ms:
+          format: int64
+          type: integer
+        matched_dispatch_rule_summary:
+          type: string
+        protocol_conversion_enabled:
+          type: boolean
+        provider_code:
+          type: string
+        provider_format:
+          type: string
+        provider_terminal_state:
+          type: string
+        public_response_model:
+          type: string
+        request_setup_ms:
+          format: int64
+          type: integer
+        resolved_logical_model:
+          type: string
+        response_tail_ms:
+          format: int64
+          type: integer
+        tenant_multiplier:
+          format: double
+          type: number
+        trace_id:
+          type: string
+        upstream_account_id:
+          type: string
+        upstream_account_name:
+          type: string
+        upstream_model:
+          type: string
+      required:
+        - protocol_conversion_enabled
+      type: object
     RecordCharge:
       additionalProperties: false
       properties:
@@ -7340,6 +7391,10 @@ components:
         reference_cost_micro:
           format: int64
           type: integer
+        refund_operator:
+          type: string
+        refund_reason:
+          type: string
         refunded_at:
           format: date-time
           type: string
@@ -7448,6 +7503,45 @@ components:
       required:
         - records
       type: object
+    RecordProfile:
+      additionalProperties: false
+      properties:
+        api_key_id:
+          type: string
+        api_key_last_four:
+          type: string
+        api_key_name:
+          type: string
+        auth_method:
+          type: string
+        capability_type:
+          type: string
+        effective_user_multiplier_snapshot:
+          format: double
+          type: number
+        group_default_user_multiplier_snapshot:
+          format: double
+          type: number
+        group_id:
+          type: string
+        group_name_snapshot:
+          type: string
+        key_owner_type:
+          type: string
+        reasoning_effort:
+          type: string
+        requested_model:
+          type: string
+        resolution:
+          type: string
+        tenant_name:
+          type: string
+        user_multiplier_override_snapshot:
+          format: double
+          type: number
+        user_name:
+          type: string
+      type: object
     RecordRefundInputBody:
       additionalProperties: false
       properties:
@@ -7490,7 +7584,26 @@ components:
           format: uri
           readOnly: true
           type: string
+        avg_first_token_ms:
+          format: double
+          type:
+            - number
+            - "null"
+        avg_total_ms:
+          format: double
+          type:
+            - number
+            - "null"
+        cache_read_tokens:
+          format: int64
+          type: integer
+        cache_write_tokens:
+          format: int64
+          type: integer
         errors:
+          format: int64
+          type: integer
+        first_token_samples:
           format: int64
           type: integer
         input_tokens:
@@ -7511,6 +7624,15 @@ components:
         tenant_refunded_micro:
           format: int64
           type: integer
+        timing_samples:
+          format: int64
+          type: integer
+        token_samples:
+          format: int64
+          type: integer
+        total_tokens:
+          format: int64
+          type: integer
         user_charged_micro:
           format: int64
           type: integer
@@ -7518,6 +7640,14 @@ components:
           format: int64
           type: integer
       required:
+        - cache_read_tokens
+        - cache_write_tokens
+        - total_tokens
+        - token_samples
+        - avg_total_ms
+        - avg_first_token_ms
+        - timing_samples
+        - first_token_samples
         - requests
         - errors
         - interruptions
@@ -7549,12 +7679,20 @@ components:
           type:
             - integer
             - "null"
+        protocol:
+          type: string
         reasoning:
           format: int64
           type:
             - integer
             - "null"
+        total:
+          format: int64
+          type:
+            - integer
+            - "null"
       required:
+        - total
         - input
         - output
         - cache_read
@@ -7641,6 +7779,8 @@ components:
           format: uri
           readOnly: true
           type: string
+        admin_context:
+          $ref: "#/components/schemas/RecordAdminContext"
         attempts:
           items: {}
           type:
@@ -7684,6 +7824,8 @@ components:
         model:
           type: string
         pricing: {}
+        profile:
+          $ref: "#/components/schemas/RecordProfile"
         request_id:
           type: string
         source:
@@ -7702,6 +7844,7 @@ components:
         user_id:
           type: string
       required:
+        - profile
         - request_id
         - created_at
         - model
@@ -23251,6 +23394,11 @@ paths:
       parameters:
         - explode: false
           in: query
+          name: request_id
+          schema:
+            type: string
+        - explode: false
+          in: query
           name: tenant_name
           schema:
             type: string
@@ -23416,6 +23564,11 @@ paths:
       parameters:
         - explode: false
           in: query
+          name: request_id
+          schema:
+            type: string
+        - explode: false
+          in: query
           name: tenant_name
           schema:
             type: string
@@ -23500,6 +23653,11 @@ paths:
       parameters:
         - explode: false
           in: query
+          name: request_id
+          schema:
+            type: string
+        - explode: false
+          in: query
           name: tenant_name
           schema:
             type: string
@@ -23582,6 +23740,11 @@ paths:
     get:
       operationId: ai-v2-requests
       parameters:
+        - explode: false
+          in: query
+          name: request_id
+          schema:
+            type: string
         - explode: false
           in: query
           name: tenant_name

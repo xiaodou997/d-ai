@@ -8776,6 +8776,33 @@ export interface components {
             userId: string;
             username: string;
         };
+        RecordAdminContext: {
+            cancellation_origin?: string;
+            client_protocol?: string;
+            client_user_agent?: string;
+            endpoint_id?: string;
+            /** Format: int64 */
+            final_attempt_header_ms?: number;
+            /** Format: int64 */
+            first_response_byte_ms?: number;
+            matched_dispatch_rule_summary?: string;
+            protocol_conversion_enabled: boolean;
+            provider_code?: string;
+            provider_format?: string;
+            provider_terminal_state?: string;
+            public_response_model?: string;
+            /** Format: int64 */
+            request_setup_ms?: number;
+            resolved_logical_model?: string;
+            /** Format: int64 */
+            response_tail_ms?: number;
+            /** Format: double */
+            tenant_multiplier?: number;
+            trace_id?: string;
+            upstream_account_id?: string;
+            upstream_account_name?: string;
+            upstream_model?: string;
+        };
         RecordCharge: {
             /** Format: int64 */
             api_key_used_micro: number;
@@ -8785,6 +8812,8 @@ export interface components {
             reason: string;
             /** Format: int64 */
             reference_cost_micro?: number;
+            refund_operator?: string;
+            refund_reason?: string;
             /** Format: date-time */
             refunded_at?: string;
             source: string;
@@ -8832,6 +8861,27 @@ export interface components {
             next_cursor?: string;
             records: components["schemas"]["RequestRecord"][] | null;
         };
+        RecordProfile: {
+            api_key_id?: string;
+            api_key_last_four?: string;
+            api_key_name?: string;
+            auth_method?: string;
+            capability_type?: string;
+            /** Format: double */
+            effective_user_multiplier_snapshot?: number;
+            /** Format: double */
+            group_default_user_multiplier_snapshot?: number;
+            group_id?: string;
+            group_name_snapshot?: string;
+            key_owner_type?: string;
+            reasoning_effort?: string;
+            requested_model?: string;
+            resolution?: string;
+            tenant_name?: string;
+            /** Format: double */
+            user_multiplier_override_snapshot?: number;
+            user_name?: string;
+        };
         RecordRefundInputBody: {
             /**
              * Format: uri
@@ -8857,8 +8907,18 @@ export interface components {
              * @example https://example.com/schemas/RecordSummary.json
              */
             readonly $schema?: string;
+            /** Format: double */
+            avg_first_token_ms: number | null;
+            /** Format: double */
+            avg_total_ms: number | null;
+            /** Format: int64 */
+            cache_read_tokens: number;
+            /** Format: int64 */
+            cache_write_tokens: number;
             /** Format: int64 */
             errors: number;
+            /** Format: int64 */
+            first_token_samples: number;
             /** Format: int64 */
             input_tokens: number;
             /** Format: int64 */
@@ -8871,6 +8931,12 @@ export interface components {
             tenant_charged_micro?: number;
             /** Format: int64 */
             tenant_refunded_micro?: number;
+            /** Format: int64 */
+            timing_samples: number;
+            /** Format: int64 */
+            token_samples: number;
+            /** Format: int64 */
+            total_tokens: number;
             /** Format: int64 */
             user_charged_micro: number;
             /** Format: int64 */
@@ -8885,8 +8951,11 @@ export interface components {
             input: number | null;
             /** Format: int64 */
             output: number | null;
+            protocol?: string;
             /** Format: int64 */
             reasoning: number | null;
+            /** Format: int64 */
+            total: number | null;
         };
         ReplaceGroupTargetsRequest: {
             /**
@@ -8930,6 +8999,7 @@ export interface components {
              * @example https://example.com/schemas/RequestRecord.json
              */
             readonly $schema?: string;
+            admin_context?: components["schemas"]["RecordAdminContext"];
             attempts?: unknown[] | null;
             charge: components["schemas"]["RecordCharge"];
             /** Format: date-time */
@@ -8951,6 +9021,7 @@ export interface components {
             media_units?: number;
             model: string;
             pricing?: unknown;
+            profile: components["schemas"]["RecordProfile"];
             request_id: string;
             source: string;
             stream: boolean;
@@ -22805,6 +22876,7 @@ export interface operations {
     "ai-v2-settlements": {
         parameters: {
             query?: {
+                request_id?: string;
                 tenant_name?: string;
                 user_name?: string;
                 group?: string;
@@ -22946,6 +23018,7 @@ export interface operations {
     "ai-v2-request-errors": {
         parameters: {
             query?: {
+                request_id?: string;
                 tenant_name?: string;
                 user_name?: string;
                 group?: string;
@@ -22988,6 +23061,7 @@ export interface operations {
     "ai-v2-record-summary": {
         parameters: {
             query?: {
+                request_id?: string;
                 tenant_name?: string;
                 user_name?: string;
                 group?: string;
@@ -23030,6 +23104,7 @@ export interface operations {
     "ai-v2-requests": {
         parameters: {
             query?: {
+                request_id?: string;
                 tenant_name?: string;
                 user_name?: string;
                 group?: string;

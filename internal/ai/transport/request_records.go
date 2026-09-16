@@ -11,6 +11,7 @@ import (
 )
 
 type recordListInput struct {
+	RequestID  string `query:"request_id"`
 	TenantName string `query:"tenant_name"`
 	UserName   string `query:"user_name"`
 	Group      string `query:"group"`
@@ -73,7 +74,7 @@ func recordQuery(ctx context.Context, in *recordListInput, kind string) (domain.
 	if err != nil {
 		return domain.RecordQuery{}, err
 	}
-	return domain.RecordQuery{RecordScope: scope, Kind: kind, TenantName: strings.TrimSpace(in.TenantName), UserName: strings.TrimSpace(in.UserName), Group: strings.TrimSpace(in.Group), APIKeyName: strings.TrimSpace(in.APIKeyName), Model: strings.TrimSpace(in.Model), Source: in.Source, From: from, To: to, Cursor: in.Cursor, Limit: in.Limit}, nil
+	return domain.RecordQuery{RecordScope: scope, Kind: kind, RequestID: strings.TrimSpace(in.RequestID), TenantName: strings.TrimSpace(in.TenantName), UserName: strings.TrimSpace(in.UserName), Group: strings.TrimSpace(in.Group), APIKeyName: strings.TrimSpace(in.APIKeyName), Model: strings.TrimSpace(in.Model), Source: in.Source, From: from, To: to, Cursor: in.Cursor, Limit: in.Limit}, nil
 }
 func registerRequestRecords(api huma.API, d UsageHTTPDeps) {
 	registerRecordDebug(api, d)

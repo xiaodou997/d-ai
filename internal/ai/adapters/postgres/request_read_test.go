@@ -151,3 +151,73 @@ func TestRecordSearchFiltersListsAndSummary(t *testing.T) {
 		})
 	}
 }
+
+func TestRecordDisplayEvidenceAndRoleProjection(t *testing.T) {
+	ctx := context.Background()
+	pool, cleanup, err := testsupport.OpenAsyncTaskTestPool(ctx, testsupport.AsyncTaskPoolOptions{MaxConns: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup(ctx)
+	store := NewRequestStore(pool, fixedUsageBiller{result: domain.BillingResult{GroupNameSnapshot: "Premium", EffectiveUserMultiplier: 0.3, BillingBreakdownJSON: []byte(`{"user_payable":{"raw_usd":1,"price_lines":{"input_context_tokens":10,"token_price_tier_index":0}},"catalog_base":{"secret_cost":99}}`)}}, nil)
+	for _, protocol := range []domain.UpstreamProtocol{domain.ProtocolAnthropicMessages, domain.ProtocolGeminiGenerate, domain.ProtocolOpenAIChat} {
+		req := usageCompletionRequest("display-"+string(protocol), "display-t", "display-u")
+		req.Candidate.TenantMultiplier = 0.27
+		req.UsageEvidence = domain.UsageEvidence{Protocol: protocol, Fields: map[string]int{"input_tokens": 10, "output_tokens": 20, "cache_read_tokens": 3, "cache_write_tokens": 2, "reasoning_tokens": 4}}
+		if err := store.Log(ctx, req); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, tc := range []struct {
+		scope    domain.RecordScope
+		admin    bool
+		customer bool
+	}{
+		{domain.RecordScope{Admin: true}, true, false},
+		{domain.RecordScope{TenantID: "display-t"}, false, false},
+		{domain.RecordScope{TenantID: "display-t", UserID: "display-u", EndUser: true}, false, true},
+	} {
+		row, err := store.Record(ctx, tc.scope, "display-anthropic_messages")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if row.Profile.GroupName != "Premium" || row.Tokens.Total == nil || *row.Tokens.Total != 35 {
+			t.Fatalf("missing display facts: %+v", row)
+		}
+		if (row.AdminContext != nil) != tc.admin || (row.Charge.TenantCharged == nil) != tc.customer {
+			t.Fatalf("role projection: %+v", row)
+		}
+		if tc.admin && (row.AdminContext.TenantMultiplier == nil || *row.AdminContext.TenantMultiplier != 0.27) {
+			t.Fatalf("missing tenant multiplier snapshot: %+v", row.AdminContext)
+		}
+		if !tc.admin {
+			var receipt map[string]any
+			if err := json.Unmarshal(row.Pricing, &receipt); err != nil {
+				t.Fatal(err)
+			}
+			if receipt["account_price"] != nil || receipt["calculation"] != nil || receipt["user_breakdown"] == nil {
+				t.Fatalf("unsafe/incomplete receipt: %s", row.Pricing)
+			}
+		}
+	}
+	q := domain.RecordQuery{RecordScope: domain.RecordScope{TenantID: "display-t"}, Kind: "requests", RequestID: "display-gemini_generate"}
+	page, err := store.Records(ctx, q)
+	if err != nil {
+		t.Fatal(err)
+	}
+	summary, err := store.RecordSummary(ctx, q)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Records) != 1 || summary.Requests != 1 || summary.TotalTokens != 34 || summary.CacheReadTokens != 3 || summary.TokenSamples != 1 {
+		t.Fatalf("filtered totals: %+v %+v", page, summary)
+	}
+	q.RequestID = ""
+	summary, err = store.RecordSummary(ctx, q)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.TotalTokens != 99 || summary.TokenSamples != 3 {
+		t.Fatalf("protocol totals: %+v", summary)
+	}
+}

@@ -20,7 +20,7 @@ export interface UserOverviewServiceAvailability {
   ai: boolean;
 }
 
-const EMPTY_AI_USAGE_STATS: TenantUsageStats = { requests: 0, errors: 0, interruptions: 0, input_tokens: 0, output_tokens: 0, user_charged_micro: 0, user_refunded_micro: 0 };
+const EMPTY_AI_USAGE_STATS: TenantUsageStats = { avg_first_token_ms: null, avg_total_ms: null, cache_read_tokens: 0, cache_write_tokens: 0, total_tokens: 0, token_samples: 0, timing_samples: 0, first_token_samples: 0, requests: 0, errors: 0, interruptions: 0, input_tokens: 0, output_tokens: 0, user_charged_micro: 0, user_refunded_micro: 0 };
 
 function buildActivityWindow(days: number) {
   const end = new Date();

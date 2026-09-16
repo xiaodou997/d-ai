@@ -433,6 +433,11 @@ export const portalModules: PortalModule[] = [
     component: () => import("@/views/tenant/ai/UserConsumptionView.vue")
   },
   {
+    id: "tenant-usage-detail", label: "使用详情", path: "/tenant/ai/usage/:requestId",
+    icon: "scroll-text", capability: "tenant.ai.usage", order: 51, nav: false,
+    component: () => import("@/views/tenant/ai/UsageDetailView.vue")
+  },
+  {
     id: "tenant-developer",
     label: "API 密钥",
     path: "/tenant/developer",
@@ -577,6 +582,11 @@ export const portalModules: PortalModule[] = [
     navGroup: customerServices,
     order: 20,
     component: () => import("@/views/customer/ai/UsageRecordsView.vue")
+  },
+  {
+    id: "customer-usage-detail", label: "使用详情", path: "/customer/usage/:requestId",
+    icon: "scroll-text", capability: "customer.usage", order: 21, nav: false,
+    component: () => import("@/views/customer/ai/UsageDetailView.vue")
   },
   {
     id: "customer-developer",
