@@ -1,3 +1,13 @@
+export function formatDuration(value?: number | null): string {
+  if (value == null || !Number.isFinite(value) || value < 0) return "—";
+  if (value < 1000) return `${Math.round(value)} ms`;
+  const seconds = Math.round(value / 100) / 10;
+  if (seconds < 60) return `${seconds} 秒`;
+  const minutes = Math.floor(seconds / 60);
+  const remainder = Math.round((seconds - minutes * 60) * 10) / 10;
+  return remainder ? `${minutes} 分 ${remainder} 秒` : `${minutes} 分`;
+}
+
 /** 毫秒展示：>=1s 转秒保留 1 位，空值/0 返回 "-"。 */
 export function formatMs(n?: number | null): string {
   if (n == null || n === 0) return "-";

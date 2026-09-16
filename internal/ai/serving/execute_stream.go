@@ -290,7 +290,7 @@ awaitLoop:
 		unwrapped = s.restorePII(req, unwrapped)
 		finalData := publicSanitizer.SanitizeSSEData(unwrapped)
 		if req.FirstTokenMs == 0 && streamChunkStartsToken(string(finalData), evt, req.Candidate.Protocol) {
-			req.FirstTokenMs = int(time.Since(startTime).Milliseconds())
+			req.MarkFirstOutput(time.Now(), startTime)
 		}
 		auditAcc.AddChunk(finalData)
 		if bytes.Equal(finalData, data) {
@@ -705,7 +705,7 @@ awaitLoop:
 			switch fr.Event {
 			case corebridge.EvTextDelta, corebridge.EvReasoningDelta:
 				if fr.Text != "" && req.FirstTokenMs == 0 {
-					req.FirstTokenMs = max(1, int(time.Since(startTime).Milliseconds()))
+					req.MarkFirstOutput(time.Now(), startTime)
 				}
 				auditBuf.WriteString(fr.Text)
 				accumulatedOutputBytes += len(fr.Text)

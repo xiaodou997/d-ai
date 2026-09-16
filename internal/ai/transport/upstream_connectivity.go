@@ -461,10 +461,8 @@ func runUpstreamAccountTest(ctx context.Context, client HTTPDoer, cfg upstreamTe
 	}
 	deadline.headersReceived()
 	defer resp.Body.Close()
-	streaming := isImage && normalizedUpstreamTestImageStreamMode(cfg.ImageStreamMode) == domain.ImageStreamModeForceStream
-	body, readErr := io.ReadAll(io.LimitReader(&upstreamTestBodyReader{
-		reader: resp.Body, deadline: deadline, streaming: streaming,
-	}, 64<<20))
+	streaming := strings.Contains(strings.ToLower(resp.Header.Get("Content-Type")), "text/event-stream") || (!isImage && !isEmbedding && upstreamChatTestStreams(cfg.APIFormat)) || (isImage && normalizedUpstreamTestImageStreamMode(cfg.ImageStreamMode) == domain.ImageStreamModeForceStream)
+	body, readErr := readUpstreamTestBody(&upstreamTestBodyReader{reader: resp.Body, deadline: deadline, streaming: streaming}, cfg.APIFormat, strings.Contains(strings.ToLower(resp.Header.Get("Content-Type")), "text/event-stream"))
 	res.LatencyMs = time.Since(start).Milliseconds()
 	res.HTTPStatus = resp.StatusCode
 	if readErr != nil {
@@ -476,7 +474,10 @@ func runUpstreamAccountTest(ctx context.Context, client HTTPDoer, cfg upstreamTe
 		return res
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		res.Error = truncateStr(strings.TrimSpace(string(body)), 2048)
+		res.Error = upstreamTestHTTPError(resp.StatusCode, body)
+		if cfg.APIKey != "" {
+			res.Error = strings.ReplaceAll(res.Error, cfg.APIKey, "[redacted]")
+		}
 		return res
 	}
 
@@ -486,6 +487,9 @@ func runUpstreamAccountTest(ctx context.Context, client HTTPDoer, cfg upstreamTe
 		parseUpstreamTestEmbeddingResponse(&res, cfg.APIFormat, body)
 	} else {
 		parseUpstreamTestChatResponse(&res, cfg.APIFormat, body)
+		if !res.OK && !json.Valid(body) && !bytes.Contains(body, []byte("data:")) {
+			res.Error = fmt.Sprintf("上游返回了非 JSON/SSE 响应（HTTP %d，Content-Type: %s）。请检查请求端点及上游协议支持。", resp.StatusCode, resp.Header.Get("Content-Type"))
+		}
 	}
 	return res
 }
@@ -520,7 +524,8 @@ func buildUpstreamTestRequest(ctx context.Context, cfg upstreamTestConfig, isIma
 	case string(domain.ProtocolAnthropicMessages):
 		body, _ = json.Marshal(map[string]any{
 			"model":      cfg.UpstreamModel,
-			"max_tokens": 64,
+			"max_tokens": 256,
+			"stream":     true,
 			"messages":   []any{map[string]any{"role": "user", "content": prompt}},
 		})
 	case string(domain.ProtocolOpenAIImages):
@@ -547,7 +552,7 @@ func buildUpstreamTestRequest(ctx context.Context, cfg upstreamTestConfig, isIma
 		body, _ = json.Marshal(payload)
 	case string(domain.ProtocolOpenAIResponses):
 		body, _ = json.Marshal(map[string]any{
-			"model": cfg.UpstreamModel, "input": prompt, "max_output_tokens": 64, "stream": false,
+			"model": cfg.UpstreamModel, "input": prompt, "max_output_tokens": 256, "stream": true,
 		})
 	case string(domain.ProtocolOpenAIEmbeddings):
 		body, _ = json.Marshal(map[string]any{"model": cfg.UpstreamModel, "input": prompt})
@@ -559,8 +564,8 @@ func buildUpstreamTestRequest(ctx context.Context, cfg upstreamTestConfig, isIma
 		body, _ = json.Marshal(map[string]any{
 			"model":      cfg.UpstreamModel,
 			"messages":   []any{map[string]any{"role": "user", "content": prompt}},
-			"max_tokens": 64,
-			"stream":     false,
+			"max_tokens": 256,
+			"stream":     true,
 		})
 	}
 	candidate := &domain.RouteCandidate{
@@ -591,12 +596,12 @@ func buildUpstreamTestRequest(ctx context.Context, cfg upstreamTestConfig, isIma
 		return nil, err
 	}
 	req.Header.Set("Content-Type", contentType)
-	if isImage && imageStream {
+	if (isImage && imageStream) || upstreamChatTestStreams(format) {
 		req.Header.Set("Accept", "text/event-stream")
 	} else {
 		req.Header.Set("Accept", "application/json")
 	}
-	for key, value := range upstreamcompat.BuildHeaders(candidate, upstreamcompat.RequestMeta{ContentType: contentType, IsStream: isImage && imageStream}) {
+	for key, value := range upstreamcompat.BuildHeaders(candidate, upstreamcompat.RequestMeta{ContentType: contentType, IsStream: (isImage && imageStream) || upstreamChatTestStreams(format)}) {
 		req.Header.Set(key, value)
 	}
 	return req, nil
@@ -643,10 +648,14 @@ func normalizedUpstreamTestImageMIME(value string) string {
 	return value
 }
 
-func parseUpstreamTestChatResponse(res *upstreamTestResult, format string, body []byte) {
+func parseUpstreamTestChatJSON(res *upstreamTestResult, format string, body []byte) {
 	var doc map[string]any
 	if err := json.Unmarshal(body, &doc); err != nil {
 		res.Error = "parse response failed: " + err.Error()
+		return
+	}
+	if message := upstreamTestDocumentError(doc); message != "" {
+		res.Error = message
 		return
 	}
 	switch strings.TrimSpace(format) {
@@ -849,6 +858,8 @@ func decodeUpstreamTestJSONDocuments(body []byte) ([]map[string]any, error) {
 
 	documents := make([]map[string]any, 0, 4)
 	dataLines := make([]string, 0, 1)
+	eventType := ""
+	var decodeErr error
 	flushEvent := func() {
 		if len(dataLines) == 0 {
 			return
@@ -859,24 +870,36 @@ func decodeUpstreamTestJSONDocuments(body []byte) ([]map[string]any, error) {
 			return
 		}
 		var event map[string]any
-		if json.Unmarshal([]byte(payload), &event) == nil {
+		if err := json.Unmarshal([]byte(payload), &event); err == nil && event != nil {
+			if _, exists := event["type"]; !exists && eventType != "" {
+				event["type"] = eventType
+			}
 			documents = append(documents, event)
+		} else {
+			decodeErr = fmt.Errorf("SSE event is not a JSON object")
 		}
 	}
 	for _, rawLine := range strings.Split(string(body), "\n") {
 		line := strings.TrimSuffix(rawLine, "\r")
 		if line == "" {
 			flushEvent()
+			eventType = ""
 			continue
 		}
 		if strings.HasPrefix(line, ":") {
 			continue
+		}
+		if strings.HasPrefix(line, "event:") {
+			eventType = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
 		}
 		if strings.HasPrefix(line, "data:") {
 			dataLines = append(dataLines, strings.TrimPrefix(strings.TrimPrefix(line, "data:"), " "))
 		}
 	}
 	flushEvent()
+	if decodeErr != nil {
+		return nil, decodeErr
+	}
 	if len(documents) > 0 {
 		return documents, nil
 	}

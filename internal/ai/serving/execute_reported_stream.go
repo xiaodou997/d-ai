@@ -258,7 +258,7 @@ func (s *ExecuteStep) executeReportedStream(dc *deadlineController, req *Request
 			}
 			semantic := streamChunkStartsToken(string(ev.data), ev.event, req.Candidate.Protocol)
 			if semantic && req.FirstTokenMs == 0 {
-				req.FirstTokenMs = max(1, int(time.Since(start).Milliseconds()))
+				req.MarkFirstOutput(time.Now(), start)
 			}
 			ready := req.Candidate.Protocol != domain.ProtocolOpenAIResponses || semantic || req.ProviderTerminalState == domain.ProviderTerminalCompleted
 			if !req.ResponseCommitted && ready {

@@ -2,6 +2,8 @@ package transport
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"github.com/danielgtaylor/huma/v2/humatest"
 	"testing"
 	"xiaodou/dai/internal/ai/domain"
@@ -66,5 +68,51 @@ func TestStabilityAdminInterfacesRejectTenantBeforeReadingState(t *testing.T) {
 	}
 	if reader.calls != 0 {
 		t.Fatal("tenant read admin data")
+	}
+}
+
+type isolatedStabilityReader struct{}
+
+func (isolatedStabilityReader) ListUpstreamStability(context.Context, string, string) ([]domain.UpstreamStability, error) {
+	out := []domain.UpstreamStability{}
+	for _, id := range []string{"broken", "healthy"} {
+		out = append(out, domain.UpstreamStability{ResourceKind: "direct_upstream", ResourceID: id, ConfigStatus: "active", Paths: []domain.UpstreamRuntimePath{{EndpointID: id}}})
+	}
+	return out, nil
+}
+func (isolatedStabilityReader) UpstreamStabilityDetails(context.Context, string, string, string) ([]domain.UpstreamModelStability, error) {
+	return nil, nil
+}
+
+type isolatedAvailability struct {
+	routing.Availability
+	calls []string
+}
+
+func (a *isolatedAvailability) List(_ context.Context, kind, id string) ([]routing.AvailabilitySnapshot, error) {
+	a.calls = append(a.calls, id)
+	if id == "broken" {
+		return nil, fmt.Errorf("invalid state")
+	}
+	return nil, nil
+}
+func TestStabilityStateFailureIsLimitedToItsAccount(t *testing.T) {
+	_, api := humatest.New(t)
+	state := &isolatedAvailability{}
+	registerUpstreamStability(api, UpstreamAccountManagementHTTPDeps{Stability: isolatedStabilityReader{}, RuntimeHealth: state})
+	response := api.Get("/api/v1/upstream-stability")
+	var result struct {
+		Items []upstreamStabilityDTO `json:"items"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if response.Code != 200 || len(result.Items) != 2 || result.Items[0].StateError == "" || result.Items[1].StateError != "" || result.Items[1].Availability != "available" {
+		t.Fatalf("response: %s", response.Body)
+	}
+	state.calls = nil
+	response = api.Get("/api/v1/upstream-stability/direct_upstream/healthy")
+	if response.Code != 200 || len(state.calls) != 1 || state.calls[0] != "healthy" {
+		t.Fatalf("detail scanned other accounts: %v status=%d", state.calls, response.Code)
 	}
 }

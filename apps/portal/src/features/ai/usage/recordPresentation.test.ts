@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compactCount, recordColumns, recordMetrics, receiptFacts } from "./recordPresentation";
+import { ms, compactCount, recordColumns, recordMetrics, receiptFacts } from "./recordPresentation";
 import type { RequestRecord, RecordSummary } from "./recordsApi";
 describe("role-specific record presentation", () => {
   it("keeps two-level fees and internal routing separate from customer data", () => {
@@ -39,4 +39,11 @@ describe("role-specific record presentation", () => {
     expect(compactCount(6_768_761)).toBe("6.8M");
     expect(compactCount(1_200_000_000)).toBe("1.2B");
   });
+});
+
+it("formats duration boundaries and unavailable values", () => {
+  expect(ms(null)).toBe("—"); expect(ms(NaN)).toBe("—"); expect(ms(-1)).toBe("—");
+  expect(ms(0)).toBe("0 ms"); expect(ms(999)).toBe("999 ms"); expect(ms(1000)).toBe("1 秒");
+  expect(ms(6172)).toBe("6.2 秒"); expect(ms(59999)).toBe("1 分");
+  expect(ms(100665)).toBe("1 分 40.7 秒"); expect(ms(120000)).toBe("2 分");
 });

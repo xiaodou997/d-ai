@@ -2,6 +2,7 @@ package transport
 
 import (
 	"context"
+	"go.uber.org/zap"
 	"net/http"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -37,7 +38,7 @@ type stabilityListOutput struct {
 type stabilityDetailOutput struct{ Body upstreamStabilityDTO }
 
 func registerUpstreamStability(api huma.API, d UpstreamAccountManagementHTTPDeps) {
-	read := func(ctx context.Context, kind, window string) ([]upstreamStabilityDTO, error) {
+	read := func(ctx context.Context, kind, window, resourceID string) ([]upstreamStabilityDTO, error) {
 		if d.Stability == nil {
 			return nil, httpx.ErrUnavailable
 		}
@@ -45,15 +46,16 @@ func registerUpstreamStability(api huma.API, d UpstreamAccountManagementHTTPDeps
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
-		states := []routing.AvailabilitySnapshot{}
-		var stateErr error
-		if d.RuntimeHealth != nil {
-			states, stateErr = d.RuntimeHealth.List(ctx, "", "")
-		} else {
-			stateErr = routing.ErrAvailabilityUnavailable
-		}
 		out := make([]upstreamStabilityDTO, 0, len(items))
 		for _, item := range items {
+			if resourceID != "" && item.ResourceID != resourceID {
+				continue
+			}
+			var states []routing.AvailabilitySnapshot
+			stateErr := routing.ErrAvailabilityUnavailable
+			if d.RuntimeHealth != nil {
+				states, stateErr = d.RuntimeHealth.List(ctx, item.ResourceKind, item.ResourceID)
+			}
 			dto := upstreamStabilityDTO{UpstreamStability: item, Availability: "available", States: []routing.AvailabilitySnapshot{}}
 			for _, state := range states {
 				if state.Scope.ResourceKind == item.ResourceKind && state.Scope.ResourceID == item.ResourceID {
@@ -63,6 +65,7 @@ func registerUpstreamStability(api huma.API, d UpstreamAccountManagementHTTPDeps
 			dto.Availability = resourceAvailability(item, dto.States)
 
 			if stateErr != nil {
+				zap.L().Warn("upstream availability read failed", zap.String("resource_kind", item.ResourceKind), zap.String("resource_id", item.ResourceID), zap.Error(stateErr))
 				dto.Availability = "unknown"
 				dto.StateError = "运行状态暂不可读取"
 			}
@@ -74,7 +77,7 @@ func registerUpstreamStability(api huma.API, d UpstreamAccountManagementHTTPDeps
 		return out, nil
 	}
 	huma.Register(api, huma.Operation{OperationID: "ai-list-upstream-stability", Method: http.MethodGet, Path: "/api/v1/upstream-stability", Summary: "管理员上游稳定性", Tags: []string{"upstream-accounts"}}, func(ctx context.Context, in *stabilityListInput) (*stabilityListOutput, error) {
-		items, err := read(ctx, in.Kind, in.Window)
+		items, err := read(ctx, in.Kind, in.Window, "")
 		if err != nil {
 			return nil, err
 		}
@@ -83,7 +86,7 @@ func registerUpstreamStability(api huma.API, d UpstreamAccountManagementHTTPDeps
 		return out, nil
 	})
 	huma.Register(api, huma.Operation{OperationID: "ai-get-upstream-stability", Method: http.MethodGet, Path: "/api/v1/upstream-stability/{kind}/{id}", Summary: "上游运行状态及模型调用结果", Tags: []string{"upstream-accounts"}}, func(ctx context.Context, in *stabilityDetailInput) (*stabilityDetailOutput, error) {
-		items, err := read(ctx, in.Kind, in.Window)
+		items, err := read(ctx, in.Kind, in.Window, in.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -99,7 +102,7 @@ func registerUpstreamStability(api huma.API, d UpstreamAccountManagementHTTPDeps
 		return nil, httpx.ErrNotFound
 	})
 	huma.Register(api, huma.Operation{OperationID: "ai-resume-upstream", Method: http.MethodPost, Path: "/api/v1/upstream-stability/{kind}/{id}/resume", Summary: "立即恢复业务试用（不发送探测请求）", Tags: []string{"upstream-accounts"}}, func(ctx context.Context, in *stabilityDetailInput) (*stabilityDetailOutput, error) {
-		items, err := read(ctx, in.Kind, in.Window)
+		items, err := read(ctx, in.Kind, in.Window, in.ID)
 		if err != nil {
 			return nil, err
 		}

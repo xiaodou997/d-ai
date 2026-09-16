@@ -530,9 +530,9 @@ func TestExecuteDirect403FailsOverToNextRoute(t *testing.T) {
 	if got, want := attemptRouteIDs(req.Attempts), []string{"forbidden", "fallback"}; !slices.Equal(got, want) {
 		t.Fatalf("attempt routes = %v, want %v", got, want)
 	}
-	// Ambiguous 403 is model-scoped, not a permanent account rejection.
-	if len(health.failures) != 0 {
-		t.Fatalf("health failures = %v, want empty (model permission uses separate cooldown)", health.failures)
+	// Ambiguous 403 uses the transient-failure threshold, not immediate cooldown.
+	if len(health.failures) != 1 {
+		t.Fatalf("health failures = %v, want one transient failure", health.failures)
 	}
 }
 

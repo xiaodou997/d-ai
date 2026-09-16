@@ -13,6 +13,7 @@ import { Delete, Download, Edit, Plus, Refresh, Upload, VideoPlay } from '@eleme
 import { Database } from 'lucide-vue-next'
 import { PortalContentCard, PortalPagePanel } from '@/platform'
 import { DsEmpty, DsNumberInput, DsTable, DsTabs, DsTag, type DsTableColumn } from '@/shared/ui'
+import { formatDuration } from '@/platform/ai/usage'
 import { formatMultiplier } from '@/platform/ai/utils'
 import { aiAdminApi } from '@/api/aiAdmin'
 import type {
@@ -856,8 +857,8 @@ onBeforeUnmount(() => {
           <el-alert v-if="stability.error.value" title="稳定性统计加载失败" :description="stability.error.value" type="warning" :closable="false" />
           <el-alert
             v-else-if="stabilityStateError"
-            title="运行状态服务暂不可用"
-            description="运行状态依赖 Redis 中的可用性状态，当前读取失败；成功率和样本统计仍可用，冷却、恢复及账号可用性状态暂时不显示。"
+            title="账号状态读取失败"
+            description="部分账号的可用状态读取失败，请刷新重试。选择账号可查看具体调用错误。"
             type="warning"
             :closable="false"
           />
@@ -1085,7 +1086,7 @@ onBeforeUnmount(() => {
                 ? '选择图片模型后，这里会直接发起生图测试，并在下方展示返回图片。'
                 : testSelectedCapability === 'embedding'
                   ? '选择向量模型后，这里会发送一段输入文本并验证返回向量。'
-                  : '选择对话模型后，这里会发送一条对话测试，并在下方展示返回文本。' }}
+                  : '对话测试使用业务转发的网络出口；OpenAI 和 Anthropic 按流式协议验证完整响应。' }}
             </p>
           </el-form-item>
           <el-form-item v-if="testIsImage" label="测试类型">
@@ -1109,7 +1110,7 @@ onBeforeUnmount(() => {
             <span class="test-line" :class="testResult.ok ? 'test-ok' : 'test-err'">
               {{ testResult.ok ? '✓ 测试成功' : '✗ 测试失败' }}
             </span>
-            <span class="test-line test-muted">HTTP {{ testResult.http_status }} · {{ testResult.latency_ms }}ms · {{ testResult.api_format }}</span>
+            <span class="test-line test-muted">HTTP {{ testResult.http_status }} · {{ formatDuration(testResult.latency_ms) }} · {{ testResult.api_format }}</span>
             <span class="test-line test-muted">上游模型 ID：{{ testResult.upstream_model }}</span>
             <span v-if="testIsImage" class="test-line test-muted">
               上游请求：{{ imageTestStreamLabel(testResult.image_stream_mode) }}<template v-if="testForm.imageEdit"> · {{ imageTestTransportLabel(testResult.image_edit_transport) }}</template> · 返回格式配置：{{ imageTestFormatLabel(testResult.image_upstream_response_format) }}

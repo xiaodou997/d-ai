@@ -232,7 +232,11 @@ func ClassifyResponse(status int, headers http.Header, body string, err error) O
 	}
 	modelError := strings.Contains(code, "model_not_found") || strings.Contains(code, "model_not_available") || strings.Contains(code, "model_access") || strings.Contains(code, "unsupported_model") || strings.Contains(code, "insufficient_quota")
 	authError := strings.Contains(code, "invalid_api_key") || strings.Contains(code, "invalid_token") || strings.Contains(code, "authentication_error") || strings.Contains(code, "invalid_grant") || strings.Contains(code, "unauthenticated")
-	if status == http.StatusForbidden && !authError || status == http.StatusNotFound || modelError {
+	// A generic gateway/WAF denial does not prove a model or key is invalid.
+	if status == http.StatusForbidden && !authError && !modelError {
+		out.Status = ResultServerError
+	}
+	if status == http.StatusNotFound || modelError {
 		out.Status = ResultModelError
 	}
 	if authError {

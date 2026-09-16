@@ -252,7 +252,8 @@ func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisCl
 	)
 	poolModelCatalog := clientcatalog.New(oauthCreds, fixedClientRuntime, appLogger)
 	managementHTTPClient := &http.Client{}
-	modelCapabilities := externalmodels.New(redisClient, managementHTTPClient)
+	diagnosticsHTTPClient := upstreamHTTPTransport.DiagnosticClient()
+	modelCapabilities := externalmodels.New(redisClient, diagnosticsHTTPClient)
 
 	executeStep := &serving.ExecuteStep{
 		CompletionRecorder: usageLogger,
@@ -442,7 +443,7 @@ func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisCl
 				EndpointManager:   accountSvc,
 				ModelBindings:     modelBindings,
 				ProviderSecrets:   providerSecrets,
-				HTTPClient:        managementHTTPClient,
+				HTTPClient:        diagnosticsHTTPClient,
 				AccountHealth:     accountSvc,
 				ModelCapabilities: modelCapabilities,
 				RuntimeHealth:     availabilityService,

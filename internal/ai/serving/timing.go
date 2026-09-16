@@ -116,3 +116,19 @@ func durationMs(start, end time.Time) int {
 	}
 	return int(end.Sub(start).Milliseconds())
 }
+
+// MarkFirstOutput keeps request latency separate from the final attempt's
+// latency used by upstream scoring. Failed attempts and setup count for users.
+func (r *Request) MarkFirstOutput(at, attemptStart time.Time) {
+	if r == nil || r.FirstTokenMs != 0 {
+		return
+	}
+	start := r.StartedAt
+	if start.IsZero() {
+		start = attemptStart
+	}
+	r.FirstTokenMs = max(1, durationMs(start, at))
+	if n := len(r.Attempts); n > 0 && r.Attempts[n-1].FirstOutputMs == 0 {
+		r.Attempts[n-1].FirstOutputMs = max(1, durationMs(attemptStart, at))
+	}
+}

@@ -92,6 +92,25 @@ func (c *Client) Do(ctx context.Context, req *serving.UpstreamRequest) (*serving
 		httpReq.Header.Set(k, v)
 	}
 
+	resp, err := c.doHTTPRequest(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("http do %s %s: %w", req.Method, url, err)
+	}
+	return &serving.UpstreamResponse{StatusCode: resp.StatusCode, Headers: resp.Header, Body: resp.Body}, nil
+}
+
+// DiagnosticClient shares the exact proxy selection, connection pool and
+// transport settings used for normal upstream calls.
+func (c *Client) DiagnosticClient() HTTPDoer { return diagnosticHTTPClient{c} }
+
+type diagnosticHTTPClient struct{ client *Client }
+
+func (d diagnosticHTTPClient) Do(req *http.Request) (*http.Response, error) {
+	return d.client.doHTTPRequest(req)
+}
+
+func (c *Client) doHTTPRequest(httpReq *http.Request) (*http.Response, error) {
+	ctx := httpReq.Context()
 	client := c.http
 	if c.selector != nil {
 		proxyURL, selectErr := c.selector.SelectProxy(ctx)
@@ -123,14 +142,10 @@ func (c *Client) Do(ctx context.Context, req *serving.UpstreamRequest) (*serving
 
 	resp, err := client.Do(httpReq)
 	if err != nil {
-		return nil, fmt.Errorf("http do %s %s: %w", req.Method, url, err)
+		return nil, err
 	}
 
-	return &serving.UpstreamResponse{
-		StatusCode: resp.StatusCode,
-		Headers:    resp.Header,
-		Body:       resp.Body,
-	}, nil
+	return resp, nil
 }
 
 // resolveURL handles protocol-specific URL construction.

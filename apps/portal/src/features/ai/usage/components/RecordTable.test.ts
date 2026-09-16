@@ -39,8 +39,8 @@ describe("record table presentation", () => {
     expect(text).toContain("输出 133");
     expect(text).toContain("缓存读 119.9K");
     expect(text).not.toContain("缓存写");
-    expect(text).toContain("首：6,172ms");
-    expect(text).toContain("总：8,673ms");
+    expect(text).toContain("首：6.2 秒");
+    expect(text).toContain("总：8.7 秒");
     expect(text).not.toContain("已结算");
     expect(text).not.toContain("复制 ID");
   });

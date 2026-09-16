@@ -156,7 +156,7 @@ func (s *ExecuteStep) commitImageClientStream(dc *deadlineController, req *Reque
 	req.HTTPStatus = http.StatusOK
 	dc.firstByte()
 	req.MarkFirstResponseByte(time.Now())
-	req.FirstTokenMs = int(time.Since(startTime).Milliseconds())
+	req.MarkFirstOutput(time.Now(), startTime)
 	// The upstream body was fully read, validated and converted before this
 	// client stream was built. Mark provider completion before the downstream
 	// write so a client disconnect cannot incorrectly void an already-completed

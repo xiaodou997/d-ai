@@ -29,9 +29,9 @@ func streamChunkStartsToken(data, eventType string, protocol domain.UpstreamProt
 	}
 	switch protocol {
 	case domain.ProtocolAnthropicMessages:
-		return eventType == "content_block_delta" || eventType == "content_block_start" || hasNestedText(payload, "text", "input_json")
+		return hasNestedText(payload, "text", "thinking", "partial_json", "input_json")
 	case domain.ProtocolOpenAIResponses:
-		return strings.Contains(eventType, "output_text.delta") || strings.Contains(eventType, "reasoning_summary_text.delta") || strings.Contains(eventType, "function_call_arguments.delta") || hasNestedText(payload, "delta", "text", "output_text")
+		return hasNestedText(payload, "delta", "text", "output_text")
 	case domain.ProtocolGeminiGenerate:
 		return hasNestedText(payload, "text", "functionCall", "function_call")
 	default:

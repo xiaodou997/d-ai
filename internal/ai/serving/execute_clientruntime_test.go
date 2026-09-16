@@ -125,8 +125,8 @@ func TestExecuteDoesNotPermanentlyInvalidateCodexForbidden(t *testing.T) {
 	if len(pool.invalid) != 0 {
 		t.Fatalf("invalid credentials = %v, want none", pool.invalid)
 	}
-	if len(request.Attempts) == 0 || (request.Attempts[0].AvailabilityOutcome != "rate_limited" && request.Attempts[0].AvailabilityOutcome != "model_error") {
-		t.Fatalf("missing normalized cooldown outcome: %+v", request.Attempts)
+	if len(request.Attempts) == 0 || request.Attempts[0].AvailabilityOutcome != "server_error" {
+		t.Fatalf("ambiguous denial must not invalidate the model: %+v", request.Attempts)
 	}
 }
 
@@ -154,8 +154,8 @@ func TestExecuteRetriesRateLimitedRuntimeCredentialWithinPool(t *testing.T) {
 	if pool.selected != 2 || len(runtime.invocations) != 2 {
 		t.Fatalf("selected = %d, invocations = %d", pool.selected, len(runtime.invocations))
 	}
-	if len(request.Attempts) == 0 || (request.Attempts[0].AvailabilityOutcome != "rate_limited" && request.Attempts[0].AvailabilityOutcome != "model_error") {
-		t.Fatalf("missing normalized cooldown outcome: %+v", request.Attempts)
+	if len(request.Attempts) == 0 || request.Attempts[0].AvailabilityOutcome != "rate_limited" {
+		t.Fatalf("missing rate-limit outcome: %+v", request.Attempts)
 	}
 	if runtime.invocations[1].Credential.ID != "credential-2" {
 		t.Fatalf("second invocation credential = %q", runtime.invocations[1].Credential.ID)

@@ -1,3 +1,4 @@
+import { formatDuration as ms } from "@/platform/ai/usage";
 import { ElMessage } from "element-plus";
 import type { DsTableColumn } from "@/shared/ui";
 import { microUSD, type RequestRecord, type RecordSummary } from "./recordsApi";
@@ -6,9 +7,9 @@ export const recordRole = (userType: unknown): RecordRole => Number(userType) ==
 export const recordPath = (role: RecordRole) => role === "customer" ? "/customer/usage" : `/${role}/ai/usage`;
 export const recordTitle = (role: RecordRole) => role === "tenant" ? "使用分析" : "使用记录";
 export const sourceLabel = (value: string) => ({ api_key: "API Key", web_chat: "网页对话", web_image: "网页生图", web_video: "网页视频", workspace: "工作台", internal: "内部调用" } as Record<string, string>)[value] || value || "—";
-export const ms = (value?: number | null) => value == null ? "—" : `${Math.round(value).toLocaleString()} ms`;
+export { formatDuration as ms } from "@/platform/ai/usage";
 export const compactCount = (value?: number | null) => value == null ? "未报告" : Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(value);
-export const compactMs = (value?: number | null) => value == null ? "—" : `${Math.round(value).toLocaleString()}ms`;
+export const compactMs = ms;
 export const multiplier = (value?: number | null) => value == null ? "—" : `× ${value}`;
 export const timestamp = (value?: string | null) => value ? new Date(value).toLocaleString("zh-CN", { hour12: false }) : "—";
 export const deliveryLabel = (value: string) => ({ complete: "响应已交付", disconnected: "客户端连接中断", write_failed: "响应写入失败", unknown: "未确认完整交付" } as Record<string, string>)[value] || value;

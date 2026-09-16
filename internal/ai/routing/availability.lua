@@ -21,7 +21,11 @@ local function load(key, scope)
   return s
 end
 local function save(key, s)
-  redis.call('SET',key,cjson.encode(s),'PX',math.max(ttl,(s.retry_at or 0)-now+86400000))
+  -- Empty history is absent in both stored state and public snapshots.
+  local stored = {}
+  for k,v in pairs(s) do stored[k]=v end
+  if #s.recent_trips == 0 then stored.recent_trips=nil end
+  redis.call('SET',key,cjson.encode(stored),'PX',math.max(ttl,(s.retry_at or 0)-now+86400000))
   redis.call('SADD',prefix..'scopes',key)
   redis.call('SADD',prefix..'resource:'..s.scope.resource_kind..':'..s.scope.resource_id,key)
 end
@@ -29,7 +33,7 @@ local function snapshot(s)
   local r = {busy=s.owner~=nil}
   for k,v in pairs(s) do if k ~= 'owner' and k ~= 'window' then r[k]=v end end
   -- Redis cjson represents an empty Lua table as an object. Keep public arrays stable.
-  if #s.recent_trips == 0 then r.recent_trips=cjson.empty_array or nil end
+  if #s.recent_trips == 0 then r.recent_trips=nil end
   return r
 end
 local function array(items)

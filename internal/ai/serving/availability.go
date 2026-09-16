@@ -303,9 +303,6 @@ func (s *ExecuteStep) recordCompletedAttempt(ctx context.Context, req *Request, 
 		a.Outcome = ResultRejected
 		a.AvailabilityOutcome = a.Outcome.String()
 	}
-	if req.IsStream {
-		a.FirstOutputMs = req.FirstTokenMs
-	}
 	if (req.ClientDeliveryState == domain.ClientDeliveryDisconnected || req.ClientDeliveryState == domain.ClientDeliveryWriteFailed) && a.Outcome == ResultSuccess {
 		a.Outcome = ResultCanceled
 		a.AvailabilityOutcome = ResultCanceled.String()

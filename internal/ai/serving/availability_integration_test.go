@@ -191,3 +191,22 @@ func TestPoolCredentialsShareOneRecoveryRotationWithDirectCandidates(t *testing.
 		t.Fatalf("trial credential selected %d times out of 20; recovery rotations must not multiply", trials)
 	}
 }
+
+func TestGenericForbiddenDoesNotImmediatelyCoolAllSubsequentRequests(t *testing.T) {
+	availability, _ := servingAvailability(t)
+	candidate := runtimeCandidate("denied-once")
+	transport := &sequenceTransport{responses: []*UpstreamResponse{
+		{StatusCode: 403, Headers: http.Header{}, Body: io.NopCloser(strings.NewReader("error code: 1010"))},
+		jsonResp(`{"choices":[{"message":{"content":"OK"}}]}`),
+	}}
+	step := &ExecuteStep{Availability: availability, Transport: transport, Bridge: testProtocolBridge{}}
+	if err := step.Execute(context.Background(), executeTestRequest(httptest.NewRecorder(), []*domain.RouteCandidate{candidate})); err == nil {
+		t.Fatal("expected first request rejection")
+	}
+	if err := step.Execute(context.Background(), executeTestRequest(httptest.NewRecorder(), []*domain.RouteCandidate{candidate})); err != nil {
+		t.Fatalf("next request blocked: %v", err)
+	}
+	if transport.calls != 2 {
+		t.Fatalf("upstream calls=%d", transport.calls)
+	}
+}

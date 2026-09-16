@@ -2,6 +2,7 @@ package routing
 
 import (
 	"context"
+
 	"errors"
 	miniredis "github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
@@ -316,4 +317,29 @@ func TestAdminResumeOnlyLiftsCooldownWithoutClearingHealthyOrBusyState(t *testin
 		t.Fatal("resume stole a live recovery lease")
 	}
 	s.Complete(ctx, p, AvailabilityOutcome{})
+}
+
+// Persisted state must be readable without a separate decoder.
+func TestAvailabilityListsAndResumesHealthyState(t *testing.T) {
+	s, _, scope, _ := availabilityFixture(t)
+	ctx := context.Background()
+	p, err := s.Acquire(ctx, []FaultScope{scope}, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.Complete(ctx, p, AvailabilityOutcome{Success: true}); err != nil {
+		t.Fatal(err)
+	}
+	if states, err := s.List(ctx, scope.ResourceKind, scope.ResourceID); err != nil || len(states) != 1 || states[0].Phase != Available {
+		t.Fatalf("states=%+v err=%v", states, err)
+	}
+	if err := s.Suspend(ctx, scope, time.Now().Add(time.Minute), "test"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Resume(ctx, scope.ResourceKind, scope.ResourceID); err != nil {
+		t.Fatal(err)
+	}
+	if states, err := s.List(ctx, scope.ResourceKind, scope.ResourceID); err != nil || states[0].Phase != Recovering {
+		t.Fatalf("states=%+v err=%v", states, err)
+	}
 }

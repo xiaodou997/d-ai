@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatDuration } from "@/platform/ai/usage";
 import { computed, shallowRef } from 'vue';
 import { ElMessage } from 'element-plus';
 import { DsMetricCard, DsTable, DsTag, type DsTableColumn } from '@/shared/ui';
@@ -18,7 +19,7 @@ const availabilityLabels: Record<string, string> = {
   unknown: '状态未知'
 };
 const windowLabels: Record<string, string> = { '1h': '最近 1 小时', '24h': '最近 24 小时', '7d': '最近 7 天' };
-const phaseLabels: Record<string, string> = { available: '可用', cooling: '冷却中', recovering: '恢复试用' };
+const phaseLabels: Record<string, string> = { available: '可用', cooling: '冷却中', recovering: '等待请求验证' };
 const operationLabels: Record<string, string> = {
   openai_chat: 'OpenAI Chat',
   openai_responses: 'OpenAI Responses',
@@ -84,7 +85,7 @@ function operationLabel(value?: string) {
 
 function durationLabel(value?: number | null) {
   if (value == null || value <= 0) return '—';
-  return `${value < 1 ? value.toFixed(1) : Math.round(value)} ms`;
+  return formatDuration(value);
 }
 
 function availabilityTone(value?: string): 'positive' | 'warning' | 'danger' | 'neutral' {
@@ -130,7 +131,7 @@ async function resume() {
   try {
     await stabilityApi.resume(props.kind, props.resourceId);
     await runtime.refresh();
-    ElMessage.success('已恢复业务试用，未发送探测请求');
+    ElMessage.success('已允许新的业务请求重试，成功后将自动恢复正常调度');
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '恢复失败');
   } finally {
@@ -152,13 +153,13 @@ async function resume() {
       <DsTag v-if="detail && !detail.state_error" :tone="availabilityTone(detail.availability)">{{ availabilityLabels[detail.availability] }}</DsTag>
       <DsTag v-if="detail?.repeated_failure" tone="danger">最近一小时反复异常</DsTag>
       <span class="stability-toolbar__spacer" />
-      <el-button :disabled="!detail || detail.config_status === 'disabled' || Boolean(detail.state_error)" :loading="resuming" :title="detail?.state_error ? '运行状态服务不可用，暂时无法执行恢复操作' : undefined" @click="resume">立即恢复试用</el-button>
+      <el-button :disabled="!detail || detail.config_status === 'disabled' || Boolean(detail.state_error)" :loading="resuming" :title="detail?.state_error ? '运行状态服务不可用，暂时无法执行恢复操作' : undefined" @click="resume">允许立即重试</el-button>
     </div>
 
     <el-alert
       v-if="detail?.state_error"
       title="运行状态暂不可读取"
-      description="运行状态依赖 Redis 中的可用性状态，当前读取失败；成功率、失败次数和调用明细仍可用，冷却与恢复信息将在服务恢复后更新。"
+      description="暂时无法读取账号的重试状态。请刷新重试；历史调用记录仍可查看，暂时不要反复停用、启用账号。"
       type="warning"
       :closable="false"
     />
@@ -180,7 +181,7 @@ async function resume() {
           <div class="stability-section-heading">
             <div>
               <h3>故障与恢复</h3>
-              <p>展示当前仍在冷却或恢复试用中的运行范围。</p>
+              <p>上游报错后会暂时等待，再用新的业务请求验证恢复。可点击“允许立即重试”提前结束等待。</p>
             </div>
           </div>
           <DsTable
