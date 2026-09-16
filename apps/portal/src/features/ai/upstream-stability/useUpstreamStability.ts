@@ -6,35 +6,41 @@ export function useUpstreamStability(kind: ResourceKind, resourceId?: () => stri
   const items = shallowRef<Stability[]>([]);
   const detail = shallowRef<Stability | null>(null);
   const error = shallowRef('');
+  const loading = shallowRef(false);
   let controller: AbortController | null = null;
   let timer: ReturnType<typeof setInterval> | undefined;
   let generation = 0;
   async function refresh() {
     if (document.hidden) return;
     const current = ++generation;
-    controller?.abort(); controller = new AbortController();
+    controller?.abort();
+    const requestController = new AbortController();
+    controller = requestController;
+    loading.value = true;
     try {
       if (resourceId) {
         const id = resourceId();
         if (!id) { detail.value = null; return; }
-        const result = await stabilityApi.detail(kind, id, window.value, controller.signal);
+        const result = await stabilityApi.detail(kind, id, window.value, requestController.signal);
         if (current === generation) detail.value = result;
       } else {
-        const result = await stabilityApi.list(kind, window.value, controller.signal);
+        const result = await stabilityApi.list(kind, window.value, requestController.signal);
         if (current === generation) items.value = result.items || [];
       }
       if (current === generation) error.value = '';
     } catch (cause) {
-      if (current === generation && !controller?.signal.aborted) error.value = cause instanceof Error ? cause.message : '运行信息加载失败';
+      if (current === generation && !requestController.signal.aborted) error.value = cause instanceof Error ? cause.message : '运行信息加载失败';
+    } finally {
+      if (current === generation) loading.value = false;
     }
   }
   function visibilityChanged() {
-    if (document.hidden) { ++generation; controller?.abort(); if (timer) clearInterval(timer); timer = undefined; }
+    if (document.hidden) { ++generation; controller?.abort(); loading.value = false; if (timer) clearInterval(timer); timer = undefined; }
     else { void refresh(); if (!timer) timer = setInterval(() => void refresh(), 10_000); }
   }
   onMounted(() => { document.addEventListener('visibilitychange', visibilityChanged); visibilityChanged(); });
   onBeforeUnmount(() => { ++generation; controller?.abort(); if (timer) clearInterval(timer); document.removeEventListener('visibilitychange', visibilityChanged); });
   watch(window, refresh);
   if (resourceId) watch(resourceId, () => { detail.value = null; void refresh(); });
-  return { window, items, detail, error, refresh };
+  return { window, items, detail, error, loading, refresh };
 }

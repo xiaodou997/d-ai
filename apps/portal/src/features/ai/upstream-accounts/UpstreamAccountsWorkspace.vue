@@ -46,6 +46,9 @@ const stability = useUpstreamStability('direct_upstream')
 const stabilityById = computed(() => new Map(stability.items.value.map(item => [item.resource_id, item])))
 const stabilityFilter = shallowRef('all')
 const stabilitySort = shallowRef('default')
+const stabilityStateError = computed(() => stability.items.value.find(item => item.state_error)?.state_error || '')
+const stabilityWindowLabels: Record<string, string> = { '1h': '最近 1 小时', '24h': '最近 24 小时', '7d': '最近 7 天' }
+const stabilityWindowLabel = computed(() => stabilityWindowLabels[stability.window.value] || stability.window.value)
 const sortedAccounts = computed(() => {
   const rows = accounts.value.filter(account => {
     const metric = stabilityById.value.get(account.id)
@@ -616,18 +619,27 @@ let listObserver: IntersectionObserver | null = null
 
 function revealMoreAccounts() {
   if (!hasMoreAccounts.value) return
-  visibleCount.value = Math.min(visibleCount.value + LIST_PAGE_SIZE, accounts.value.length)
+  visibleCount.value = Math.min(visibleCount.value + LIST_PAGE_SIZE, sortedAccounts.value.length)
 }
 
 // 账号数据变化(刷新/增删/导入)后回到第一批,哨兵进入视口再继续追加
 watch(accounts, () => {
-  visibleCount.value = listObserver ? LIST_PAGE_SIZE : accounts.value.length
+  visibleCount.value = listObserver ? LIST_PAGE_SIZE : sortedAccounts.value.length
 })
+
+watch([stabilityFilter, stabilitySort], () => {
+  visibleCount.value = listObserver ? LIST_PAGE_SIZE : sortedAccounts.value.length
+})
+
+function resetStabilityFilters() {
+  stabilityFilter.value = 'all'
+  stabilitySort.value = 'default'
+}
 
 function setupListObserver() {
   // 测试环境(happy-dom)没有 IntersectionObserver,直接全量渲染兜底
   if (typeof IntersectionObserver === 'undefined') {
-    visibleCount.value = accounts.value.length
+    visibleCount.value = sortedAccounts.value.length
     return
   }
   listObserver = new IntersectionObserver(
@@ -798,11 +810,49 @@ onBeforeUnmount(() => {
       <el-col :span="7" class="accounts-list-col">
         <PortalContentCard title="上游账号" body-padding="none" class="accounts-list-card">
           <div class="runtime-filters">
- <el-select v-model="stability.window.value" aria-label="账号成功率统计范围"><el-option label="最近 1 小时" value="1h" /><el-option label="最近 24 小时" value="24h" /><el-option label="最近 7 天" value="7d" /></el-select>
-            <el-select v-model="stabilityFilter" aria-label="账号异常筛选"><el-option label="全部账号" value="all" /><el-option label="需要关注" value="abnormal" /><el-option label="成功率低于 95%" value="low_rate" /><el-option label="反复异常" value="repeated" /><el-option label="暂无样本" value="no_data" /></el-select>
-            <el-select v-model="stabilitySort" aria-label="账号稳定性排序"><el-option label="默认排序" value="default" /><el-option label="成功率从低到高" value="success" /></el-select>
+            <div class="runtime-filters-heading">
+              <div>
+                <strong>运行视图</strong>
+                <span>按 {{ stabilityWindowLabel }} 的真实上游尝试筛选</span>
+              </div>
+              <DsTag v-if="stability.loading.value" tone="info">更新中</DsTag>
+            </div>
+            <div class="runtime-filter-grid">
+              <label class="runtime-filter-field">
+                <span>统计范围</span>
+                <el-select v-model="stability.window.value" aria-label="账号成功率统计范围">
+                  <el-option label="最近 1 小时" value="1h" />
+                  <el-option label="最近 24 小时" value="24h" />
+                  <el-option label="最近 7 天" value="7d" />
+                </el-select>
+              </label>
+              <label class="runtime-filter-field">
+                <span>账号筛选</span>
+                <el-select v-model="stabilityFilter" aria-label="账号异常筛选">
+                  <el-option label="全部账号" value="all" />
+                  <el-option label="需要关注" value="abnormal" />
+                  <el-option label="成功率低于 95%" value="low_rate" />
+                  <el-option label="反复异常" value="repeated" />
+                  <el-option label="暂无样本" value="no_data" />
+                </el-select>
+              </label>
+              <label class="runtime-filter-field runtime-filter-field--wide">
+                <span>排序方式</span>
+                <el-select v-model="stabilitySort" aria-label="账号稳定性排序">
+                  <el-option label="默认排序" value="default" />
+                  <el-option label="成功率从低到高" value="success" />
+                </el-select>
+              </label>
+            </div>
           </div>
-          <el-alert v-if="stability.error.value" :title="stability.error.value" type="warning" :closable="false" />
+          <el-alert v-if="stability.error.value" title="稳定性统计加载失败" :description="stability.error.value" type="warning" :closable="false" />
+          <el-alert
+            v-else-if="stabilityStateError"
+            title="运行状态服务暂不可用"
+            description="成功率和样本统计仍可用；冷却、恢复及账号可用性状态暂时不显示。"
+            type="warning"
+            :closable="false"
+          />
           <div v-loading="loading" ref="accountListEl" class="account-list">
             <div
               v-for="a in visibleAccounts"
@@ -837,11 +887,11 @@ onBeforeUnmount(() => {
                 <span class="account-item-description-text">{{ a.description }}</span>
               </div>
               <div class="account-item-host truncate">{{ accountEndpointHosts(a) }}</div>
-              <StabilityBadge :value="stabilityById.get(a.id)" />
+              <StabilityBadge :value="stabilityById.get(a.id)" :loading="stability.loading.value" />
             </div>
             <div ref="listSentinelEl" class="account-list-sentinel" aria-hidden="true">
               <span v-if="hasMoreAccounts">加载中…</span>
-              <span v-else-if="accounts.length > LIST_PAGE_SIZE">共 {{ accounts.length }} 条</span>
+              <span v-else-if="sortedAccounts.length > LIST_PAGE_SIZE">共 {{ sortedAccounts.length }} 条</span>
             </div>
             <DsEmpty
               v-if="!accounts.length && !loading"
@@ -850,6 +900,15 @@ onBeforeUnmount(() => {
             >
               <template #action>
                 <el-button type="primary" :icon="Plus" @click="openAccountCreate">新增账号</el-button>
+              </template>
+            </DsEmpty>
+            <DsEmpty
+              v-else-if="!visibleAccounts.length && !loading"
+              title="没有符合条件的账号"
+              description="调整筛选条件，或恢复显示全部账号"
+            >
+              <template #action>
+                <el-button @click="resetStabilityFilters">显示全部账号</el-button>
               </template>
             </DsEmpty>
           </div>
@@ -1320,8 +1379,16 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.runtime-filters { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px; }
-.runtime-filters :deep(.el-select) { min-width: 0; }
+.runtime-filters { padding: 14px 14px 12px; border-bottom: 1px solid var(--ds-line); background: var(--ds-panel-muted); }
+.runtime-filters-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.runtime-filters-heading > div { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.runtime-filters-heading strong { color: var(--ds-ink); font-size: 13px; }
+.runtime-filters-heading span { color: var(--ds-muted); font-size: 11px; line-height: 1.4; }
+.runtime-filter-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.runtime-filter-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.runtime-filter-field--wide { grid-column: 1 / -1; }
+.runtime-filter-field > span { color: var(--ds-muted); font-size: 11px; font-weight: 600; }
+.runtime-filter-field :deep(.el-select) { width: 100%; min-width: 0; }
 .accounts-view {
   flex: 0 1 auto;
   min-height: 0;
@@ -1384,6 +1451,11 @@ onBeforeUnmount(() => {
 .import-stats { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; color: var(--ds-muted); font-size: 13px; }
 .import-stats span { padding: 6px 10px; border: 1px solid var(--ds-line); border-radius: var(--ds-radius-control); background: var(--ds-panel-muted); }
 .import-stats strong { color: var(--ds-ink); }
+
+@media (max-width: 768px) {
+  .runtime-filter-grid { grid-template-columns: 1fr; }
+  .runtime-filter-field--wide { grid-column: auto; }
+}
 
 /* 主从布局：限制在页面剩余高度内，左右两栏各自滚动，避免列表把整个页面向下撑开。 */
 .accounts-body {

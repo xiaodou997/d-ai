@@ -33,6 +33,8 @@ describe('upstream stability', () => {
  it('always attaches sample count and distinguishes missing data from low confidence', () => {
   const wrapper = mount(StabilityBadge, { props: { value: sample() } });
   expect(wrapper.text()).toContain('100.0%'); expect(wrapper.text()).toContain('1 次'); expect(wrapper.text()).toContain('样本不足'); wrapper.unmount();
-  const empty = mount(StabilityBadge); expect(empty.text()).toContain('暂无数据'); expect(empty.text()).not.toContain('100'); empty.unmount();
+  const empty = mount(StabilityBadge); expect(empty.text()).toContain('暂无稳定性样本'); expect(empty.text()).not.toContain('100'); empty.unmount();
+  const stateUnavailable = mount(StabilityBadge, { props: { value: { ...sample(), availability: 'unknown', state_error: '运行状态暂不可读取' } } });
+  expect(stateUnavailable.text()).not.toContain('状态服务不可用'); expect(stateUnavailable.text()).toContain('100.0%'); stateUnavailable.unmount();
  });
 });
