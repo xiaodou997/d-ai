@@ -94,6 +94,7 @@ type JWTService struct {
 	cfg                   config.JWTConfig
 	mu                    sync.RWMutex
 	reloadMu              sync.Mutex
+	lastUnknownKidRefresh time.Time
 	activeKey             *keyEntry
 	graceKeys             []*keyEntry
 	accessTokenExpiration time.Duration
@@ -102,6 +103,7 @@ type JWTService struct {
 
 const accessSessionValidationTimeout = 2 * time.Second
 const TenantOperationsAccessTokenExpiration = time.Hour
+const unknownKidRefreshInterval = time.Second
 
 // NewJWTService 创建 JWT 服务
 // 从数据库加载密钥，若无则自动生成并写入数据库
@@ -343,7 +345,8 @@ func (s *JWTService) cachedPublicKey(kid string) *rsa.PublicKey {
 // verificationKey returns a cached verification key when possible. When a
 // different replica rotates signing keys, the first request carrying the new
 // kid refreshes this replica from PostgreSQL. reloadMu plus the second cache
-// check collapses a concurrent burst of the same new kid into one DB reload.
+// check collapses a concurrent burst, and the refresh interval bounds DB work
+// caused by attacker-controlled unknown kid values.
 func (s *JWTService) verificationKey(ctx context.Context, kid string) (*rsa.PublicKey, error) {
 	if publicKey := s.cachedPublicKey(kid); publicKey != nil {
 		return publicKey, nil
@@ -357,6 +360,19 @@ func (s *JWTService) verificationKey(ctx context.Context, kid string) (*rsa.Publ
 	if publicKey := s.cachedPublicKey(kid); publicKey != nil {
 		return publicKey, nil
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	now := time.Now()
+	if !s.lastUnknownKidRefresh.IsZero() && now.Sub(s.lastUnknownKidRefresh) < unknownKidRefreshInterval {
+		return nil, fmt.Errorf("unknown kid: %s", kid)
+	}
+	// Set the throttle timestamp before touching PostgreSQL. A transient DB
+	// failure must not let a flood of forged kids immediately retry the same
+	// expensive reload path.
+	s.lastUnknownKidRefresh = now
+
 	if err := s.reloadKeysLocked(ctx); err != nil {
 		return nil, fmt.Errorf("reload signing keys for kid %q: %w", kid, err)
 	}
