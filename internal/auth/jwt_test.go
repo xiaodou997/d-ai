@@ -64,6 +64,34 @@ func TestParseTokenReloadsSigningKeysAcrossReplicas(t *testing.T) {
 	}
 }
 
+func TestVerificationKeyRateLimitsUnknownKidReloads(t *testing.T) {
+	ctx := context.Background()
+	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 2})
+	if err != nil {
+		t.Skipf("JWT test database unavailable: %v", err)
+	}
+	t.Cleanup(func() { _ = cleanup(context.Background()) })
+	if err := clientsecret.Configure("0123456789abcdef0123456789abcdef"); err != nil {
+		t.Fatal(err)
+	}
+
+	service := NewJWTService(config.JWTConfig{Expiration: 15 * time.Minute, RefreshExpiration: time.Hour, Issuer: "dai-jwt-unknown-kid-throttle"}, pool)
+	if _, err := service.verificationKey(ctx, "forged-kid-1"); err == nil {
+		t.Fatal("verificationKey(forged-kid-1) unexpectedly succeeded")
+	}
+	firstRefresh := service.lastUnknownKidRefresh
+	if firstRefresh.IsZero() {
+		t.Fatal("first unknown kid did not record a refresh attempt")
+	}
+
+	if _, err := service.verificationKey(ctx, "forged-kid-2"); err == nil {
+		t.Fatal("verificationKey(forged-kid-2) unexpectedly succeeded")
+	}
+	if !service.lastUnknownKidRefresh.Equal(firstRefresh) {
+		t.Fatalf("second unknown kid moved refresh timestamp from %v to %v inside throttle interval", firstRefresh, service.lastUnknownKidRefresh)
+	}
+}
+
 func TestRetireExpiredGraceKeysReloadsEveryReplica(t *testing.T) {
 	ctx := context.Background()
 	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 4})
