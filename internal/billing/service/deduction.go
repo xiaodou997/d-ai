@@ -14,21 +14,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// BatchOpError 批量操作单条失败记录
-type BatchOpError struct {
-	RequestID string `json:"requestId"`
-	Reason    string `json:"reason"`
-}
-
-// BatchOpResult 批量操作结果
-type BatchOpResult struct {
-	Succeeded          []string       `json:"succeeded"`
-	Failed             []BatchOpError `json:"failed"`
-	TotalTenantCredits int64          `json:"totalTenantCredits"`
-	TotalUserCredits   int64          `json:"totalUserCredits"`
-}
-
-// DeductionService 运营资金操作：AI 使用退款与充值撤销。
+// DeductionService 运营资金操作：AI 使用结算冲正与充值撤销。
 //
 // 运行时的 AI 扣费不走这里 —— 它由 billing/outbox 消费者直接调用 ledger。
 // 本类型只承载需要人工授权的、有审计意义的账务动作。
@@ -54,10 +40,11 @@ func (s *DeductionService) WithUsageRefunder(r UsageRefunder) *DeductionService 
 	return s
 }
 
-// RefundUsage 全额退回一条已结算的 AI 使用记录（仅平台管理员可操作）。
+// RefundUsage 冲正一条已结算的 AI 使用记录（仅平台管理员可操作）。
 //
-// 退款就是把钱加回账户。账户余额是有符号的，所以「欠费的账户退款只清欠、不退现」
-// 这条规则不需要任何代码来实现 —— 加法本身就是这个语义。
+// 这是对原 request_id 结算的账务冲正：底层按原 settlement 记录的 tenant/user
+// payer 分摊恢复余额，并保持幂等和审计证据。它不是面向用户的通用退款，也不能
+// 用充值替代。
 func (s *DeductionService) RefundUsage(ctx context.Context, requestID, reason, operatorID string) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -225,51 +212,4 @@ func (s *DeductionService) reverseOrder(ctx context.Context, orderID, tenantID, 
 		LostCredits:       lostMicro,
 		IsPartial:         lostMicro > 0,
 	}, nil
-}
-
-func (s *DeductionService) BatchRefundUsage(ctx context.Context, requestIDs []string, reason, operatorID string) BatchOpResult {
-	if len(requestIDs) > 100 {
-		requestIDs = requestIDs[:100]
-	}
-
-	result := BatchOpResult{
-		Succeeded: make([]string, 0),
-		Failed:    make([]BatchOpError, 0),
-	}
-
-	for i, requestID := range requestIDs {
-		if err := ctx.Err(); err != nil {
-			for _, pendingID := range requestIDs[i:] {
-				result.Failed = append(result.Failed, BatchOpError{RequestID: pendingID, Reason: err.Error()})
-			}
-			break
-		}
-		// 读取原始金额用于汇总（RefundUsage 内部会校验状态）。
-		var tenantCredits, userCredits int64
-		if err := s.pool.QueryRow(ctx, `
-			SELECT tenant_charged, user_charged FROM bill_settlements WHERE request_id = $1
-		`, requestID).Scan(&tenantCredits, &userCredits); err != nil && ctx.Err() != nil {
-			for _, pendingID := range requestIDs[i:] {
-				result.Failed = append(result.Failed, BatchOpError{RequestID: pendingID, Reason: ctx.Err().Error()})
-			}
-			break
-		}
-
-		if err := s.RefundUsage(ctx, requestID, reason, operatorID); err != nil {
-			result.Failed = append(result.Failed, BatchOpError{RequestID: requestID, Reason: err.Error()})
-			if ctx.Err() != nil {
-				for _, pendingID := range requestIDs[i+1:] {
-					result.Failed = append(result.Failed, BatchOpError{RequestID: pendingID, Reason: ctx.Err().Error()})
-				}
-				break
-			}
-			continue
-		}
-
-		result.Succeeded = append(result.Succeeded, requestID)
-		result.TotalTenantCredits += tenantCredits
-		result.TotalUserCredits += userCredits
-	}
-
-	return result
 }
