@@ -84,7 +84,13 @@ func TestVerificationKeyRateLimitsUnknownKidReloads(t *testing.T) {
 		t.Fatal("first unknown kid did not record a refresh attempt")
 	}
 
-	if _, err := service.verificationKey(ctx, "forged-kid-2"); err == nil {
+	// Prove that the second forged kid does not touch PostgreSQL. Once the
+	// first lookup has populated the throttle timestamp, close the pool: a
+	// second DB reload would now fail with a pool-closed error instead of the
+	// normal unknown-kid result.
+	pool.Close()
+	_, err = service.verificationKey(ctx, "forged-kid-2")
+	if err == nil {
 		t.Fatal("verificationKey(forged-kid-2) unexpectedly succeeded")
 	}
 	if !service.lastUnknownKidRefresh.Equal(firstRefresh) {
