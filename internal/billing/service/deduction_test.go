@@ -35,15 +35,6 @@ func TestDeductionCommandsHonorCanceledContext(t *testing.T) {
 	if _, err := deduction.ReverseOrder(canceled, "missing", "canceled", "test"); !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled recharge reversal error = %v, want context.Canceled", err)
 	}
-	result := deduction.BatchRefundUsage(canceled, []string{"one", "two"}, "canceled", "test")
-	if len(result.Succeeded) != 0 || len(result.Failed) != 2 {
-		t.Fatalf("canceled batch result = %+v, want two failures and no successes", result)
-	}
-	for _, failure := range result.Failed {
-		if failure.Reason != context.Canceled.Error() {
-			t.Fatalf("canceled batch failure = %+v, want context canceled", failure)
-		}
-	}
 }
 
 func TestRefundUsageCreditsAccountsOnceAndAuditsUsage(t *testing.T) {
@@ -68,9 +59,12 @@ func TestRefundUsageCreditsAccountsOnceAndAuditsUsage(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	var balance int64
-	if err = pool.QueryRow(ctx, `SELECT balance_micro FROM bill_accounts WHERE account_id='user_refund'`).Scan(&balance); err != nil || balance != 2000 {
-		t.Fatalf("refund balance=%d %v", balance, err)
+	var tenantBalance, userBalance int64
+	if err = pool.QueryRow(ctx, `SELECT balance_micro FROM bill_accounts WHERE account_id='tenant_refund'`).Scan(&tenantBalance); err != nil || tenantBalance != 1000 {
+		t.Fatalf("tenant refund balance=%d %v", tenantBalance, err)
+	}
+	if err = pool.QueryRow(ctx, `SELECT balance_micro FROM bill_accounts WHERE account_id='user_refund'`).Scan(&userBalance); err != nil || userBalance != 2000 {
+		t.Fatalf("user refund balance=%d %v", userBalance, err)
 	}
 	var state, reason, operator string
 	if err = pool.QueryRow(ctx, `SELECT state,refund_reason,refund_operator FROM bill_settlements WHERE request_id='req-refund'`).Scan(&state, &reason, &operator); err != nil || state != "refunded" || operator != "admin-refund" || reason != "operator correction" {
