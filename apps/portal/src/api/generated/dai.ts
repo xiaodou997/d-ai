@@ -4000,7 +4000,7 @@ export interface paths {
         put?: never;
         /**
          * 测试上游账号连通性
-         * @description 按所选模型的能力(生图/对话)对上游直发一条真实请求并返回结果，不计费。401/403 会把非停用账号标记为 invalid；invalid 账号验证成功后恢复 active。
+         * @description 按所选模型的能力(生图/对话)对上游直发一条真实请求并返回结果，不计费。401 会把非停用账号标记为 invalid；invalid 账号验证成功后恢复 active。
          */
         post: operations["ai-test-account-upstream"];
         delete?: never;
@@ -10888,6 +10888,8 @@ export interface components {
             capability: string;
             /** @description 失败原因(上游报错/解析失败) */
             error?: string;
+            /** @description 诊断错误代码 */
+            error_code?: string;
             /**
              * Format: int64
              * @description 上游 HTTP 状态码
@@ -10924,6 +10926,8 @@ export interface components {
             prompt_tokens?: number;
             /** @description 对话测试的回复文本 */
             reply_text?: string;
+            /** @description 上游响应 Content-Type */
+            response_content_type?: string;
             /**
              * Format: int64
              * @description 总 token
@@ -10931,6 +10935,8 @@ export interface components {
             total_tokens?: number;
             /** @description 上游真实模型名 */
             upstream_model: string;
+            /** @description 上游返回的请求 ID，便于排查 */
+            upstream_request_id?: string;
         };
         UpstreamAccountTransferAccountDTO: {
             api_key: string;

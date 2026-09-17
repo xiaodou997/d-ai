@@ -215,6 +215,9 @@ export interface UpstreamAccountTestImage {
 }
 
 export interface UpstreamAccountTestResult {
+  response_content_type?: string;
+  upstream_request_id?: string;
+  error_code?: string;
   ok: boolean;
   http_status: number;
   latency_ms: number;

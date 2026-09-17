@@ -11393,6 +11393,9 @@ components:
         error:
           description: 失败原因(上游报错/解析失败)
           type: string
+        error_code:
+          description: 诊断错误代码
+          type: string
         http_status:
           description: 上游 HTTP 状态码
           format: int64
@@ -11433,12 +11436,18 @@ components:
         reply_text:
           description: 对话测试的回复文本
           type: string
+        response_content_type:
+          description: 上游响应 Content-Type
+          type: string
         total_tokens:
           description: 总 token
           format: int64
           type: integer
         upstream_model:
           description: 上游真实模型名
+          type: string
+        upstream_request_id:
+          description: 上游返回的请求 ID，便于排查
           type: string
       required:
         - ok
@@ -21998,7 +22007,7 @@ paths:
         - upstream-accounts
   /api/v1/upstream-accounts/{accountID}/test:
     post:
-      description: 按所选模型的能力(生图/对话)对上游直发一条真实请求并返回结果，不计费。401/403 会把非停用账号标记为 invalid；invalid 账号验证成功后恢复 active。
+      description: 按所选模型的能力(生图/对话)对上游直发一条真实请求并返回结果，不计费。401 会把非停用账号标记为 invalid；invalid 账号验证成功后恢复 active。
       operationId: ai-test-account-upstream
       parameters:
         - description: 上游账号 ID

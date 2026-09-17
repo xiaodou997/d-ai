@@ -556,4 +556,26 @@ describe('UpstreamAccountsWorkspace', () => {
       }
     })
   })
+  it('uses the default request and displays upstream diagnostic metadata', async () => {
+    api.listUpstreamAccounts.mockResolvedValue({ items: [{
+      id: 'chat-account', name: 'Chat account', status: 'active',
+      endpoints: [{ id: 'chat-endpoint', api_format: 'openai_responses', base_url: 'https://api.example.com', status: 'active' }]
+    }] })
+    api.listAccountModelBindings.mockResolvedValue({ items: [{ model_code: 'public-model', capability_type: 'chat' }] })
+    api.testUpstreamAccount.mockResolvedValue({ ok: true, http_status: 200, latency_ms: 200, capability: 'chat', api_format: 'openai_responses', upstream_model: 'bound-model', reply_text: 'OK', response_content_type: 'text/event-stream', upstream_request_id: 'upstream-123' })
+    const wrapper = mount(AccountsView, { global })
+    await flushPromises()
+    await wrapper.findAll('button').find((button) => button.text().includes('测试连通'))!.trigger('click')
+    await flushPromises()
+    const dialog = wrapper.get('[data-dialog-title="测试账号连通"]')
+    expect(dialog.find('input[placeholder="粘贴与所选端点协议一致的 JSON 请求体"]').exists()).toBe(false)
+    const run = dialog.findAll('button').find((button) => button.text().includes('开始测试'))!
+    await run.trigger('click')
+    await flushPromises()
+    expect(api.testUpstreamAccount).toHaveBeenCalledWith('chat-account', expect.objectContaining({ model_code: 'public-model', prompt: undefined }))
+    expect(api.testUpstreamAccount.mock.calls[0]?.[1]).not.toHaveProperty('request_body')
+    expect(dialog.text()).toContain('text/event-stream')
+    expect(dialog.text()).toContain('upstream-123')
+  })
+
 })

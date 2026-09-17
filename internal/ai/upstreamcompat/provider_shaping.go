@@ -173,5 +173,23 @@ func UnwrapResponseBody(c *domain.RouteCandidate, body []byte) []byte {
 }
 
 func ApplyRequestBodyTransform(c *domain.RouteCandidate, meta RequestMeta, body []byte) ([]byte, error) {
-	return body, nil
+	if c == nil || c.Protocol != domain.ProtocolGeminiGenerate || c.FixedProviderType != "" {
+		return body, nil
+	}
+	// Gemini carries the model and streaming action in the URL, not JSON.
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(body, &fields); err != nil {
+		return nil, fmt.Errorf("invalid Gemini request: %w", err)
+	}
+	if fields == nil {
+		return nil, fmt.Errorf("Gemini request must be an object")
+	}
+	_, model := fields["model"]
+	_, stream := fields["stream"]
+	if !model && !stream {
+		return body, nil
+	}
+	delete(fields, "model")
+	delete(fields, "stream")
+	return json.Marshal(fields)
 }

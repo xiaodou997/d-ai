@@ -96,3 +96,16 @@ func TestDecodeConsoleImageEditRequestUsesOfficialJSONSchema(t *testing.T) {
 		t.Fatalf("request options = %+v", decoded)
 	}
 }
+
+func TestConsoleImageGenerationPreservesCompressionAndModeration(t *testing.T) {
+	compression := 70
+	raw, err := buildConsoleImageBody(consoleImageGenerateRequest{N: 2, Size: "1536x1024", OutputFormat: "webp", OutputCompression: &compression, Moderation: "low"}, "image-model", "landscape")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var body map[string]any
+	json.Unmarshal(raw, &body)
+	if body["output_compression"] != float64(70) || body["moderation"] != "low" || body["n"] != float64(2) || body["prompt"] != "landscape" || body["instructions"] != nil {
+		t.Fatalf("body=%s", raw)
+	}
+}

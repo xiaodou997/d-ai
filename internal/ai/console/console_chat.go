@@ -19,6 +19,7 @@ import (
 	coreidentity "xiaodou/dai/internal/ai/core/identity"
 	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/internal/ai/gateway"
+	"xiaodou/dai/internal/ai/upstreamcompat"
 	"xiaodou/dai/internal/ai/workspace"
 )
 
@@ -294,6 +295,7 @@ func (s *Console) handleConsoleChatStream(w http.ResponseWriter, r *http.Request
 		defer func() { persistence.close(routeID, !completed) }()
 	}
 	runtimeResult := s.gateway.ExecuteRuntime(capture, r, domain.CapabilityChat, gateway.RuntimeOverride{
+		Model: modelCode, Stream: true, Apply: true,
 		ClientProtocol: protocol,
 		ClientPath:     clientPath,
 	}, sessionSubject, false)
@@ -445,111 +447,19 @@ func (s *Console) chooseConsoleChatProtocol(r *http.Request, subject *coreidenti
 }
 
 func buildConsoleProtocolBody(protocol domain.UpstreamProtocol, modelCode string, messages []consoleChatMessage, maxTokens int) ([]byte, string, error) {
-	switch protocol {
-	case domain.ProtocolOpenAIChat:
-		body := map[string]any{
-			"model":      modelCode,
-			"messages":   messages,
-			"stream":     true,
-			"max_tokens": maxTokens,
-		}
-		raw, err := json.Marshal(body)
-		return raw, "/v1/chat/completions", err
-	case domain.ProtocolOpenAIResponses:
-		body := map[string]any{
-			"model":             modelCode,
-			"input":             openAIResponsesInput(messages),
-			"stream":            true,
-			"max_output_tokens": maxTokens,
-		}
-		raw, err := json.Marshal(body)
-		return raw, "/v1/responses", err
-	case domain.ProtocolAnthropicMessages:
-		body := map[string]any{
-			"model":      modelCode,
-			"messages":   anthropicMessages(messages),
-			"stream":     true,
-			"max_tokens": maxTokens,
-		}
-		if system := systemPrompt(messages); system != "" {
-			body["system"] = system
-		}
-		raw, err := json.Marshal(body)
-		return raw, "/v1/messages", err
-	case domain.ProtocolGeminiGenerate:
-		body := map[string]any{
-			"model":            modelCode,
-			"contents":         geminiContents(messages),
-			"generationConfig": map[string]any{"maxOutputTokens": maxTokens},
-		}
-		raw, err := json.Marshal(body)
-		return raw, "/v1beta/models/{model}:streamGenerateContent", err
-	default:
-		return nil, "", fmt.Errorf("unsupported protocol")
+	input := make([]upstreamcompat.Message, len(messages))
+	for i, msg := range messages {
+		input[i] = upstreamcompat.Message{Role: msg.Role, Content: msg.Content}
 	}
-}
-
-func openAIResponsesInput(messages []consoleChatMessage) []map[string]any {
-	out := make([]map[string]any, 0, len(messages))
-	for _, msg := range messages {
-		role := msg.Role
-		if role == "assistant" {
-			role = "assistant"
-		} else if role != "system" {
-			role = "user"
-		}
-		out = append(out, map[string]any{
-			"role": role,
-			"content": []map[string]any{{
-				"type": "input_text",
-				"text": msg.Content,
-			}},
-		})
+	body, err := upstreamcompat.BuildChatRequest(protocol, modelCode, input, true, maxTokens)
+	if err != nil {
+		return nil, "", err
 	}
-	return out
-}
-
-func anthropicMessages(messages []consoleChatMessage) []map[string]string {
-	out := make([]map[string]string, 0, len(messages))
-	for _, msg := range messages {
-		if msg.Role == "system" {
-			continue
-		}
-		role := msg.Role
-		if role != "assistant" {
-			role = "user"
-		}
-		out = append(out, map[string]string{"role": role, "content": msg.Content})
+	path, err := upstreamcompat.DefaultPath(protocol, "")
+	if protocol == domain.ProtocolGeminiGenerate {
+		path = "/v1beta/models/{model}:streamGenerateContent"
 	}
-	return out
-}
-
-func systemPrompt(messages []consoleChatMessage) string {
-	parts := make([]string, 0)
-	for _, msg := range messages {
-		if msg.Role != "system" {
-			continue
-		}
-		if text := strings.TrimSpace(msg.Content); text != "" {
-			parts = append(parts, text)
-		}
-	}
-	return strings.Join(parts, "\n\n")
-}
-
-func geminiContents(messages []consoleChatMessage) []map[string]any {
-	out := make([]map[string]any, 0, len(messages))
-	for _, msg := range messages {
-		role := "user"
-		if msg.Role == "assistant" {
-			role = "model"
-		}
-		out = append(out, map[string]any{
-			"role":  role,
-			"parts": []map[string]string{{"text": msg.Content}},
-		})
-	}
-	return out
+	return body, path, err
 }
 
 func lastUserText(messages []consoleChatMessage) string {

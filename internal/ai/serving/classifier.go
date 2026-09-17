@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 	"xiaodou/dai/internal/ai/domain"
+	"xiaodou/dai/internal/ai/upstreamcompat"
 )
 
 // ResultStatus is shared by retry policy, availability and attempt statistics.
@@ -17,21 +18,24 @@ type ResultStatus int
 const (
 	ResultUnknown ResultStatus = iota
 	ResultSuccess
-	ResultClientError  // other 4xx — request is malformed, don't retry
-	ResultUnauthorized // 401/403 — credential is rejected, swap or fail over
-	ResultRateLimited  // 429 — back off and retry on a different route
-	ResultServerError  // 5xx
-	ResultTimeout      // ctx deadline exceeded / explicit timeout
-	ResultNetwork      // transport-level error (DNS / connection refused / TLS)
-	ResultCanceled     // caller context ended; never retry or penalize upstream health
-	ResultCircuitOpen  // candidate skipped: circuit breaker open, never reached transport
-	ResultRejected     // candidate skipped by planner/binder verdict, never reached transport
-	ResultModelError   // upstream model or operation is unavailable
+	ResultClientError    // other 4xx — request is malformed, don't retry
+	ResultUnauthorized   // 401/403 — credential is rejected, swap or fail over
+	ResultRateLimited    // 429 — back off and retry on a different route
+	ResultServerError    // 5xx
+	ResultTimeout        // ctx deadline exceeded / explicit timeout
+	ResultNetwork        // transport-level error (DNS / connection refused / TLS)
+	ResultCanceled       // caller context ended; never retry or penalize upstream health
+	ResultCircuitOpen    // candidate skipped: circuit breaker open, never reached transport
+	ResultRejected       // candidate skipped by planner/binder verdict, never reached transport
+	ResultModelError     // upstream model or operation is unavailable
+	ResultPolicyRejected // upstream rejected this request by policy, not an account health failure
 )
 
 // String returns a short human-readable label for the status.
 func (s ResultStatus) String() string {
 	switch s {
+	case ResultPolicyRejected:
+		return "policy_rejected"
 	case ResultModelError:
 		return "model_error"
 	case ResultSuccess:
@@ -127,7 +131,7 @@ func (o Outcome) Decision(hasCredential bool) Decision {
 			return DecisionRetryNewCred
 		}
 		return DecisionRetry
-	case ResultModelError, ResultRateLimited, ResultServerError, ResultTimeout, ResultNetwork:
+	case ResultPolicyRejected, ResultModelError, ResultRateLimited, ResultServerError, ResultTimeout, ResultNetwork:
 		return DecisionRetry
 	case ResultClientError:
 		return DecisionGiveUp
@@ -207,6 +211,9 @@ type AttemptRecord struct {
 func ClassifyResponse(status int, headers http.Header, body string, err error) Outcome {
 	out := ClassifyOutcome(status, err)
 	out.RetryAt = retryAfter(headers)
+	if _, blocked := upstreamcompat.ProbeBlock(headers); err == nil && status >= 200 && status < 300 && blocked {
+		return Outcome{Status: ResultPolicyRejected, HTTPStatus: status, ErrorCode: upstreamcompat.ProbeBlockedCode}
+	}
 	if err != nil {
 		return out
 	}

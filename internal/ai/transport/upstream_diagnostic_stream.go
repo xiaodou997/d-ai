@@ -68,6 +68,24 @@ func readUpstreamTestBody(r io.Reader, format string, stream bool) ([]byte, erro
 }
 
 func upstreamTestDocumentError(doc map[string]any) string {
+	stop, _ := doc["stop_reason"].(string)
+	if delta, ok := doc["delta"].(map[string]any); ok {
+		if reason, ok := delta["stop_reason"].(string); ok {
+			stop = reason
+		}
+	}
+	if stop == "max_tokens" {
+		return "上游达到输出 token 上限，未完整完成测试"
+	}
+	if choices, ok := doc["choices"].([]any); ok {
+		for _, raw := range choices {
+			choice, _ := raw.(map[string]any)
+			if reason, _ := choice["finish_reason"].(string); reason == "length" || reason == "content_filter" {
+				return "上游未完整完成测试（" + reason + "）"
+			}
+		}
+	}
+
 	if response, ok := doc["response"].(map[string]any); ok {
 		if message := upstreamTestDocumentError(response); message != "" {
 			return message
@@ -101,11 +119,15 @@ func parseUpstreamTestChatResponse(res *upstreamTestResult, format string, body 
 		return
 	}
 	complete := false
+	toolReply := ""
 	var text strings.Builder
 	for _, doc := range docs {
 		if message := upstreamTestDocumentError(doc); message != "" {
 			res.Error = message
 			return
+		}
+		if reply := upstreamTestToolReply(doc); reply != "" {
+			toolReply = reply
 		}
 		typ, _ := doc["type"].(string)
 		switch format {
@@ -162,6 +184,9 @@ func parseUpstreamTestChatResponse(res *upstreamTestResult, format string, body 
 	if res.ReplyText == "" {
 		res.ReplyText = text.String()
 	}
+	if res.ReplyText == "" {
+		res.ReplyText = toolReply
+	}
 	res.TotalTokens = max(res.TotalTokens, res.PromptTokens+res.OutputTokens)
 	res.OK = complete && strings.TrimSpace(res.ReplyText) != ""
 	if !complete {
@@ -198,4 +223,54 @@ func upstreamTestHTTPError(status int, body []byte) string {
 		return fmt.Sprintf("HTTP %d：%s", status, message)
 	}
 	return fmt.Sprintf("HTTP %d：%s。详情：%s", status, message, truncateStr(detail, 1024))
+}
+
+// A completed tool-call response is a valid model result; diagnostics never
+// execute tools. Only inspect protocol output fields, not arbitrary metadata.
+func upstreamTestToolReply(doc map[string]any) string {
+	if nested, ok := doc["response"].(map[string]any); ok {
+		return upstreamTestToolReply(nested)
+	}
+	for _, field := range []string{"item", "content_block"} {
+		if nested, ok := doc[field].(map[string]any); ok {
+			if reply := upstreamTestToolReply(nested); reply != "" {
+				return reply
+			}
+		}
+	}
+	typ, _ := doc["type"].(string)
+	if typ == "function_call" || typ == "custom_tool_call" || typ == "tool_use" {
+		if name, _ := doc["name"].(string); strings.TrimSpace(name) != "" {
+			return "工具调用（仅验证返回，未执行）：" + truncateStr(name, 256)
+		}
+	}
+	for _, field := range []string{"output", "content"} {
+		if items, ok := doc[field].([]any); ok {
+			for _, raw := range items {
+				if item, ok := raw.(map[string]any); ok {
+					if reply := upstreamTestToolReply(item); reply != "" {
+						return reply
+					}
+				}
+			}
+		}
+	}
+	if choices, ok := doc["choices"].([]any); ok {
+		for _, raw := range choices {
+			choice, _ := raw.(map[string]any)
+			for _, field := range []string{"message", "delta"} {
+				message, _ := choice[field].(map[string]any)
+				if calls, ok := message["tool_calls"].([]any); ok {
+					for _, rawCall := range calls {
+						call, _ := rawCall.(map[string]any)
+						function, _ := call["function"].(map[string]any)
+						if name, _ := function["name"].(string); strings.TrimSpace(name) != "" {
+							return "工具调用（仅验证返回，未执行）：" + truncateStr(name, 256)
+						}
+					}
+				}
+			}
+		}
+	}
+	return ""
 }

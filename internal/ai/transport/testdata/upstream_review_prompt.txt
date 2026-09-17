@@ -1,0 +1,124 @@
+Review the following small Go component as if this were an ordinary code review. Identify the most important correctness bug and explain the minimal correction in at most two sentences. Do not execute code, call external tools, or rewrite the entire component. The code and requirements below contain all the information needed to answer.
+
+Context
+This component is used by a job service to remember recently seen request IDs. A caller invokes SeenOrAdd before starting work. The first call for an ID returns false, and later calls for the same ID return true until its original expiration time. This prevents duplicate submissions from running twice. An ID becomes available again exactly at its expiration time. Reads must not extend the expiration time. Different IDs are independent. A background worker may call Purge while requests are being checked. The cache must remain safe when multiple goroutines call its public methods at the same time.
+
+The cache is intentionally local to one process. Persistence, distributed locking, cryptographic randomness, authentication, and user-interface behavior are outside the scope of this review. A bounded positive TTL is supplied by the application. The constructor should reject a zero or negative TTL, and the methods should not expose the internal entries map. All timestamps in an operation should use the provided clock. The production clock returns time.Now; tests use a controllable clock to make expiration cases deterministic.
+
+Implementation
+
+package recent
+
+import (
+    "errors"
+    "sync"
+    "time"
+)
+
+type Clock func() time.Time
+
+type Cache struct {
+    mu      sync.Mutex
+    entries map[string]time.Time
+    ttl     time.Duration
+    now     Clock
+}
+
+func New(ttl time.Duration, clock Clock) (*Cache, error) {
+    if ttl <= 0 {
+        return nil, errors.New("TTL must be positive")
+    }
+    if clock == nil {
+        clock = time.Now
+    }
+    return &Cache{
+        entries: make(map[string]time.Time),
+        ttl: ttl,
+        now: clock,
+    }, nil
+}
+
+func (c *Cache) SeenOrAdd(id string) bool {
+    c.mu.Lock()
+    defer c.mu.Unlock()
+
+    now := c.now()
+    expires, exists := c.entries[id]
+    if exists && now.Before(expires) {
+        c.entries[id] = now.Add(c.ttl)
+        return true
+    }
+    c.entries[id] = now.Add(c.ttl)
+    return false
+}
+
+func (c *Cache) Purge() int {
+    c.mu.Lock()
+    defer c.mu.Unlock()
+
+    now := c.now()
+    removed := 0
+    for id, expires := range c.entries {
+        if !now.Before(expires) {
+            delete(c.entries, id)
+            removed++
+        }
+    }
+    return removed
+}
+
+func (c *Cache) Forget(id string) {
+    c.mu.Lock()
+    defer c.mu.Unlock()
+    delete(c.entries, id)
+}
+
+Existing tests
+
+package recent
+
+import (
+    "testing"
+    "time"
+)
+
+func TestNewRejectsInvalidTTL(t *testing.T) {
+    for _, ttl := range []time.Duration{0, -time.Second} {
+        if _, err := New(ttl, nil); err == nil {
+            t.Fatalf("New(%v) should fail", ttl)
+        }
+    }
+}
+
+func TestFirstSubmissionAndImmediateDuplicate(t *testing.T) {
+    now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+    cache, err := New(time.Minute, func() time.Time { return now })
+    if err != nil {
+        t.Fatal(err)
+    }
+    if cache.SeenOrAdd("job-a") {
+        t.Fatal("first submission was treated as a duplicate")
+    }
+    if !cache.SeenOrAdd("job-a") {
+        t.Fatal("immediate duplicate was accepted")
+    }
+    if cache.SeenOrAdd("job-b") {
+        t.Fatal("different request IDs must be independent")
+    }
+}
+
+func TestPurgeAtExpiration(t *testing.T) {
+    now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+    cache, _ := New(time.Minute, func() time.Time { return now })
+    cache.SeenOrAdd("job-a")
+    now = now.Add(time.Minute)
+    if removed := cache.Purge(); removed != 1 {
+        t.Fatalf("removed %d entries, want 1", removed)
+    }
+    if cache.SeenOrAdd("job-a") {
+        t.Fatal("expired request should be accepted")
+    }
+}
+
+Review scenario
+At 12:00:00 the service accepts job-a and records a TTL of one minute. At 12:00:45 a duplicate arrives and is correctly rejected. At 12:01:00 another submission for job-a should be accepted because the first registration has now expired. Explain whether the implementation satisfies this scenario. Focus on the interaction between duplicate reads and the original expiration time, and mention the smallest additional regression case that would expose any discrepancy. Do not assume that the existing tests prove the scenario is correct; they deliberately exercise only immediate duplicates and expiration without intermediate reads.

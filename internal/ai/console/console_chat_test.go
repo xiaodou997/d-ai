@@ -10,6 +10,7 @@ import (
 
 	"xiaodou/dai/internal/ai/core/surface"
 	"xiaodou/dai/internal/ai/domain"
+	"xiaodou/dai/internal/ai/upstreamcompat"
 	"xiaodou/dai/internal/ai/workspace"
 )
 
@@ -102,4 +103,16 @@ func containsTemperature(value any) bool {
 		}
 	}
 	return false
+}
+
+func TestConsoleResponsesSharesManagedContract(t *testing.T) {
+	messages := []consoleChatMessage{{Role: "user", Content: "hello"}, {Role: "assistant", Content: "earlier reply"}, {Role: "user", Content: "continue"}}
+	got, path, err := buildConsoleProtocolBody(domain.ProtocolOpenAIResponses, "model", messages, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected, err := upstreamcompat.BuildChatRequest(domain.ProtocolOpenAIResponses, "model", []upstreamcompat.Message{{Role: "user", Content: "hello"}, {Role: "assistant", Content: "earlier reply"}, {Role: "user", Content: "continue"}}, true, 2048)
+	if err != nil || string(got) != string(expected) || path != "/v1/responses" {
+		t.Fatalf("console is not using shared contract: %s (%v)", got, err)
+	}
 }

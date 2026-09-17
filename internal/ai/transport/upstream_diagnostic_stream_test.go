@@ -106,3 +106,35 @@ func TestDiagnosticRejectsMalformedEventsBeforeCompletion(t *testing.T) {
 		}
 	}
 }
+
+func TestDiagnosticExplainsExplicitProbeBlock(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Header().Set("X-Sub2api-Probe-Blocked", "true")
+		w.Header().Set("X-Sub2api-Estimated-Input-Tokens", "34")
+		io.WriteString(w, "Hi! What can I help you with?")
+	}))
+	defer server.Close()
+	result := runUpstreamAccountTest(context.Background(), NewClient(0).DiagnosticClient(), upstreamTestConfig{BaseURL: server.URL, APIFormat: string(domain.ProtocolOpenAIResponses), UpstreamModel: "model", Capability: "chat"})
+	if result.OK || result.HTTPStatus != 200 || !strings.Contains(result.Error, "探测") || !strings.Contains(result.Error, "34 tokens") || strings.Contains(result.Error, "非 JSON") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
+type probeHealthRecorder struct {
+	UpstreamAccountEndpointManager
+	health  domain.HealthStatus
+	message string
+}
+
+func (r *probeHealthRecorder) UpdateEndpointHealth(_ context.Context, _, _ string, health domain.HealthStatus, message string) (domain.UpstreamAccountEndpoint, error) {
+	r.health, r.message = health, message
+	return domain.UpstreamAccountEndpoint{}, nil
+}
+func TestProbeDiagnosticDoesNotDeclareEndpointUnhealthy(t *testing.T) {
+	recorder := &probeHealthRecorder{}
+	err := reconcileUpstreamAccountTestStatus(context.Background(), nil, recorder, nil, "account", "endpoint", domain.UpstreamAccountStatusActive, upstreamTestResult{HTTPStatus: 200, ProbeBlocked: true, Error: "probe blocked"})
+	if err != nil || recorder.health != domain.HealthUnknown || recorder.message != "probe blocked" {
+		t.Fatalf("error=%v recorder=%+v", err, recorder)
+	}
+}

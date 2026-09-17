@@ -448,6 +448,9 @@ function toTestImageResponseFormat(value: string | undefined): "url" | "b64_json
 
 function toAccountTest(value: AccountTestTransport): UpstreamAccountTestResult {
   return {
+    response_content_type: value.response_content_type,
+    upstream_request_id: value.upstream_request_id,
+    error_code: value.error_code,
     ok: value.ok,
     http_status: value.http_status,
     latency_ms: value.latency_ms,

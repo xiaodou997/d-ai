@@ -16,6 +16,7 @@ import (
 	"xiaodou/dai/internal/ai/formats"
 	"xiaodou/dai/internal/ai/gateway"
 	"xiaodou/dai/internal/ai/imageedit"
+	"xiaodou/dai/internal/ai/upstreamcompat"
 )
 
 // consoleImageResolution is deliberately local to the caller's goroutine.
@@ -456,30 +457,9 @@ func (s *Console) ensureConsoleImageModelGranted(ctx context.Context, subject *c
 }
 
 func buildConsoleImageBody(req consoleImageGenerateRequest, modelCode, prompt string) ([]byte, error) {
-	body := map[string]any{}
-	body["model"] = modelCode
-	body["prompt"] = prompt
-	if req.N > domain.DefaultImageOutputCount {
-		body["n"] = req.N
-	}
-	if req.Size != "" {
-		body["size"] = req.Size
-	}
-	if req.ResponseFormat != "" {
-		body["response_format"] = req.ResponseFormat
-	} else {
-		body["response_format"] = defaultConsoleImageResponseFormat
-	}
-	if req.Stream != nil {
-		body["stream"] = *req.Stream
-	}
-	if req.Background != "" {
-		body["background"] = req.Background
-	}
-	if req.OutputFormat != "" {
-		body["output_format"] = req.OutputFormat
-	}
-	return json.Marshal(body)
+	return upstreamcompat.BuildImageRequest(domain.ProtocolOpenAIImages, modelCode, prompt, upstreamcompat.ImageOptions{
+		N: req.N, Stream: consoleImageRequestStreamEnabled(req), Size: req.Size, ResponseFormat: effectiveConsoleImageResponseFormat(req.ResponseFormat), Background: req.Background, OutputFormat: req.OutputFormat, Moderation: req.Moderation, User: req.User, OutputCompression: req.OutputCompression,
+	})
 }
 
 func decodeConsoleImageEditRequest(req consoleImageGenerateRequest) (imageedit.Request, error) {

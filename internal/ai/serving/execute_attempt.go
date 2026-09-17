@@ -18,6 +18,7 @@ import (
 	corebridge "xiaodou/dai/internal/ai/core/bridge"
 	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/internal/ai/routing"
+	"xiaodou/dai/internal/ai/upstreamcompat"
 )
 
 func (s *ExecuteStep) usesClientRuntime(candidate *domain.RouteCandidate) bool {
@@ -271,7 +272,7 @@ func (s *ExecuteStep) runAttempt(parentCtx context.Context, req *Request, cand *
 	if upResp != nil {
 		status = upResp.StatusCode
 	}
-	outcome := ClassifyOutcome(status, callErr)
+	outcome := ClassifyResponse(status, upstreamHeaders(upResp), "", callErr)
 	if callErr != nil && phaseCause == nil && parentCtx.Err() != nil {
 		outcome = Outcome{Status: ResultCanceled, Err: parentCtx.Err()}
 	}
@@ -322,6 +323,17 @@ func (s *ExecuteStep) runAttempt(parentCtx context.Context, req *Request, cand *
 			finished: true,
 			finalErr: apiError(http.StatusGatewayTimeout, req.ErrorCode, req.ErrorMessage),
 		}
+	}
+
+	if outcome.Status == ResultPolicyRejected {
+		// This 200 is an explicit request-policy refusal. Do not parse its
+		// greeting as a model result or cool down an otherwise healthy account.
+		_ = upResp.Body.Close()
+		req.Attempts[attemptIndex].ErrorMsg = upstreamcompat.ProbeBlockedMessage
+		s.recordOutcome(parentCtx, req, cand, outcome)
+		logUpstreamFailure(parentCtx, req, cand, upstreamURL, status, latencyMs, nil,
+			upstreamcompat.ProbeBlockedCode+": "+upstreamcompat.ProbeBlockedMessage, upstreamContentType, upstreamRequestSummary)
+		return attemptResult{decision: DecisionRetry, finalErr: apiError(http.StatusBadGateway, upstreamcompat.ProbeBlockedCode, upstreamcompat.ProbeBlockedMessage)}
 	}
 
 	// Pre-read error body once (consumed by DecisionRetry/GiveUp branches below)

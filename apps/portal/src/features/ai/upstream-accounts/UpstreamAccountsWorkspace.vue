@@ -1079,14 +1079,14 @@ onBeforeUnmount(() => {
               :rows="3"
               :placeholder="testIsImage
                 ? 'Generate a cute orange cat astronaut sticker on a clean pastel background.'
-                : 'Reply with a short friendly greeting.'"
+                : testSelectedCapability === 'embedding' ? 'A short sentence for embedding validation.' : '留空使用带代码、需求和回归场景的代码审查示例，要求简短回复；也可输入实际业务内容。'"
             />
             <p class="test-hint">
               {{ testIsImage
                 ? '选择图片模型后，这里会直接发起生图测试，并在下方展示返回图片。'
                 : testSelectedCapability === 'embedding'
                   ? '选择向量模型后，这里会发送一段输入文本并验证返回向量。'
-                  : '对话测试使用业务转发的网络出口；OpenAI 和 Anthropic 按流式协议验证完整响应。' }}
+                  : '默认使用带上下文的代码审查示例；输入提示词后替换默认示例。使用业务网络出口并验证完整响应，上游可能计费。' }}
             </p>
           </el-form-item>
           <el-form-item v-if="testIsImage" label="测试类型">
@@ -1137,7 +1137,10 @@ onBeforeUnmount(() => {
               <img v-else-if="testResult.image_url" :src="testResult.image_url" alt="生图测试结果" class="test-image" />
             </div>
           </template>
-          <span v-else class="test-line test-muted">尚未测试。选择模型后点击「开始测试」。</span>
+          <span v-if="testResult?.response_content_type" class="test-line test-muted">响应类型：{{ testResult.response_content_type }}</span>
+          <span v-if="testResult?.upstream_request_id" class="test-line test-muted">上游请求 ID：{{ testResult.upstream_request_id }}</span>
+          <span v-if="!testResult && testError" class="test-line test-err">{{ testError }}</span>
+          <span v-if="!testing && !testResult && !testError" class="test-line test-muted">尚未测试。选择模型后点击「开始测试」。</span>
         </div>
       </div>
       <template #footer>

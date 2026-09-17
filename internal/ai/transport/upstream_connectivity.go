@@ -48,6 +48,9 @@ type upstreamAccountTestInput struct {
 
 type upstreamAccountTestOutput struct {
 	Body struct {
+		ResponseContentType         string `json:"response_content_type,omitempty" doc:"上游响应 Content-Type"`
+		UpstreamRequestID           string `json:"upstream_request_id,omitempty" doc:"上游返回的请求 ID，便于排查"`
+		ErrorCode                   string `json:"error_code,omitempty" doc:"诊断错误代码"`
 		OK                          bool   `json:"ok" doc:"上游是否返回可用结果"`
 		HTTPStatus                  int    `json:"http_status" doc:"上游 HTTP 状态码"`
 		LatencyMs                   int64  `json:"latency_ms" doc:"往返耗时(毫秒)"`
@@ -77,13 +80,12 @@ type upstreamTestBinding struct {
 
 func registerUpstreamAccountTest(api huma.API, d UpstreamDiagnosticsHTTPDeps) {
 	huma.Register(api, huma.Operation{
-		OperationID:  "ai-test-account-upstream",
-		Method:       http.MethodPost,
-		Path:         "/api/v1/upstream-accounts/{accountID}/test",
-		MaxBodyBytes: imagepayload.MaxImageRequestBodyBytes,
-		Summary:      "测试上游账号连通性",
-		Description:  "按所选模型的能力(生图/对话)对上游直发一条真实请求并返回结果，不计费。401/403 会把非停用账号标记为 invalid；invalid 账号验证成功后恢复 active。",
-		Tags:         []string{"upstream-accounts"},
+		OperationID: "ai-test-account-upstream",
+		Method:      http.MethodPost,
+		Path:        "/api/v1/upstream-accounts/{accountID}/test",
+		Summary:     "测试上游账号连通性",
+		Description: "按所选模型的能力(生图/对话)对上游直发一条真实请求并返回结果，不计费。401 会把非停用账号标记为 invalid；invalid 账号验证成功后恢复 active。",
+		Tags:        []string{"upstream-accounts"},
 	}, func(ctx context.Context, in *upstreamAccountTestInput) (*upstreamAccountTestOutput, error) {
 		if d.AccountReader == nil || d.ModelBindings == nil || d.ProviderSecrets == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("database or provider secret codec is not configured")
@@ -145,6 +147,9 @@ func registerUpstreamAccountTest(api huma.API, d UpstreamDiagnosticsHTTPDeps) {
 			return nil, mapServiceError(err)
 		}
 		out := &upstreamAccountTestOutput{}
+		out.Body.ResponseContentType = result.ResponseContentType
+		out.Body.UpstreamRequestID = result.UpstreamRequestID
+		out.Body.ErrorCode = result.ErrorCode
 		out.Body.OK = result.OK
 		out.Body.HTTPStatus = result.HTTPStatus
 		out.Body.LatencyMs = result.LatencyMs
@@ -172,6 +177,9 @@ func reconcileUpstreamAccountTestStatus(ctx context.Context, health UpstreamAcco
 		status, lastError := domain.HealthHealthy, ""
 		if !result.OK {
 			status, lastError = domain.HealthUnhealthy, result.Error
+			if result.ProbeBlocked {
+				status = domain.HealthUnknown
+			}
 		}
 		if _, err := endpoints.UpdateEndpointHealth(ctx, accountID, endpointID, status, lastError); err != nil {
 			return err
@@ -262,6 +270,10 @@ type upstreamTestConfig struct {
 }
 
 type upstreamTestResult struct {
+	ResponseContentType         string
+	UpstreamRequestID           string
+	ErrorCode                   string
+	ProbeBlocked                bool
 	OK                          bool
 	HTTPStatus                  int
 	LatencyMs                   int64
@@ -281,7 +293,6 @@ type upstreamTestResult struct {
 }
 
 const (
-	defaultTestChatPrompt                       = "Reply with a short friendly greeting."
 	defaultTestImagePrompt                      = "Generate a cute orange cat astronaut sticker on a clean pastel background."
 	upstreamTestOpenAIImageSize                 = "1024x1024"
 	upstreamTestGeminiImageSize                 = "1K"
@@ -429,10 +440,12 @@ func runUpstreamAccountTest(ctx context.Context, client HTTPDoer, cfg upstreamTe
 		res.Capability = "embedding"
 	}
 
-	prompt := cfg.Prompt
+	prompt := strings.TrimSpace(cfg.Prompt)
 	if prompt == "" {
 		if isImage {
 			prompt = defaultTestImagePrompt
+		} else if isEmbedding {
+			prompt = "A short sentence for embedding validation."
 		} else {
 			prompt = defaultTestChatPrompt
 		}
@@ -460,8 +473,21 @@ func runUpstreamAccountTest(ctx context.Context, client HTTPDoer, cfg upstreamTe
 		return res
 	}
 	deadline.headersReceived()
+	res.ResponseContentType = truncateStr(resp.Header.Get("Content-Type"), 256)
+	res.UpstreamRequestID = truncateStr(resp.Header.Get("X-Request-ID"), 256)
 	defer resp.Body.Close()
-	streaming := strings.Contains(strings.ToLower(resp.Header.Get("Content-Type")), "text/event-stream") || (!isImage && !isEmbedding && upstreamChatTestStreams(cfg.APIFormat)) || (isImage && normalizedUpstreamTestImageStreamMode(cfg.ImageStreamMode) == domain.ImageStreamModeForceStream)
+	if estimated, blocked := upstreamcompat.ProbeBlock(resp.Header); blocked && resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		res.ProbeBlocked = true
+		res.ErrorCode = upstreamcompat.ProbeBlockedCode
+		res.HTTPStatus = resp.StatusCode
+		res.LatencyMs = time.Since(start).Milliseconds()
+		res.Error = "上游将本次请求识别为探测并拦截（x-sub2api-probe-blocked=true），未返回模型结果。请检查上游防探测策略，或使用实际业务内容测试。"
+		if estimated > 0 {
+			res.Error += fmt.Sprintf("上游估算输入 %d tokens。", estimated)
+		}
+		return res
+	}
+	streaming := strings.Contains(strings.ToLower(resp.Header.Get("Content-Type")), "text/event-stream") || (!isImage && !isEmbedding && req.Header.Get("Accept") == "text/event-stream") || (isImage && normalizedUpstreamTestImageStreamMode(cfg.ImageStreamMode) == domain.ImageStreamModeForceStream)
 	body, readErr := readUpstreamTestBody(&upstreamTestBodyReader{reader: resp.Body, deadline: deadline, streaming: streaming}, cfg.APIFormat, strings.Contains(strings.ToLower(resp.Header.Get("Content-Type")), "text/event-stream"))
 	res.LatencyMs = time.Since(start).Milliseconds()
 	res.HTTPStatus = resp.StatusCode
@@ -506,68 +532,36 @@ func buildUpstreamTestRequest(ctx context.Context, cfg upstreamTestConfig, isIma
 		contentType = "application/json"
 	)
 	imageStream := normalizedUpstreamTestImageStreamMode(cfg.ImageStreamMode) == domain.ImageStreamModeForceStream
-	switch format {
-	case string(domain.ProtocolGeminiGenerate):
-		if isImage {
-			body, _ = json.Marshal(map[string]any{
-				"contents": []any{map[string]any{"role": "user", "parts": []any{map[string]any{"text": prompt}}}},
-				"generationConfig": map[string]any{
-					"responseModalities": []string{"TEXT", "IMAGE"},
-					"imageConfig":        map[string]any{"imageSize": upstreamTestGeminiImageSize},
-				},
-			})
-		} else {
-			body, _ = json.Marshal(map[string]any{
-				"contents": []any{map[string]any{"role": "user", "parts": []any{map[string]any{"text": prompt}}}},
-			})
+	var buildErr error
+	protocol := domain.UpstreamProtocol(format)
+	switch {
+	case cfg.ImageEdit:
+		if cfg.Image == nil || len(cfg.Image.Data) == 0 {
+			return nil, fmt.Errorf("image edit compatibility test requires an uploaded image")
 		}
-	case string(domain.ProtocolAnthropicMessages):
-		body, _ = json.Marshal(map[string]any{
-			"model":      cfg.UpstreamModel,
-			"max_tokens": 256,
-			"stream":     true,
-			"messages":   []any{map[string]any{"role": "user", "content": prompt}},
-		})
-	case string(domain.ProtocolOpenAIImages):
-		if cfg.ImageEdit {
-			if cfg.Image == nil || len(cfg.Image.Data) == 0 {
-				return nil, fmt.Errorf("image edit compatibility test requires an uploaded image")
-			}
-			encoded, err := imageedit.EncodeForUpstream(ctx, imageedit.Request{
-				Model: cfg.UpstreamModel, Prompt: prompt, Size: upstreamTestOpenAIImageSize, Stream: imageStream,
-				Images: []imageedit.Source{*cfg.Image},
-			}, normalizedUpstreamTestImageEditTransport(cfg.ImageEditTransport), normalizedUpstreamTestImageResponseFormat(cfg.ImageUpstreamResponseFormat))
-			if err != nil {
-				return nil, err
-			}
-			body, contentType = encoded.Body, encoded.ContentType
-			break
+		encoded, err := imageedit.EncodeForUpstream(ctx, imageedit.Request{Model: cfg.UpstreamModel, Prompt: prompt, Size: upstreamTestOpenAIImageSize, Stream: imageStream, Images: []imageedit.Source{*cfg.Image}}, normalizedUpstreamTestImageEditTransport(cfg.ImageEditTransport), normalizedUpstreamTestImageResponseFormat(cfg.ImageUpstreamResponseFormat))
+		if err != nil {
+			return nil, err
 		}
-		payload := map[string]any{
-			"model": cfg.UpstreamModel, "prompt": prompt, "n": 1, "size": upstreamTestOpenAIImageSize, "stream": imageStream,
+		body, contentType = encoded.Body, encoded.ContentType
+	case isImage:
+		size := upstreamTestOpenAIImageSize
+		if protocol == domain.ProtocolGeminiGenerate {
+			size = upstreamTestGeminiImageSize
 		}
-		if responseFormat := normalizedUpstreamTestImageResponseFormat(cfg.ImageUpstreamResponseFormat); responseFormat != "" {
-			payload["response_format"] = responseFormat
-		}
-		body, _ = json.Marshal(payload)
-	case string(domain.ProtocolOpenAIResponses):
-		body, _ = json.Marshal(map[string]any{
-			"model": cfg.UpstreamModel, "input": prompt, "max_output_tokens": 256, "stream": true,
-		})
-	case string(domain.ProtocolOpenAIEmbeddings):
-		body, _ = json.Marshal(map[string]any{"model": cfg.UpstreamModel, "input": prompt})
-	case string(domain.ProtocolGeminiEmbeddings):
-		body, _ = json.Marshal(map[string]any{
-			"content": map[string]any{"parts": []any{map[string]any{"text": prompt}}},
-		})
+		body, buildErr = upstreamcompat.BuildImageRequest(protocol, cfg.UpstreamModel, prompt, upstreamcompat.ImageOptions{N: 1, Stream: imageStream, Size: size, ResponseFormat: normalizedUpstreamTestImageResponseFormat(cfg.ImageUpstreamResponseFormat)})
+	case protocol == domain.ProtocolOpenAIEmbeddings:
+		body, buildErr = json.Marshal(map[string]any{"model": cfg.UpstreamModel, "input": prompt})
+	case protocol == domain.ProtocolGeminiEmbeddings:
+		body, buildErr = json.Marshal(map[string]any{"content": map[string]any{"parts": []any{map[string]any{"text": prompt}}}})
 	default:
-		body, _ = json.Marshal(map[string]any{
-			"model":      cfg.UpstreamModel,
-			"messages":   []any{map[string]any{"role": "user", "content": prompt}},
-			"max_tokens": 256,
-			"stream":     true,
-		})
+		body, buildErr = upstreamcompat.BuildChatRequest(protocol, cfg.UpstreamModel, []upstreamcompat.Message{{Role: "user", Content: prompt}}, upstreamChatTestStreams(format), 0)
 	}
+	if buildErr != nil {
+		return nil, buildErr
+	}
+	requestStream := (isImage && imageStream) || upstreamChatTestStreams(format)
+
 	candidate := &domain.RouteCandidate{
 		Protocol:           domain.UpstreamProtocol(format),
 		BaseURL:            cfg.BaseURL,
@@ -596,12 +590,12 @@ func buildUpstreamTestRequest(ctx context.Context, cfg upstreamTestConfig, isIma
 		return nil, err
 	}
 	req.Header.Set("Content-Type", contentType)
-	if (isImage && imageStream) || upstreamChatTestStreams(format) {
+	if requestStream {
 		req.Header.Set("Accept", "text/event-stream")
 	} else {
 		req.Header.Set("Accept", "application/json")
 	}
-	for key, value := range upstreamcompat.BuildHeaders(candidate, upstreamcompat.RequestMeta{ContentType: contentType, IsStream: (isImage && imageStream) || upstreamChatTestStreams(format)}) {
+	for key, value := range upstreamcompat.BuildHeaders(candidate, upstreamcompat.RequestMeta{ContentType: contentType, IsStream: requestStream}) {
 		req.Header.Set(key, value)
 	}
 	return req, nil
@@ -720,6 +714,9 @@ func parseUpstreamTestChatJSON(res *upstreamTestResult, format string, body []by
 			res.OutputTokens = jsonInt(usage["completion_tokens"])
 			res.TotalTokens = jsonInt(usage["total_tokens"])
 		}
+	}
+	if res.ReplyText == "" {
+		res.ReplyText = upstreamTestToolReply(doc)
 	}
 	res.OK = strings.TrimSpace(res.ReplyText) != ""
 	if !res.OK && res.Error == "" {

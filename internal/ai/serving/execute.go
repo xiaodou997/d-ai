@@ -19,6 +19,7 @@ import (
 	"xiaodou/dai/internal/ai/formats"
 	"xiaodou/dai/internal/ai/privacy"
 	"xiaodou/dai/internal/ai/routing"
+	"xiaodou/dai/internal/ai/upstreamcompat"
 )
 
 // stickyWriter writes a sticky binding after a successful upstream call.
@@ -332,6 +333,15 @@ func (s *ExecuteStep) Execute(ctx context.Context, req *Request) error {
 	if len(req.Attempts) >= budget.MaxAttempts && hasUnusedCandidate(req) {
 		req.ErrorCode = "retry_budget_exhausted"
 		req.ErrorMessage = fmt.Sprintf("upstream attempt limit reached after %d attempts", len(req.Attempts))
+		return apiError(http.StatusBadGateway, req.ErrorCode, req.ErrorMessage)
+	}
+	allProbeBlocked := len(req.Attempts) > 0
+	for _, attempt := range req.Attempts {
+		allProbeBlocked = allProbeBlocked && attempt.UpstreamErrorCode == upstreamcompat.ProbeBlockedCode
+	}
+	if allProbeBlocked {
+		req.ErrorCode = upstreamcompat.ProbeBlockedCode
+		req.ErrorMessage = upstreamcompat.ProbeBlockedMessage
 		return apiError(http.StatusBadGateway, req.ErrorCode, req.ErrorMessage)
 	}
 	req.ErrorCode = "all_routes_failed"
