@@ -1,0 +1,36 @@
+name: JWT Verify
+
+on:
+  push:
+    branches: [fix/jwt-unknown-kid-refresh]
+
+jobs:
+  auth:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: dai_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+    env:
+      DAI_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/dai_test?sslmode=disable
+      DAI_TEST_DATABASE_STRICT: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: JWT cross-replica and unknown-kid regression tests
+        run: >-
+          go test ./internal/auth
+          -run '^(TestParseTokenReloadsSigningKeysAcrossReplicas|TestVerificationKeyRateLimitsUnknownKidReloads)$'
+          -count=1 -v
