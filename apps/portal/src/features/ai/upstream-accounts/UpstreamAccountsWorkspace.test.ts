@@ -3,6 +3,7 @@ import { defineComponent } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import UpstreamAccountsWorkspace from './UpstreamAccountsWorkspace.vue'
+import { stabilityApi } from '@/features/ai/upstream-stability/api'
 
 const AccountsView = UpstreamAccountsWorkspace
 
@@ -118,6 +119,8 @@ const global = {
 
 describe('UpstreamAccountsWorkspace', () => {
   beforeEach(() => {
+    vi.mocked(stabilityApi.list).mockReset().mockResolvedValue({ items: [] })
+    vi.mocked(stabilityApi.detail).mockReset().mockResolvedValue({ models: [] } as any)
     api.createUpstreamAccount.mockReset().mockResolvedValue({ id: 'account-1' })
     api.listAccountModelBindings.mockReset().mockResolvedValue({ items: [], total: 0 })
     api.listLinkedGroupsByTarget.mockReset().mockResolvedValue({ items: [], total: 0 })
@@ -150,6 +153,38 @@ describe('UpstreamAccountsWorkspace', () => {
         { id: 'active-newer', name: '特殊价格', description: '', status: 'active' }
       ]
     })
+  })
+
+  it('refreshes account and endpoint rates together when the time tab changes', async () => {
+    api.listUpstreamAccounts.mockResolvedValue({ items: [{
+      id: 'account-rate', name: 'Rate account', status: 'active',
+      endpoints: [{ id: 'endpoint-rate', api_format: 'openai_responses', base_url: 'https://rate.example.com', status: 'active' }]
+    }] })
+    vi.mocked(stabilityApi.list).mockImplementation(async (_kind, window) => ({ items: [{
+      resource_id: 'account-rate', window, success_rate: window === '1h' ? 80 : null
+    }] } as any))
+    vi.mocked(stabilityApi.detail).mockImplementation(async (_kind, _id, window) => ({ window, models: [
+      { endpoint_id: 'endpoint-rate', outcome: 'success', count: 8 },
+      { endpoint_id: 'endpoint-rate', outcome: 'timeout', count: 2 },
+      { endpoint_id: 'endpoint-rate', outcome: 'cancelled', count: 10 },
+      { endpoint_id: 'other-endpoint', outcome: 'server_error', count: 100 }
+    ] } as any))
+    const wrapper = mount(AccountsView, { global })
+    await flushPromises()
+    expect(wrapper.find('.account-item-rate').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('暂无有效样本')
+    expect(wrapper.text()).not.toContain('运行稳定性')
+    wrapper.findAllComponents(ElSelectStub).find(select => select.attributes('aria-label') === '成功率统计范围')!.vm.$emit('update:modelValue', '1h')
+    await flushPromises()
+    expect(stabilityApi.list).toHaveBeenLastCalledWith('direct_upstream', '1h', expect.any(AbortSignal))
+    expect(stabilityApi.detail).toHaveBeenLastCalledWith('direct_upstream', 'account-rate', '1h', expect.any(AbortSignal))
+    expect(wrapper.get('.account-item-rate').text()).toContain('80.0%')
+    const successColumn = wrapper.findAllComponents({ name: 'ElTableColumn' }).find(column => column.attributes('label') === '成功率')
+    const slot = successColumn!.vm.$slots.default!({ row: { id: 'endpoint-rate' } })
+    const cell = mount(defineComponent({ render: () => slot }))
+    expect(cell.text()).toBe('80.0%')
+    cell.unmount()
+    wrapper.unmount()
   })
 
   it('uses the first active price book when creating an upstream account', async () => {
@@ -266,15 +301,15 @@ describe('UpstreamAccountsWorkspace', () => {
     await flushPromises()
 
     const panes = wrapper.findAll('.account-detail-pane')
-    expect(panes).toHaveLength(4)
+    expect(panes).toHaveLength(3)
     expect(panes[0]!.attributes('style')).not.toBe('display: none;')
-    expect(panes[2]!.attributes('style')).toBe('display: none;')
+    expect(panes[1]!.attributes('style')).toBe('display: none;')
 
     const endpointTab = wrapper.findAll('[role="tab"]').find((tab) => tab.text() === '请求端点')!
     await endpointTab.trigger('click')
 
     expect(panes[0]!.attributes('style')).toBe('display: none;')
-    expect(panes[2]!.attributes('style')).not.toBe('display: none;')
+    expect(panes[1]!.attributes('style')).not.toBe('display: none;')
   })
 
   it('defaults a new account endpoint to OpenAI Responses', async () => {

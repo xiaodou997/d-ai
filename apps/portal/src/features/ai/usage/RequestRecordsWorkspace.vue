@@ -16,7 +16,7 @@ const auth = useAuthStore(), route = useRoute(), router = useRouter();
 const role = computed(() => recordRole(auth.userInfo?.userType));
 const container = ref<HTMLElement | null>(null);
 const stateKey = `usage-records:v2:${auth.userInfo?.sub}:${auth.userInfo?.tenantId}:${role.value}:${route.path}:${props.userId || ""}`;
-const { filters, range, customRange, tab, pageSize, rows, busy, failure, metrics, applied, history, nextCursor, search, refresh, reset, changeTab, changePageSize, next, previous, save } = useRecordList(role, stateKey, props.userId, container);
+const { filters, range, customRange, tab, pageSize, rows, busy, failure, metrics, applied, history, nextCursor, search, changeRange, changeCustomRange, refresh, reset, changeTab, changePageSize, next, previous, save } = useRecordList(role, stateKey, props.userId, container);
 const tabs = [{ key: "requests", label: "请求记录" }, { key: "errors", label: "错误请求" }];
 function show(row: RequestRecord) {
   save();
@@ -27,7 +27,7 @@ function show(row: RequestRecord) {
   <div class="record-page-root">
   <component :is="embedded ? 'section' : PortalPagePanel" :fill="!embedded" :icon="ScrollText" :breadcrumbs="[{ label: '智能服务' }, { label: recordTitle(role) }]" description="按请求查看调用用量与实际扣款">
     <div ref="container" class="records-workspace" :class="{ 'records-workspace--embedded': embedded }">
-      <RecordRangeSelector v-model="range" v-model:custom-range="customRange" />
+      <RecordRangeSelector :model-value="range" :custom-range="customRange" @update:model-value="changeRange" @update:custom-range="changeCustomRange" />
       <PortalMetricGrid class="record-metrics" :class="{ 'record-metrics--customer': role === 'customer' }" :metrics="metrics" min-col-width="180px" />
       <p class="records-note">整体概览 · {{ timestamp(applied.from) }} 至 {{ timestamp(applied.to) }} · 包含正常与错误请求，切换 Tab 不改变统计口径。</p>
       <DsTabs :tabs="tabs" :model-value="tab" @update:model-value="changeTab" />

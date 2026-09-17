@@ -1,8 +1,7 @@
-import { onBeforeUnmount, onMounted, shallowRef, watch } from 'vue';
+import { onBeforeUnmount, onMounted, shallowRef, watch, type Ref } from 'vue';
 import { stabilityApi, type ResourceKind, type Stability, type StabilityWindow } from './api';
 
-export function useUpstreamStability(kind: ResourceKind, resourceId?: () => string) {
-  const window = shallowRef<StabilityWindow>('24h');
+export function useUpstreamStability(kind: ResourceKind, resourceId?: () => string, window: Ref<StabilityWindow> = shallowRef<StabilityWindow>('24h')) {
   const items = shallowRef<Stability[]>([]);
   const detail = shallowRef<Stability | null>(null);
   const error = shallowRef('');

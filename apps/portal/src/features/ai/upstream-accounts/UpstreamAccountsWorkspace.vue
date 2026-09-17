@@ -40,37 +40,47 @@ import {
   upstreamAccountStatusTagType
 } from './components/status'
 
-import StabilityBadge from '@/features/ai/upstream-stability/StabilityBadge.vue'
-import UpstreamStabilityPanel from '@/features/ai/upstream-stability/UpstreamStabilityPanel.vue'
 import { useUpstreamStability } from '@/features/ai/upstream-stability/useUpstreamStability'
 const stability = useUpstreamStability('direct_upstream')
-const stabilityById = computed(() => new Map(stability.items.value.map(item => [item.resource_id, item])))
-const stabilityFilter = shallowRef('all')
-const stabilitySort = shallowRef('default')
-const stabilityStateError = computed(() => stability.items.value.find(item => item.state_error)?.state_error || '')
-const stabilityWindowLabels: Record<string, string> = { '1h': '最近 1 小时', '24h': '最近 24 小时', '7d': '最近 7 天' }
-const stabilityWindowLabel = computed(() => stabilityWindowLabels[stability.window.value] || stability.window.value)
-const sortedAccounts = computed(() => {
-  const rows = accounts.value.filter(account => {
-    const metric = stabilityById.value.get(account.id)
-    if (stabilityFilter.value === 'low_rate') return metric?.success_rate != null && metric.success_rate < 95
-    if (stabilityFilter.value === 'repeated') return metric?.repeated_failure
-    if (stabilityFilter.value === 'no_data') return !metric?.samples
-    return stabilityFilter.value === 'all' || metric?.repeated_failure || metric?.stability_declining || metric?.availability === 'unavailable' || metric?.availability === 'partial'
-  })
-  if (stabilitySort.value === 'success') rows.sort((a, b) => (stabilityById.value.get(a.id)?.success_rate ?? 101) - (stabilityById.value.get(b.id)?.success_rate ?? 101))
-  return rows
-})
+const stabilityById = computed(() => new Map(stability.items.value
+  .filter(item => item.window === stability.window.value)
+  .map(item => [item.resource_id, item])))
+const sortedAccounts = computed(() => accounts.value)
 const loading = shallowRef(false)
 const accounts = shallowRef<AccountDTO[]>([])
 const priceBooks = shallowRef<PriceBookRecord[]>([])
 const selectedAccountId = shallowRef('')
+const endpointStability = useUpstreamStability('direct_upstream', () => selectedAccountId.value, stability.window)
+const endpointSuccessRates = computed(() => {
+  const detail = endpointStability.detail.value
+  const rates = new Map<string, number>()
+  if (!detail || detail.window !== stability.window.value || endpointStability.error.value) return rates
+  const totals = new Map<string, { successes: number; samples: number }>()
+  // 与后端账号成功率保持同一口径，取消及本地拒绝不计入分母。
+  const failures = new Set(['server_error', 'timeout', 'network_error', 'unauthorized', 'rate_limited', 'model_error'])
+  for (const row of detail.models || []) {
+    if (row.outcome !== 'success' && !failures.has(row.outcome)) continue
+    const total = totals.get(row.endpoint_id) || { successes: 0, samples: 0 }
+    total.samples += row.count
+    if (row.outcome === 'success') total.successes += row.count
+    totals.set(row.endpoint_id, total)
+  }
+  for (const [id, total] of totals) {
+    if (total.samples > 0) rates.set(id, total.successes / total.samples * 100)
+  }
+  return rates
+})
+function successRateLabel(rate?: number | null) {
+  return rate == null ? '—' : `${rate.toFixed(1)}%`
+}
+async function refreshWorkspace() {
+  await Promise.all([fetchAccounts(), stability.refresh(), endpointStability.refresh()])
+}
 const selectedExportAccountIds = shallowRef<string[]>([])
 const updatingAccountStatusId = shallowRef('')
 const accountContentScroll = ref<HTMLElement | null>(null)
-const activeAccountTab = shallowRef('stability')
+const activeAccountTab = shallowRef('overview')
 const accountDetailTabs = [
-  { key: 'stability', label: '运行稳定性' },
   { key: 'overview', label: '账号概览' },
   { key: 'endpoints', label: '请求端点' },
   { key: 'models', label: '模型绑定' }
@@ -612,7 +622,7 @@ function selectAccount(id: string) {
 
 // 详情区是独立滚动容器。切换账号时回到详情顶部，避免沿用上一个账号的滚动位置。
 watch(selectedAccountId, () => {
-  activeAccountTab.value = 'stability'
+  activeAccountTab.value = 'overview'
   void nextTick(() => accountContentScroll.value?.scrollTo?.({ top: 0, behavior: 'auto' }))
 })
 
@@ -635,15 +645,6 @@ function revealMoreAccounts() {
 watch(accounts, () => {
   visibleCount.value = listObserver ? LIST_PAGE_SIZE : sortedAccounts.value.length
 })
-
-watch([stabilityFilter, stabilitySort], () => {
-  visibleCount.value = listObserver ? LIST_PAGE_SIZE : sortedAccounts.value.length
-})
-
-function resetStabilityFilters() {
-  stabilityFilter.value = 'all'
-  stabilitySort.value = 'default'
-}
 
 function setupListObserver() {
   // 测试环境(happy-dom)没有 IntersectionObserver,直接全量渲染兜底
@@ -804,7 +805,7 @@ onBeforeUnmount(() => {
       fill
     >
       <template #actions>
-        <el-button :icon="Refresh" :loading="loading" @click="fetchAccounts">刷新</el-button>
+        <el-button :icon="Refresh" :loading="loading" @click="refreshWorkspace">刷新</el-button>
         <el-button :icon="Upload" @click="openImportDialog">导入</el-button>
         <el-button :icon="Download" :disabled="!selectedExportAccountIds.length" @click="openExportDialog">
           导出<span v-if="selectedExportAccountIds.length">({{ selectedExportAccountIds.length }})</span>
@@ -818,50 +819,18 @@ onBeforeUnmount(() => {
       <!-- 账号列表 -->
       <el-col :span="7" class="accounts-list-col">
         <PortalContentCard title="上游账号" body-padding="none" class="accounts-list-card">
-          <div class="runtime-filters">
-            <div class="runtime-filters-heading">
-              <div>
-                <strong>运行视图</strong>
-                <span>按 {{ stabilityWindowLabel }} 的真实上游尝试筛选</span>
-              </div>
-              <DsTag v-if="stability.loading.value" tone="info">更新中</DsTag>
+          <div class="account-time-filter">
+            <div class="account-time-filter__label">
+              <span>成功率统计</span>
+              <span v-if="stability.loading.value || endpointStability.loading.value">更新中…</span>
             </div>
-            <div class="runtime-filter-grid">
-              <label class="runtime-filter-field">
-                <span>统计范围</span>
-                <el-select v-model="stability.window.value" aria-label="账号成功率统计范围">
-                  <el-option label="最近 1 小时" value="1h" />
-                  <el-option label="最近 24 小时" value="24h" />
-                  <el-option label="最近 7 天" value="7d" />
-                </el-select>
-              </label>
-              <label class="runtime-filter-field">
-                <span>账号筛选</span>
-                <el-select v-model="stabilityFilter" aria-label="账号异常筛选">
-                  <el-option label="全部账号" value="all" />
-                  <el-option label="需要关注" value="abnormal" />
-                  <el-option label="成功率低于 95%" value="low_rate" />
-                  <el-option label="反复异常" value="repeated" />
-                  <el-option label="暂无样本" value="no_data" />
-                </el-select>
-              </label>
-              <label class="runtime-filter-field runtime-filter-field--wide">
-                <span>排序方式</span>
-                <el-select v-model="stabilitySort" aria-label="账号稳定性排序">
-                  <el-option label="默认排序" value="default" />
-                  <el-option label="成功率从低到高" value="success" />
-                </el-select>
-              </label>
-            </div>
+            <el-select v-model="stability.window.value" aria-label="成功率统计范围">
+              <el-option label="最近 1 小时" value="1h" />
+              <el-option label="最近 24 小时" value="24h" />
+              <el-option label="最近 7 天" value="7d" />
+            </el-select>
           </div>
-          <el-alert v-if="stability.error.value" title="稳定性统计加载失败" :description="stability.error.value" type="warning" :closable="false" />
-          <el-alert
-            v-else-if="stabilityStateError"
-            title="账号状态读取失败"
-            description="部分账号的可用状态读取失败，请刷新重试。选择账号可查看具体调用错误。"
-            type="warning"
-            :closable="false"
-          />
+          <el-alert v-if="stability.error.value" title="成功率加载失败" :description="stability.error.value" type="warning" :closable="false" />
           <div v-loading="loading" ref="accountListEl" class="account-list">
             <div
               v-for="a in visibleAccounts"
@@ -877,10 +846,7 @@ onBeforeUnmount(() => {
                     @click.stop
                     @change="handleExportSelectionChange(a.id, $event)"
                   />
-                  <span class="font-bold text-slate-800 truncate">{{ a.name }}</span>
-                  <DsTag :tone="a.tenant_access_mode === 'restricted' ? 'warning' : 'positive'">
-                    {{ a.tenant_access_mode === 'restricted' ? '专属' : '公开' }}
-                  </DsTag>
+                  <span class="account-item-name truncate" :title="a.name">{{ a.name }}</span>
                 </div>
                 <UpstreamAccountStatusControl
                   :status="a.status"
@@ -890,13 +856,18 @@ onBeforeUnmount(() => {
                   @verify="openTestDialog(a)"
                 />
               </div>
-              <div class="account-item-subtitle truncate">{{ accountSubtitle(a) }}</div>
-              <div v-if="a.description" class="account-item-description" :title="a.description">
-                <span class="account-item-description-label">说明</span>
-                <span class="account-item-description-text">{{ a.description }}</span>
+              <div class="account-item-body">
+                <div class="account-item-meta">
+                  <DsTag :tone="a.tenant_access_mode === 'restricted' ? 'warning' : 'positive'">
+                    {{ a.tenant_access_mode === 'restricted' ? '专属' : '公开' }}
+                  </DsTag>
+                  <span v-if="accountSubtitle(a)" class="truncate" :title="accountSubtitle(a)">{{ accountSubtitle(a) }}</span>
+                </div>
+                <div v-if="accountEndpointHosts(a)" class="account-item-host truncate" :title="accountEndpointHosts(a)">{{ accountEndpointHosts(a) }}</div>
+                <div v-if="!stability.error.value && stabilityById.get(a.id)?.success_rate != null" class="account-item-rate">
+                  <span>成功率</span><strong>{{ successRateLabel(stabilityById.get(a.id)?.success_rate) }}</strong>
+                </div>
               </div>
-              <div class="account-item-host truncate">{{ accountEndpointHosts(a) }}</div>
-              <StabilityBadge :value="stabilityById.get(a.id)" :loading="stability.loading.value" />
             </div>
             <div ref="listSentinelEl" class="account-list-sentinel" aria-hidden="true">
               <span v-if="hasMoreAccounts">加载中…</span>
@@ -911,15 +882,6 @@ onBeforeUnmount(() => {
                 <el-button type="primary" :icon="Plus" @click="openAccountCreate">新增账号</el-button>
               </template>
             </DsEmpty>
-            <DsEmpty
-              v-else-if="!visibleAccounts.length && !loading"
-              title="没有符合条件的账号"
-              description="调整筛选条件，或恢复显示全部账号"
-            >
-              <template #action>
-                <el-button @click="resetStabilityFilters">显示全部账号</el-button>
-              </template>
-            </DsEmpty>
           </div>
         </PortalContentCard>
       </el-col>
@@ -932,7 +894,7 @@ onBeforeUnmount(() => {
               <div class="account-detail-tabs__meta">
                 <div class="account-detail-tabs__title">
                   <strong>账号详情</strong>
-                  <span>{{ selectedAccount.name }} · 按模块查看配置与运行信息</span>
+                  <span>{{ selectedAccount.name }}</span>
                 </div>
                 <div class="account-detail-tabs__actions">
                   <el-button size="small" type="success" plain :icon="VideoPlay" @click="openTestDialog(selectedAccount)">测试连通</el-button>
@@ -943,13 +905,10 @@ onBeforeUnmount(() => {
               <DsTabs v-model="activeAccountTab" :tabs="accountDetailTabs" />
             </div>
 
-            <div v-show="activeAccountTab === 'stability'" class="account-detail-pane">
-              <UpstreamStabilityPanel kind="direct_upstream" :resource-id="selectedAccount.id" />
-            </div>
-
             <div v-show="activeAccountTab === 'overview'" class="account-detail-pane">
               <PortalContentCard title="账号概览" :description="`当前账号:${selectedAccount.name}`">
                 <el-descriptions :key="selectedAccountId" :column="2" size="small" border>
+                  <el-descriptions-item label="成功率">{{ successRateLabel(stability.error.value ? null : stabilityById.get(selectedAccount.id)?.success_rate) }}</el-descriptions-item>
                   <el-descriptions-item label="请求端点">{{ selectedAccount.endpoints?.length || 0 }} 个</el-descriptions-item>
                   <el-descriptions-item label="API 格式">
                     {{ accountAPIFormats(selectedAccount) }}
@@ -980,6 +939,7 @@ onBeforeUnmount(() => {
                 <template #actions>
                   <el-button size="small" type="primary" :icon="Plus" @click="openEndpointCreate">添加端点</el-button>
                 </template>
+                <el-alert v-if="endpointStability.error.value" title="端点成功率加载失败" type="warning" :closable="false" />
                 <el-table :key="selectedAccount.id" :data="selectedAccount.endpoints || []" border stripe>
                   <el-table-column label="API 格式" min-width="190">
                     <template #default="{ row }">{{ upstreamAPIFormatLabel(row.api_format) }}</template>
@@ -987,6 +947,9 @@ onBeforeUnmount(() => {
                   <el-table-column prop="base_url" label="Base URL" min-width="220" show-overflow-tooltip />
                   <el-table-column prop="path_override" label="路径覆盖" min-width="150" show-overflow-tooltip>
                     <template #default="{ row }">{{ row.path_override || '使用格式默认路径' }}</template>
+                  </el-table-column>
+                  <el-table-column label="成功率" width="110" align="right">
+                    <template #default="{ row }"><span class="endpoint-success-rate">{{ successRateLabel(endpointSuccessRates.get(row.id)) }}</span></template>
                   </el-table-column>
                   <el-table-column label="状态" width="105">
                     <template #default="{ row }">
@@ -1404,16 +1367,9 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.runtime-filters { padding: 14px 14px 12px; border-bottom: 1px solid var(--ds-line); background: var(--ds-panel-muted); }
-.runtime-filters-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
-.runtime-filters-heading > div { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.runtime-filters-heading strong { color: var(--ds-ink); font-size: 13px; }
-.runtime-filters-heading span { color: var(--ds-muted); font-size: 11px; line-height: 1.4; }
-.runtime-filter-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.runtime-filter-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
-.runtime-filter-field--wide { grid-column: 1 / -1; }
-.runtime-filter-field > span { color: var(--ds-muted); font-size: 11px; font-weight: 600; }
-.runtime-filter-field :deep(.el-select) { width: 100%; min-width: 0; }
+.account-time-filter { padding: 14px; border-bottom: 1px solid var(--ds-line); }
+.account-time-filter__label { display: flex; justify-content: space-between; margin-bottom: 8px; color: var(--ds-muted); font-size: 12px; }
+.account-time-filter :deep(.el-select) { width: 100%; }
 .accounts-view {
   flex: 0 1 auto;
   min-height: 0;
@@ -1440,11 +1396,13 @@ onBeforeUnmount(() => {
 .account-item.active { background: var(--ds-accent-soft); border-color: color-mix(in srgb, var(--ds-accent) 40%, var(--ds-line)); }
 .account-item-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; min-width: 0; }
 .account-item-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.account-item-subtitle { font-size: 12px; color: var(--ds-muted); margin: 5px 0 0 32px; }
-.account-item-description { display: flex; align-items: baseline; gap: 8px; margin: 8px 0 7px 32px; padding: 6px 8px; border-left: 2px solid color-mix(in srgb, var(--ds-accent) 42%, var(--ds-line)); background: color-mix(in srgb, var(--ds-accent-soft) 55%, transparent); border-radius: var(--ds-radius-sm); min-width: 0; }
-.account-item-description-label { flex: 0 0 auto; color: var(--ds-muted); font-size: 11px; font-weight: 600; letter-spacing: .04em; }
-.account-item-description-text { min-width: 0; overflow: hidden; color: var(--ds-ink); font-size: 12px; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
-.account-item-host { margin-left: 32px; font-size: 12px; color: var(--ds-faint); }
+.account-item-name { color: var(--ds-ink); font-weight: 600; }
+.account-item-body { display: grid; gap: 7px; margin: 6px 0 0 24px; min-width: 0; }
+.account-item-meta { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--ds-muted); font-size: 12px; }
+.account-item-host { font-size: 12px; color: var(--ds-faint); }
+.account-item-rate { display: flex; justify-content: space-between; align-items: center; color: var(--ds-muted); font-size: 12px; }
+.account-item-rate strong { color: var(--ds-ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.endpoint-success-rate { font-variant-numeric: tabular-nums; }
 .account-overview-description-empty { color: var(--ds-faint); }
 .account-content-scroll {
   flex: 1;

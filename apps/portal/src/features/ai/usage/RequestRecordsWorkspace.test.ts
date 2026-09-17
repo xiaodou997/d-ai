@@ -2,6 +2,7 @@ import { flushPromises, mount } from "@vue/test-utils";
 import { createMemoryHistory, createRouter } from "vue-router";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import RequestRecordsWorkspace from "./RequestRecordsWorkspace.vue";
+import RecordRangeSelector from "./components/RecordRangeSelector.vue";
 
 const state = vi.hoisted(() => ({ role: 1, list: vi.fn(), summary: vi.fn() }));
 vi.mock("./recordsApi", async original => ({ ...await original<typeof import("./recordsApi")>(), recordsApi: state }));
@@ -25,6 +26,51 @@ describe("record search", () => {
     state.summary.mockReset().mockResolvedValue({ requests: 0 });
   });
   afterEach(() => vi.useRealTimers());
+  it.each([
+    ["昨天", new Date(2026, 8, 14), new Date(2026, 8, 15)],
+    ["本月", new Date(2026, 8, 1), new Date(2026, 8, 15, 14)],
+    ["上月", new Date(2026, 7, 1), new Date(2026, 8, 1)],
+    ["最近七天", new Date(2026, 8, 8, 14), new Date(2026, 8, 15, 14)],
+    ["近30天", new Date(2026, 7, 16, 14), new Date(2026, 8, 15, 14)]
+  ])("automatically queries %s and resets pagination", async (label, from, to) => {
+    const wrapper = await render(); await flushPromises();
+    expect(wrapper.findAll("button").some(button => button.text() === "近90天")).toBe(false);
+    await wrapper.findAll("button").find(button => button.text() === "下一页")!.trigger("click"); await flushPromises();
+    const calls = state.list.mock.calls.length;
+    await wrapper.findAll("button").find(button => button.text() === label)!.trigger("click"); await flushPromises();
+    expect(state.list).toHaveBeenCalledTimes(calls + 1);
+    const window = { from: (from as Date).toISOString(), to: (to as Date).toISOString() };
+    expect(state.list.mock.lastCall![1]).toMatchObject({ ...window, cursor: undefined });
+    expect(state.summary.mock.lastCall![0]).toMatchObject(window);
+    expect(wrapper.text()).toContain("第 1 页");
+    wrapper.unmount();
+  });
+  it("waits for a valid custom window and automatically queries it", async () => {
+    const wrapper = await render(); await flushPromises();
+    const selector = wrapper.getComponent(RecordRangeSelector);
+    await wrapper.findAll("button").find(button => button.text() === "自定义")!.trigger("click"); await flushPromises();
+    expect(state.list).toHaveBeenCalledTimes(1);
+    const from = new Date(2026, 8, 1, 10), to = new Date(2026, 8, 2, 11);
+    selector.vm.$emit("update:customRange", [to, from]); await flushPromises();
+    expect(state.list).toHaveBeenCalledTimes(1);
+    selector.vm.$emit("update:customRange", [from, to]); await flushPromises();
+    expect(state.list).toHaveBeenCalledTimes(2);
+    expect(state.list.mock.lastCall![1]).toMatchObject({ from: from.toISOString(), to: to.toISOString() });
+    expect(state.summary.mock.lastCall![0]).toMatchObject({ from: from.toISOString(), to: to.toISOString() });
+    selector.vm.$emit("update:customRange", null); await flushPromises();
+    expect(state.list).toHaveBeenCalledTimes(2);
+    wrapper.unmount();
+  });
+  it("replaces a saved 90-day filter with 30 days", async () => {
+    const wrapper = await render(); await flushPromises(); wrapper.unmount();
+    const key = sessionStorage.key(0)!;
+    const saved = JSON.parse(sessionStorage.getItem(key)!);
+    sessionStorage.setItem(key, JSON.stringify({ ...saved, range: "90d", appliedRange: "90d", cursor: "old-page", history: [null] }));
+    const restored = await render(); await flushPromises();
+    expect(state.list.mock.lastCall![1]).toMatchObject({ from: new Date(2026, 7, 16, 14).toISOString(), cursor: undefined });
+    expect(restored.findAll("button").find(button => button.text() === "近30天")!.attributes("aria-pressed")).toBe("true");
+    restored.unmount();
+  });
   it("applies all filters to list and summary and keeps pagination on the applied query", async () => {
     const wrapper = await render(); await flushPromises();
     await wrapper.get('[aria-label="模型 ID"]').setValue(" test-model ");

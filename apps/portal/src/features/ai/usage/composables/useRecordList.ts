@@ -43,6 +43,10 @@ export function useRecordList(role: Ref<RecordRole>, stateKey: string, fixedUser
       tab.value = state.tab === "errors" ? "errors" : "requests";
       pageSize.value = [20, 50, 100].includes(state.pageSize) ? state.pageSize : 20;
       cursor.value = state.cursor; history.value = (state.history || []).map((item: string | null) => item || undefined);
+      if (range.value === "90d" || appliedRange.value === "90d") {
+        range.value = "30d";
+        applyDraft(); firstPage();
+      }
       savedScroll = state.scroll || []; savedTableScroll = Number(state.tableScroll) || 0;
     } catch { /* Invalid stored state falls back to defaults. */ }
   }
@@ -66,6 +70,18 @@ export function useRecordList(role: Ref<RecordRole>, stateKey: string, fixedUser
     } finally { if (!active.signal.aborted) busy.value = false; }
   }
   async function search() { if (!applyDraft()) return; firstPage(); await load(); }
+  async function changeRange(value: WorkbenchRangeId) {
+    range.value = value;
+    if (value === "custom" && !validCustomRange()) return;
+    await search();
+  }
+  function validCustomRange() {
+    return customRange.value?.length === 2 && customRange.value.every(date => Number.isFinite(date.getTime())) && customRange.value[0] < customRange.value[1];
+  }
+  async function changeCustomRange(value: [Date, Date] | null) {
+    customRange.value = value;
+    if (range.value === "custom" && validCustomRange()) await search();
+  }
   async function refresh() {
     if (appliedRange.value !== "custom") { const window = buildWorkbenchRangeWindow(getWorkbenchRangeOption(appliedRange.value)); applied.value = { ...applied.value, from: window.date_from, to: window.date_to }; }
     firstPage(); await load();
@@ -82,5 +98,5 @@ export function useRecordList(role: Ref<RecordRole>, stateKey: string, fixedUser
     ancestors().forEach((el, index) => { el.scrollTop = savedScroll[index] || 0; });
   });
   onBeforeUnmount(() => { save(); controller?.abort(); });
-  return { filters, range, customRange, tab, pageSize, rows, summary, busy, failure, metrics, rangeLabel, applied, history, nextCursor, search, refresh, reset, changeTab, changePageSize, next, previous, save };
+  return { filters, range, customRange, tab, pageSize, rows, summary, busy, failure, metrics, rangeLabel, applied, history, nextCursor, search, changeRange, changeCustomRange, refresh, reset, changeTab, changePageSize, next, previous, save };
 }

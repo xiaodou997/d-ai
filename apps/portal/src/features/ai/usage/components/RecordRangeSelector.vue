@@ -6,7 +6,7 @@ const emit = defineEmits<{ "update:modelValue": [value: WorkbenchRangeId]; "upda
 <template>
   <div class="record-range">
     <div class="record-range__options" role="group" aria-label="时间范围">
-      <button v-for="option in WORKBENCH_RANGE_OPTIONS" :key="option.id" type="button" :aria-pressed="modelValue === option.id" @click="emit('update:modelValue', option.id)">{{ option.label }}</button>
+      <button v-for="option in WORKBENCH_RANGE_OPTIONS.filter(option => option.id !== '90d')" :key="option.id" type="button" :aria-pressed="modelValue === option.id" @click="emit('update:modelValue', option.id)">{{ option.label }}</button>
     </div>
     <el-date-picker v-if="modelValue === 'custom'" :model-value="customRange" type="datetimerange" start-placeholder="开始时间" end-placeholder="结束时间" range-separator="至" @update:model-value="emit('update:customRange', $event)" />
   </div>
