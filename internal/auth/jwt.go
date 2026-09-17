@@ -93,6 +93,7 @@ type JWTService struct {
 	database              *pgxpool.Pool
 	cfg                   config.JWTConfig
 	mu                    sync.RWMutex
+	reloadMu              sync.Mutex
 	activeKey             *keyEntry
 	graceKeys             []*keyEntry
 	accessTokenExpiration time.Duration
@@ -167,9 +168,18 @@ func (s *JWTService) generateAndSaveKey() error {
 	return err
 }
 
-// reloadKeys 从数据库重新加载 active 和 grace 密钥到内存
-// DB 查询在锁外完成，内存 swap 在写锁内完成，避免 IO 阻塞验签并发
+// reloadKeys 从数据库重新加载 active 和 grace 密钥到内存。
+// reloadMu serializes DB snapshots so an older reload cannot overwrite a newer
+// rotation/retirement snapshot after it finishes later.
 func (s *JWTService) reloadKeys(ctx context.Context) error {
+	s.reloadMu.Lock()
+	defer s.reloadMu.Unlock()
+	return s.reloadKeysLocked(ctx)
+}
+
+// reloadKeysLocked requires reloadMu. DB 查询在 mu 外完成，内存 swap 在写锁内
+// 完成，避免 IO 阻塞普通验签并发。
+func (s *JWTService) reloadKeysLocked(ctx context.Context) error {
 	rows, err := s.database.Query(ctx, `
 		SELECT kid, private_key, public_key, status
 		FROM auth_signing_keys
@@ -315,6 +325,47 @@ func (s *JWTService) signClaims(claims Claims) (string, error) {
 
 func (s *JWTService) AccessTokenExpiration() time.Duration { return s.accessTokenExpiration }
 
+func (s *JWTService) cachedPublicKey(kid string) *rsa.PublicKey {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.activeKey != nil && s.activeKey.kid == kid {
+		return s.activeKey.publicKey
+	}
+	for _, gk := range s.graceKeys {
+		if gk.kid == kid {
+			return gk.publicKey
+		}
+	}
+	return nil
+}
+
+// verificationKey returns a cached verification key when possible. When a
+// different replica rotates signing keys, the first request carrying the new
+// kid refreshes this replica from PostgreSQL. reloadMu plus the second cache
+// check collapses a concurrent burst of the same new kid into one DB reload.
+func (s *JWTService) verificationKey(ctx context.Context, kid string) (*rsa.PublicKey, error) {
+	if publicKey := s.cachedPublicKey(kid); publicKey != nil {
+		return publicKey, nil
+	}
+
+	s.reloadMu.Lock()
+	defer s.reloadMu.Unlock()
+
+	// Another request or a local rotation may have refreshed the cache while
+	// this request waited for reloadMu.
+	if publicKey := s.cachedPublicKey(kid); publicKey != nil {
+		return publicKey, nil
+	}
+	if err := s.reloadKeysLocked(ctx); err != nil {
+		return nil, fmt.Errorf("reload signing keys for kid %q: %w", kid, err)
+	}
+	if publicKey := s.cachedPublicKey(kid); publicKey != nil {
+		return publicKey, nil
+	}
+	return nil, fmt.Errorf("unknown kid: %s", kid)
+}
+
 // ParseToken 解析并验证 Token，根据 kid 选择公钥；访问令牌的 session
 // 校验沿用调用方 context，以便 HTTP 请求取消时及时停止数据库查询。
 // 新系统不兼容无 kid 的 token
@@ -333,21 +384,7 @@ func (s *JWTService) ParseToken(ctx context.Context, tokenString string) (*Claim
 			return nil, fmt.Errorf("invalid kid in token header")
 		}
 
-		s.mu.RLock()
-		activeKey := s.activeKey
-		graceKeys := s.graceKeys
-		s.mu.RUnlock()
-
-		if activeKey != nil && activeKey.kid == kid {
-			return activeKey.publicKey, nil
-		}
-		for _, gk := range graceKeys {
-			if gk.kid == kid {
-				return gk.publicKey, nil
-			}
-		}
-
-		return nil, fmt.Errorf("unknown kid: %s", kid)
+		return s.verificationKey(ctx, kid)
 	}, jwt.WithIssuer(s.issuer), jwt.WithValidMethods([]string{"RS256"}))
 
 	if err != nil {
