@@ -9,7 +9,60 @@ import (
 	"xiaodou/dai/internal/clientsecret"
 	"xiaodou/dai/internal/config"
 	"xiaodou/dai/internal/dbtest"
+
+	"github.com/golang-jwt/jwt/v5"
 )
+
+func TestParseTokenReloadsSigningKeysAcrossReplicas(t *testing.T) {
+	ctx := context.Background()
+	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 4})
+	if err != nil {
+		t.Skipf("JWT test database unavailable: %v", err)
+	}
+	t.Cleanup(func() { _ = cleanup(context.Background()) })
+	if err := clientsecret.Configure("0123456789abcdef0123456789abcdef"); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := config.JWTConfig{Expiration: 15 * time.Minute, RefreshExpiration: time.Hour, Issuer: "dai-jwt-cross-replica-rotation"}
+	rotatingReplica := NewJWTService(cfg, pool)
+	staleReplica := NewJWTService(cfg, pool)
+
+	if err := rotatingReplica.RotateKey(ctx); err != nil {
+		t.Fatalf("rotate signing key: %v", err)
+	}
+
+	rotatingReplica.mu.RLock()
+	rotatedKid := rotatingReplica.activeKey.kid
+	rotatingReplica.mu.RUnlock()
+	if staleReplica.cachedPublicKey(rotatedKid) != nil {
+		t.Fatalf("stale replica unexpectedly knows rotated kid %q before parsing", rotatedKid)
+	}
+
+	now := time.Now()
+	token, err := rotatingReplica.signClaims(Claims{
+		PrincipalType: "cross-replica-test",
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(now.Add(time.Minute)),
+			IssuedAt:  jwt.NewNumericDate(now),
+			Issuer:    cfg.Issuer,
+		},
+	})
+	if err != nil {
+		t.Fatalf("sign token with rotated key: %v", err)
+	}
+
+	claims, err := staleReplica.ParseToken(ctx, token)
+	if err != nil {
+		t.Fatalf("stale replica rejected token signed by rotated key: %v", err)
+	}
+	if claims.PrincipalType != "cross-replica-test" {
+		t.Fatalf("parsed principal type = %q, want cross-replica-test", claims.PrincipalType)
+	}
+	if staleReplica.cachedPublicKey(rotatedKid) == nil {
+		t.Fatalf("stale replica did not cache rotated kid %q after parsing", rotatedKid)
+	}
+}
 
 func TestRetireExpiredGraceKeysReloadsEveryReplica(t *testing.T) {
 	ctx := context.Background()
