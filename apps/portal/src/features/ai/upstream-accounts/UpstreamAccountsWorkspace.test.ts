@@ -1,616 +1,133 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { defineComponent } from 'vue'
+import { createMemoryHistory, createRouter } from 'vue-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import UpstreamAccountsWorkspace from './UpstreamAccountsWorkspace.vue'
 import { stabilityApi } from '@/features/ai/upstream-stability/api'
 
-const AccountsView = UpstreamAccountsWorkspace
-
 const api = vi.hoisted(() => ({
-  createUpstreamAccount: vi.fn(),
-  listAccountModelBindings: vi.fn(),
-  listLinkedGroupsByTarget: vi.fn(),
   listPriceBooks: vi.fn(),
   listUpstreamAccounts: vi.fn(),
   previewImportUpstreamAccounts: vi.fn(),
-  testUpstreamAccount: vi.fn(),
-  updateUpstreamAccount: vi.fn(),
   updateUpstreamAccountStatus: vi.fn()
 }))
 
-vi.mock('@/features/ai/upstream-stability/api', () => ({ stabilityApi: { list: vi.fn().mockResolvedValue({ items: [] }), detail: vi.fn(), resume: vi.fn() } }))
-
 vi.mock('@/api/aiAdmin', () => ({ aiAdminApi: api }))
-vi.mock('@/features/ai/upstream-model-bindings', () => ({
-  useModelBindingBatchDelete: vi.fn()
-}))
+vi.mock('@/features/ai/upstream-stability/api', () => ({ stabilityApi: { list: vi.fn(), detail: vi.fn(), resume: vi.fn() } }))
 vi.mock('@/platform', () => ({
-  PortalContentCard: { template: '<div><slot name="header" /><slot name="actions" /><slot /></div>' },
-  PortalPagePanel: { template: '<div><slot name="actions" /><slot name="filters" /><slot /><slot name="pagination" /></div>' }
+  PortalPagePanel: defineComponent({ template: '<section><slot name="actions"/><slot name="filters"/><slot/><slot name="pagination"/></section>' })
 }))
 
-const SlotStub = defineComponent({
-  template: '<div><slot name="header" /><slot name="actions" /><slot /></div>'
-})
-
-const ElDialogStub = defineComponent({
-  props: {
-    modelValue: { type: Boolean, default: false },
-    title: { type: String, default: '' }
-  },
-  template: '<section v-if="modelValue" :data-dialog-title="title"><slot /><slot name="footer" /></section>'
-})
-
-const ElInputStub = defineComponent({
-  props: {
-    modelValue: { type: String, default: '' },
-    placeholder: { type: String, default: '' }
-  },
+const SlotStub = defineComponent({ template: '<div><slot/><slot name="prefix"/></div>' })
+const InputStub = defineComponent({
+  props: { modelValue: { type: String, default: '' } },
   emits: ['update:modelValue'],
-  template: '<input :value="modelValue" :placeholder="placeholder" @input="$emit(\'update:modelValue\', $event.target.value)" />'
+  template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />'
 })
-
-const ElButtonStub = defineComponent({
-  emits: ['click'],
-  template: '<button @click="$emit(\'click\')"><slot /></button>'
-})
-
-const ElSelectStub = defineComponent({
-  props: { placeholder: { type: String, default: '' } },
-  template: '<div class="select-placeholder">{{ placeholder }}<slot /></div>'
-})
-
-const ElRadioGroupStub = defineComponent({
-  props: { modelValue: { type: [String, Boolean], default: '' } },
+const SelectStub = defineComponent({
+  props: { modelValue: { type: [String, Number], default: '' } },
   emits: ['update:modelValue'],
-  template: '<div><slot /></div>'
+  template: '<div class="select-stub"><slot/></div>'
+})
+const StatusStub = defineComponent({
+  props: { status: { type: String, default: '' } },
+  template: '<span class="status-stub">{{ status }}</span>'
 })
 
-const ElTableStub = defineComponent({
-  props: { data: { type: Array, default: () => [] } },
-  data() {
-    return { initialData: this.data }
-  },
-  template: '<div><span v-for="row in initialData" :key="row.id" class="table-base-url">{{ row.base_url }}</span><slot /></div>'
-})
-
-const UpstreamModelBindingsPanelStub = defineComponent({
-  name: 'UpstreamModelBindingsPanelStub',
-  props: { defaultBindingProtocol: { type: String, default: '' } },
-  template: '<div />'
-})
-
-const global = {
-  directives: { loading: {} },
-  stubs: {
-    PortalPagePanel: SlotStub,
-    PortalContentCard: SlotStub,
-    UpstreamModelBindingsPanel: UpstreamModelBindingsPanelStub,
-    KeyValueEditor: true,
-    ElDialog: ElDialogStub,
-    ElButton: ElButtonStub,
-    ElRow: SlotStub,
-    ElCol: SlotStub,
-    ElForm: SlotStub,
-    ElFormItem: SlotStub,
-    ElCollapse: SlotStub,
-    ElCollapseItem: SlotStub,
-    ElInput: ElInputStub,
-    ElSelect: ElSelectStub,
-    ElOption: true,
-    ElRadioGroup: ElRadioGroupStub,
-    ElRadio: SlotStub,
-    ElDescriptions: SlotStub,
-    ElDescriptionsItem: SlotStub,
-    ElInputNumber: true,
-    ElCheckbox: SlotStub,
-    ElCheckboxGroup: SlotStub,
-    ElSwitch: true,
-    ElEmpty: true,
-    ElAlert: true,
-    ElTable: ElTableStub,
-    ElTableColumn: true,
-    ElTag: SlotStub,
-    ElIcon: SlotStub,
-    ElTooltip: SlotStub
+function account(index: number) {
+  return {
+    id: `account-${index}`,
+    name: `Account ${index}`,
+    tenant_display_name: `Display ${index}`,
+    tenant_access_mode: index % 2 ? 'public' : 'restricted',
+    tenant_multiplier: 1,
+    status: 'active',
+    endpoints: [{ id: `endpoint-${index}`, api_format: 'openai_responses', base_url: `https://api-${index}.example.com`, status: 'active' }]
   }
+}
+
+async function mountPage(path = '/admin/ai/upstreams/accounts') {
+  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/admin/ai/upstreams/accounts', component: UpstreamAccountsWorkspace }, { path: '/admin/ai/upstreams/accounts/:accountId', component: { template: '<div />' } }] })
+  await router.push(path)
+  await router.isReady()
+  const wrapper = mount(UpstreamAccountsWorkspace, {
+    global: {
+      plugins: [router],
+      directives: { loading: {} },
+      stubs: {
+        ElButton: defineComponent({ emits: ['click'], template: '<button @click="$emit(\'click\')"><slot/></button>' }),
+        ElInput: InputStub,
+        ElSelect: SelectStub,
+        ElOption: true,
+        ElAlert: true,
+        ElDialog: true,
+        ElTag: SlotStub,
+        ElCheckbox: SlotStub,
+        ElForm: SlotStub,
+        ElFormItem: SlotStub,
+        ElInputNumber: true,
+        UpstreamAccountStatusControl: StatusStub,
+        UpstreamAccountEditorDialog: true,
+        UpstreamAccountTestDialog: true
+      }
+    }
+  })
+  await flushPromises()
+  return { wrapper, router }
 }
 
 describe('UpstreamAccountsWorkspace', () => {
   beforeEach(() => {
-    vi.mocked(stabilityApi.list).mockReset().mockResolvedValue({ items: [] })
-    vi.mocked(stabilityApi.detail).mockReset().mockResolvedValue({ models: [] } as any)
-    api.createUpstreamAccount.mockReset().mockResolvedValue({ id: 'account-1' })
-    api.listAccountModelBindings.mockReset().mockResolvedValue({ items: [], total: 0 })
-    api.listLinkedGroupsByTarget.mockReset().mockResolvedValue({ items: [], total: 0 })
-    api.listUpstreamAccounts.mockReset().mockResolvedValue({ items: [] })
-    api.previewImportUpstreamAccounts.mockReset().mockResolvedValue({
-      items: [],
-      summary: {
-        create_accounts: 1,
-        skip_accounts: 0,
-        error_accounts: 0,
-        create_model_bindings: 0,
-        skip_model_bindings: 0
-      }
-    })
-    api.testUpstreamAccount.mockReset().mockResolvedValue({
-      ok: true,
-      http_status: 200,
-      latency_ms: 100,
-      capability: 'image',
-      api_format: 'openai_images',
-      upstream_model: 'gpt-image-2',
-      image_b64: 'aW1n'
-    })
-    api.updateUpstreamAccount.mockReset().mockResolvedValue({})
+    api.listPriceBooks.mockReset().mockResolvedValue({ items: [] })
+    api.listUpstreamAccounts.mockReset().mockResolvedValue({ items: [account(1), account(2)] })
+    api.previewImportUpstreamAccounts.mockReset()
     api.updateUpstreamAccountStatus.mockReset().mockResolvedValue({})
-    api.listPriceBooks.mockReset().mockResolvedValue({
-      items: [
-        { id: 'disabled-oldest', name: '停用表', description: '', status: 'disabled' },
-        { id: 'active-oldest', name: '基础价格', description: '', status: 'active' },
-        { id: 'active-newer', name: '特殊价格', description: '', status: 'active' }
-      ]
-    })
+    vi.mocked(stabilityApi.list).mockReset().mockResolvedValue({ items: [{ resource_id: 'account-1', window: '24h', availability: 'partial', success_rate: 80, samples: 10 }] } as any)
   })
 
-  it('refreshes account and endpoint rates together when the time tab changes', async () => {
-    api.listUpstreamAccounts.mockResolvedValue({ items: [{
-      id: 'account-rate', name: 'Rate account', status: 'active',
-      endpoints: [{ id: 'endpoint-rate', api_format: 'openai_responses', base_url: 'https://rate.example.com', status: 'active' }]
-    }] })
-    vi.mocked(stabilityApi.list).mockImplementation(async (_kind, window) => ({ items: [{
-      resource_id: 'account-rate', window, success_rate: window === '1h' ? 80 : null
-    }] } as any))
-    vi.mocked(stabilityApi.detail).mockImplementation(async (_kind, _id, window) => ({ window, models: [
-      { endpoint_id: 'endpoint-rate', outcome: 'success', count: 8 },
-      { endpoint_id: 'endpoint-rate', outcome: 'timeout', count: 2 },
-      { endpoint_id: 'endpoint-rate', outcome: 'cancelled', count: 10 },
-      { endpoint_id: 'other-endpoint', outcome: 'server_error', count: 100 }
-    ] } as any))
-    const wrapper = mount(AccountsView, { global })
-    await flushPromises()
-    expect(wrapper.find('.account-item-rate').exists()).toBe(false)
-    expect(wrapper.text()).not.toContain('暂无有效样本')
-    expect(wrapper.text()).not.toContain('运行稳定性')
-    wrapper.findAllComponents(ElSelectStub).find(select => select.attributes('aria-label') === '成功率统计范围')!.vm.$emit('update:modelValue', '1h')
-    await flushPromises()
-    expect(stabilityApi.list).toHaveBeenLastCalledWith('direct_upstream', '1h', expect.any(AbortSignal))
-    expect(stabilityApi.detail).toHaveBeenLastCalledWith('direct_upstream', 'account-rate', '1h', expect.any(AbortSignal))
-    expect(wrapper.get('.account-item-rate').text()).toContain('80.0%')
-    const successColumn = wrapper.findAllComponents({ name: 'ElTableColumn' }).find(column => column.attributes('label') === '成功率')
-    const slot = successColumn!.vm.$slots.default!({ row: { id: 'endpoint-rate' } })
-    const cell = mount(defineComponent({ render: () => slot }))
-    expect(cell.text()).toBe('80.0%')
-    cell.unmount()
+  it('renders a full-width account table with separate config, runtime and success-rate information', async () => {
+    const { wrapper } = await mountPage()
+    expect(wrapper.get('table').attributes('aria-label')).toBe('上游账号列表')
+    expect(wrapper.text()).toContain('Account 1')
+    expect(wrapper.text()).toContain('成功率 80.0%')
+    expect(wrapper.text()).toContain('样本较少')
+    expect(wrapper.text()).toContain('部分受限')
+    expect(wrapper.find('.account-content-column').exists()).toBe(false)
     wrapper.unmount()
   })
 
-  it('uses the first active price book when creating an upstream account', async () => {
-    const wrapper = mount(AccountsView, { global })
+  it('filters by name and persists filters in the URL', async () => {
+    const { wrapper, router } = await mountPage()
+    await wrapper.get('input').setValue('api-2.example.com')
     await flushPromises()
-
-    await wrapper.findAll('button').find((button) => button.text().includes('新增账号'))!.trigger('click')
-    const dialog = wrapper.get('[data-dialog-title="新增上游账号"]')
-    await dialog.get('input[placeholder="如 OpenAI 官方 / 某中转"]').setValue('OpenAI 官方')
-    await dialog.get('input[placeholder="https://api.example.com"]').setValue('https://api.openai.com')
-    await dialog.get('input[placeholder="输入上游 API Key（密文存储）"]').setValue('secret')
-    await dialog.findAll('button').find((button) => button.text() === '保存')!.trigger('click')
+    expect(wrapper.text()).not.toContain('Account 1')
+    expect(wrapper.text()).toContain('Account 2')
+    expect(router.currentRoute.value.query.q).toBe('api-2.example.com')
+    wrapper.findAllComponents(SelectStub)[0]!.vm.$emit('update:modelValue', 'disabled')
     await flushPromises()
-
-    expect(api.createUpstreamAccount).toHaveBeenCalledWith(expect.objectContaining({
-      name: 'OpenAI 官方',
-      price_book_id: 'active-oldest',
-      endpoints: [expect.objectContaining({ api_format: 'openai_responses', base_url: 'https://api.openai.com' })]
-    }))
+    expect(router.currentRoute.value.query.status).toBe('disabled')
+    wrapper.unmount()
   })
 
-  it('uses concise labels and keeps the API Key update hint in the input', async () => {
-    api.listUpstreamAccounts.mockResolvedValue({
-      items: [{
-        id: 'account-existing',
-        name: 'Existing',
-        endpoints: [{ id: 'endpoint-1', api_format: 'openai_responses', base_url: 'https://existing.example.com', status: 'active' }],
-        status: 'active'
-      }]
-    })
-    const wrapper = mount(AccountsView, { global })
+  it('keeps selections when moving between client-side pages', async () => {
+    api.listUpstreamAccounts.mockResolvedValue({ items: Array.from({ length: 25 }, (_, index) => account(index + 1)) })
+    const { wrapper } = await mountPage()
+    const rowCheckboxes = wrapper.findAll('tbody input[type="checkbox"]')
+    await rowCheckboxes[0]!.setValue(true)
+    await wrapper.get('button[aria-label="下一页"]').trigger('click')
     await flushPromises()
-
-    await wrapper.findAll('button').find((button) => button.text() === '编辑账号')!.trigger('click')
-    const dialog = wrapper.get('[data-dialog-title="编辑上游账号"]')
-
-    expect(dialog.get('[label="展示名称"]')).toBeTruthy()
-    expect(dialog.find('[label="租户展示名称"]').exists()).toBe(false)
-    expect(dialog.get('[label="API Key"]')).toBeTruthy()
-    expect(dialog.get('input[placeholder="留空不改；密文存储"]')).toBeTruthy()
-    expect(dialog.get('el-alert-stub').attributes('title')).toContain('请求端点在账号详情页单独管理')
-    expect(dialog.find('[label="权重"]').exists()).toBe(false)
-    expect(dialog.get('[label="价格表"]')).toBeTruthy()
-    expect(dialog.get('[label="租户倍率"]')).toBeTruthy()
-    expect(dialog.find('[label="结算价格表"]').exists()).toBe(false)
-    expect(dialog.find('[label="租户扣费倍率"]').exists()).toBe(false)
-
-    await dialog.findAll('button').find((button) => button.text() === '保存')!.trigger('click')
-    await flushPromises()
-    expect(api.updateUpstreamAccount.mock.calls[0]![1]).not.toHaveProperty('weight')
+    await wrapper.findAll('tbody input[type="checkbox"]')[0]!.setValue(true)
+    expect(wrapper.findAll('button').find(button => button.text().includes('导出'))!.text()).toContain('2')
+    wrapper.unmount()
   })
 
-  it('restores and submits the account description when editing', async () => {
-    api.listUpstreamAccounts.mockResolvedValue({
-      items: [{
-        id: 'account-described',
-        name: 'Described account',
-        description: 'Existing description',
-        endpoints: [{ id: 'endpoint-described', api_format: 'openai_responses', base_url: 'https://described.example.com', status: 'active' }],
-        status: 'active'
-      }]
-    })
-    const wrapper = mount(AccountsView, { global })
+  it('opens a dedicated detail URL and preserves the list query as the return target', async () => {
+    const { wrapper, router } = await mountPage('/admin/ai/upstreams/accounts?q=Account&runtime=partial')
+    await wrapper.findAll('button').find(button => button.text() === '查看详情')!.trigger('click')
     await flushPromises()
-
-    await wrapper.findAll('button').find((button) => button.text() === '编辑账号')!.trigger('click')
-    const dialog = wrapper.get('[data-dialog-title="编辑上游账号"]')
-    const description = dialog.get('input[placeholder="给租户展示的一句话说明（可选）"]')
-    expect((description.element as HTMLInputElement).value).toBe('Existing description')
-
-    await description.setValue('Updated description')
-    await dialog.findAll('button').find((button) => button.text() === '保存')!.trigger('click')
-    await flushPromises()
-
-    expect(api.updateUpstreamAccount).toHaveBeenCalledWith(
-      'account-described',
-      expect.objectContaining({ description: 'Updated description' })
-    )
+    expect(router.currentRoute.value.path).toBe('/admin/ai/upstreams/accounts/account-1')
+    expect(router.currentRoute.value.query.from).toBe('/admin/ai/upstreams/accounts?q=Account&runtime=partial')
+    wrapper.unmount()
   })
-
-  it('remounts the endpoint table so Base URL follows the selected account', async () => {
-    api.listUpstreamAccounts.mockResolvedValue({
-      items: [
-        {
-          id: 'account-a', name: 'Account A', status: 'active',
-          endpoints: [{ id: 'endpoint-a', api_format: 'openai_responses', base_url: 'https://a.example.com', status: 'active' }]
-        },
-        {
-          id: 'account-b', name: 'Account B', status: 'active',
-          endpoints: [{ id: 'endpoint-b', api_format: 'openai_responses', base_url: 'https://b.example.com', status: 'active' }]
-        }
-      ]
-    })
-    const wrapper = mount(AccountsView, { global })
-    await flushPromises()
-
-    expect(wrapper.find('.table-base-url').text()).toBe('https://a.example.com')
-    await wrapper.findAll('.account-item')[1]!.trigger('click')
-    await flushPromises()
-
-    expect(wrapper.find('.table-base-url').text()).toBe('https://b.example.com')
-  })
-
-  it('switches account detail sections with tabs instead of stacking them', async () => {
-    api.listUpstreamAccounts.mockResolvedValue({
-      items: [{
-        id: 'account-tabbed',
-        name: 'Tabbed account',
-        endpoints: [{ id: 'endpoint-tabbed', api_format: 'openai_responses', base_url: 'https://tabbed.example.com', status: 'active' }],
-        status: 'active'
-      }]
-    })
-    const wrapper = mount(AccountsView, { global })
-    await flushPromises()
-
-    const panes = wrapper.findAll('.account-detail-pane')
-    expect(panes).toHaveLength(3)
-    expect(panes[0]!.attributes('style')).not.toBe('display: none;')
-    expect(panes[1]!.attributes('style')).toBe('display: none;')
-
-    const endpointTab = wrapper.findAll('[role="tab"]').find((tab) => tab.text() === '请求端点')!
-    await endpointTab.trigger('click')
-
-    expect(panes[0]!.attributes('style')).toBe('display: none;')
-    expect(panes[1]!.attributes('style')).not.toBe('display: none;')
-  })
-
-  it('defaults a new account endpoint to OpenAI Responses', async () => {
-    api.listUpstreamAccounts.mockResolvedValue({
-      items: [{
-        id: 'account-openai',
-        name: 'OpenAI Compatible',
-        endpoints: [{ id: 'endpoint-1', api_format: 'openai_responses', base_url: 'https://api.example.com', status: 'active' }],
-        status: 'active'
-      }]
-    })
-    const wrapper = mount(AccountsView, { global })
-    await flushPromises()
-
-    await wrapper.findAll('button').find((button) => button.text().includes('新增账号'))!.trigger('click')
-    expect(wrapper.get('[data-dialog-title="新增上游账号"]').find('[modelvalue="openai_responses"]').exists()).toBe(true)
-  })
-
-  it('uses one switch instead of separate status and stop controls for an active account', async () => {
-    api.listUpstreamAccounts.mockResolvedValue({
-      items: [{
-        id: 'account-active',
-        name: 'Active account',
-        endpoints: [{ id: 'endpoint-1', api_format: 'openai_responses', base_url: 'https://api.example.com', status: 'active' }],
-        status: 'active'
-      }]
-    })
-    const wrapper = mount(AccountsView, { global })
-    await flushPromises()
-
-    expect(wrapper.findAll('el-switch-stub')).toHaveLength(1)
-    expect(wrapper.findAll('button').filter((button) => button.text() === '停用')).toHaveLength(0)
-  })
-
-  it('does not expose tenant group association controls', async () => {
-    api.listUpstreamAccounts.mockResolvedValue({
-      items: [{
-        id: 'account-1',
-        name: 'OpenAI 官方',
-        endpoints: [{ id: 'endpoint-1', api_format: 'openai_responses', base_url: 'https://api.openai.com', status: 'active' }],
-        status: 'active'
-      }]
-    })
-    const wrapper = mount(AccountsView, { global })
-    await flushPromises()
-
-    expect(wrapper.text()).not.toContain('关联分组')
-    expect(api.listLinkedGroupsByTarget).not.toHaveBeenCalled()
-  })
-
-  it('uses the first active price book for an import preview', async () => {
-    const wrapper = mount(AccountsView, { global })
-    await flushPromises()
-
-    await wrapper.findAll('button').find((button) => button.text() === '导入')!.trigger('click')
-    const dialog = wrapper.get('[data-dialog-title="导入上游账号"]')
-    const file = new File([
-      JSON.stringify({ accounts: [{ name: 'Imported', api_key: 'secret', endpoints: [{ api_format: 'openai_responses', base_url: 'https://api.example.com', status: 'active' }] }] })
-    ], 'accounts.json', { type: 'application/json' })
-    const input = dialog.get('input[type="file"]')
-    Object.defineProperty(input.element, 'files', { configurable: true, value: [file] })
-    await input.trigger('change')
-    await flushPromises()
-
-    expect(api.previewImportUpstreamAccounts).toHaveBeenCalledWith(expect.objectContaining({
-      default_price_book_id: 'active-oldest'
-    }))
-  })
-
-  it('preserves an existing price book when editing an upstream account', async () => {
-    api.listUpstreamAccounts.mockResolvedValue({
-      items: [{
-        id: 'account-existing',
-        name: 'Existing',
-        endpoints: [{ id: 'endpoint-1', api_format: 'openai_responses', base_url: 'https://existing.example.com', status: 'active' }],
-        price_book_id: 'active-newer',
-        status: 'active'
-      }]
-    })
-    const wrapper = mount(AccountsView, { global })
-    await flushPromises()
-
-    await wrapper.findAll('button').find((button) => button.text() === '编辑账号')!.trigger('click')
-    const dialog = wrapper.get('[data-dialog-title="编辑上游账号"]')
-    await dialog.findAll('button').find((button) => button.text() === '保存')!.trigger('click')
-    await flushPromises()
-
-    expect(api.updateUpstreamAccount).toHaveBeenCalledWith(
-      'account-existing',
-      expect.objectContaining({ price_book_id: 'active-newer' })
-    )
-  })
-
-  it('preserves the system-managed invalid state when editing account details', async () => {
-    api.listUpstreamAccounts.mockResolvedValue({
-      items: [{
-        id: 'account-invalid',
-        name: 'Invalid account',
-        tenant_display_name: 'Invalid account',
-        tenant_access_mode: 'public',
-        endpoints: [{ id: 'endpoint-1', api_format: 'openai_responses', base_url: 'https://invalid.example.com', status: 'active' }],
-        price_book_id: 'active-oldest',
-        status: 'invalid',
-        invalid_reason: 'upstream returned HTTP 401'
-      }]
-    })
-    const wrapper = mount(AccountsView, { global })
-    await flushPromises()
-
-    expect(wrapper.text()).toContain('失效')
-    expect(wrapper.text()).toContain('重新验证')
-    expect(wrapper.findAll('el-switch-stub')).toHaveLength(0)
-    expect(wrapper.findAll('button').filter((button) => button.text() === '测试连通')).toHaveLength(1)
-    await wrapper.findAll('button').find((button) => button.text() === '编辑账号')!.trigger('click')
-    const dialog = wrapper.get('[data-dialog-title="编辑上游账号"]')
-    await dialog.findAll('button').find((button) => button.text() === '保存')!.trigger('click')
-    await flushPromises()
-
-    expect(api.updateUpstreamAccount).toHaveBeenCalledOnce()
-    const payload = api.updateUpstreamAccount.mock.calls[0]![1]
-    expect(payload).not.toHaveProperty('status')
-  })
-
-  it('explains when no active price book is available for a new account', async () => {
-    api.listPriceBooks.mockResolvedValue({
-      items: [{ id: 'disabled', name: '停用表', description: '', status: 'disabled' }]
-    })
-    const wrapper = mount(AccountsView, { global })
-    await flushPromises()
-
-    await wrapper.findAll('button').find((button) => button.text().includes('新增账号'))!.trigger('click')
-
-    expect(wrapper.get('[data-dialog-title="新增上游账号"]').text()).toContain('暂无启用价格表')
-  })
-
-  it('fills the default when price books finish loading after the create dialog opens', async () => {
-    let resolvePriceBooks!: (value: { items: Array<Record<string, string>> }) => void
-    api.listPriceBooks.mockReturnValue(new Promise((resolve) => { resolvePriceBooks = resolve }))
-    const wrapper = mount(AccountsView, { global })
-    await flushPromises()
-
-    await wrapper.findAll('button').find((button) => button.text().includes('新增账号'))!.trigger('click')
-    const dialog = wrapper.get('[data-dialog-title="新增上游账号"]')
-    await dialog.get('input[placeholder="如 OpenAI 官方 / 某中转"]').setValue('慢加载账号')
-    await dialog.get('input[placeholder="https://api.example.com"]').setValue('https://slow.example.com')
-    await dialog.get('input[placeholder="输入上游 API Key（密文存储）"]').setValue('secret')
-
-    resolvePriceBooks({
-      items: [{ id: 'active-after-load', name: '基础价格', description: '', status: 'active' }]
-    })
-    await flushPromises()
-    await dialog.findAll('button').find((button) => button.text() === '保存')!.trigger('click')
-    await flushPromises()
-
-    expect(api.createUpstreamAccount).toHaveBeenCalledWith(expect.objectContaining({
-      price_book_id: 'active-after-load'
-    }))
-  })
-
-  it('refreshes an import preview when the default price book arrives late', async () => {
-    let resolvePriceBooks!: (value: { items: Array<Record<string, string>> }) => void
-    api.listPriceBooks.mockReturnValue(new Promise((resolve) => { resolvePriceBooks = resolve }))
-    const wrapper = mount(AccountsView, { global })
-    await flushPromises()
-
-    await wrapper.findAll('button').find((button) => button.text() === '导入')!.trigger('click')
-    const dialog = wrapper.get('[data-dialog-title="导入上游账号"]')
-    const file = new File([
-      JSON.stringify({ accounts: [{ name: 'Imported', api_key: 'secret', endpoints: [{ api_format: 'openai_responses', base_url: 'https://api.example.com', status: 'active' }] }] })
-    ], 'accounts.json', { type: 'application/json' })
-    const input = dialog.get('input[type="file"]')
-    Object.defineProperty(input.element, 'files', { configurable: true, value: [file] })
-    await input.trigger('change')
-    await flushPromises()
-
-    resolvePriceBooks({
-      items: [{ id: 'active-after-load', name: '基础价格', description: '', status: 'active' }]
-    })
-    await flushPromises()
-
-    expect(api.previewImportUpstreamAccounts).toHaveBeenLastCalledWith(expect.objectContaining({
-      default_price_book_id: 'active-after-load'
-    }))
-  })
-
-  it('ignores a stale import preview that finishes after the priced preview', async () => {
-    let resolvePriceBooks!: (value: { items: Array<Record<string, string>> }) => void
-    let resolveStalePreview!: (value: Record<string, unknown>) => void
-    let resolvePricedPreview!: (value: Record<string, unknown>) => void
-    api.listPriceBooks.mockReturnValue(new Promise((resolve) => { resolvePriceBooks = resolve }))
-    api.previewImportUpstreamAccounts
-      .mockImplementationOnce(() => new Promise((resolve) => { resolveStalePreview = resolve }))
-      .mockImplementationOnce(() => new Promise((resolve) => { resolvePricedPreview = resolve }))
-    const wrapper = mount(AccountsView, { global })
-    await flushPromises()
-
-    await wrapper.findAll('button').find((button) => button.text() === '导入')!.trigger('click')
-    const dialog = wrapper.get('[data-dialog-title="导入上游账号"]')
-    const file = new File([
-      JSON.stringify({ accounts: [{ name: 'Imported', api_key: 'secret', endpoints: [{ api_format: 'openai_responses', base_url: 'https://api.example.com', status: 'active' }] }] })
-    ], 'accounts.json', { type: 'application/json' })
-    const input = dialog.get('input[type="file"]')
-    Object.defineProperty(input.element, 'files', { configurable: true, value: [file] })
-    await input.trigger('change')
-    await flushPromises()
-
-    resolvePriceBooks({
-      items: [{ id: 'active-after-load', name: '基础价格', description: '', status: 'active' }]
-    })
-    await flushPromises()
-    resolvePricedPreview({
-      items: [],
-      summary: {
-        create_accounts: 2,
-        skip_accounts: 0,
-        error_accounts: 0,
-        create_model_bindings: 0,
-        skip_model_bindings: 0
-      }
-    })
-    await flushPromises()
-    resolveStalePreview({
-      items: [],
-      summary: {
-        create_accounts: 1,
-        skip_accounts: 0,
-        error_accounts: 0,
-        create_model_bindings: 0,
-        skip_model_bindings: 0
-      }
-    })
-    await flushPromises()
-
-    expect(dialog.findAll('.import-stats strong')[0]!.text()).toBe('2')
-  })
-
-  it('submits the selected image for an image edit connectivity test', async () => {
-    api.listUpstreamAccounts.mockResolvedValue({
-      items: [{
-        id: 'image-account',
-        name: 'Image upstream',
-        endpoints: [{ id: 'image-endpoint', api_format: 'openai_images', base_url: 'https://images.example.com', status: 'active' }],
-        status: 'active'
-      }]
-    })
-    api.listAccountModelBindings.mockResolvedValue({
-      items: [{
-        model_code: 'gpt-image-2',
-        capability_type: 'image'
-      }],
-      total: 1
-    })
-    const wrapper = mount(AccountsView, { global })
-    await flushPromises()
-
-    await wrapper.findAll('button').find((button) => button.text().includes('测试连通'))!.trigger('click')
-    await flushPromises()
-    const dialog = wrapper.get('[data-dialog-title="测试账号连通"]')
-    dialog.getComponent(ElRadioGroupStub).vm.$emit('update:modelValue', true)
-    await flushPromises()
-
-    const file = new File([new Uint8Array([137, 80, 78, 71])], 'reference.png', { type: 'image/png' })
-    const input = dialog.get('input[accept="image/png,image/jpeg,image/webp"]')
-    Object.defineProperty(input.element, 'files', { configurable: true, value: [file] })
-    await input.trigger('change')
-    await flushPromises()
-    await dialog.findAll('button').find((button) => button.text().includes('开始测试'))!.trigger('click')
-    await flushPromises()
-
-    expect(api.testUpstreamAccount).toHaveBeenCalledWith('image-account', {
-      model_code: 'gpt-image-2',
-      api_format: 'openai_images',
-      prompt: undefined,
-      image_edit: true,
-      image: {
-        filename: 'reference.png',
-        mime_type: 'image/png',
-        b64_json: 'iVBORw=='
-      }
-    })
-  })
-  it('uses the default request and displays upstream diagnostic metadata', async () => {
-    api.listUpstreamAccounts.mockResolvedValue({ items: [{
-      id: 'chat-account', name: 'Chat account', status: 'active',
-      endpoints: [{ id: 'chat-endpoint', api_format: 'openai_responses', base_url: 'https://api.example.com', status: 'active' }]
-    }] })
-    api.listAccountModelBindings.mockResolvedValue({ items: [{ model_code: 'public-model', capability_type: 'chat' }] })
-    api.testUpstreamAccount.mockResolvedValue({ ok: true, http_status: 200, latency_ms: 200, capability: 'chat', api_format: 'openai_responses', upstream_model: 'bound-model', reply_text: 'OK', response_content_type: 'text/event-stream', upstream_request_id: 'upstream-123' })
-    const wrapper = mount(AccountsView, { global })
-    await flushPromises()
-    await wrapper.findAll('button').find((button) => button.text().includes('测试连通'))!.trigger('click')
-    await flushPromises()
-    const dialog = wrapper.get('[data-dialog-title="测试账号连通"]')
-    expect(dialog.find('input[placeholder="粘贴与所选端点协议一致的 JSON 请求体"]').exists()).toBe(false)
-    const run = dialog.findAll('button').find((button) => button.text().includes('开始测试'))!
-    await run.trigger('click')
-    await flushPromises()
-    expect(api.testUpstreamAccount).toHaveBeenCalledWith('chat-account', expect.objectContaining({ model_code: 'public-model', prompt: undefined }))
-    expect(api.testUpstreamAccount.mock.calls[0]?.[1]).not.toHaveProperty('request_body')
-    expect(dialog.text()).toContain('text/event-stream')
-    expect(dialog.text()).toContain('upstream-123')
-  })
-
 })

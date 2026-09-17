@@ -232,6 +232,17 @@ export const portalModules: PortalModule[] = [
     component: () => import("@/views/admin/ai/gateway/AccountsView.vue")
   },
   {
+    id: "admin-upstream-account-detail",
+    label: "上游账号详情",
+    path: "/admin/ai/upstreams/accounts/:accountId",
+    icon: "database",
+    capability: "admin.ai.upstream",
+    navGroup: adminAi,
+    nav: false,
+    order: 20,
+    component: () => import("@/views/admin/ai/gateway/AccountDetailView.vue")
+  },
+  {
     id: "admin-credential-pools",
     label: "账号池",
     path: "/admin/ai/upstreams/pools",

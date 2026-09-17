@@ -1,403 +1,135 @@
-<!--
-  上游账号工作区 — 智能服务 / AI 网关：维护上游连接、公共模型、价格表和租户倍率。
-  重构：迁移至新设计系统一体面板（PortalPagePanel:图标徽章+面包屑标题+描述同行,
-       账号操作收进页头 #actions,主从布局置于同卡 body 的 24px 容器）;
-       列表空态用 DsEmpty,状态徽章 el-tag → DsTag,导入预检 el-table → DsTable;
-       listUpstreamAccounts 一次返回全量账号、无分页参数,故本页不渲染分页。
-       弹窗/抽屉/表单仍为 element-plus(过渡期)。
--->
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { Delete, Download, Edit, Plus, Refresh, Upload, VideoPlay } from '@element-plus/icons-vue'
-import { Database } from 'lucide-vue-next'
-import { PortalContentCard, PortalPagePanel } from '@/platform'
-import { DsEmpty, DsNumberInput, DsTable, DsTabs, DsTag, type DsTableColumn } from '@/shared/ui'
-import { formatDuration } from '@/platform/ai/usage'
-import { formatMultiplier } from '@/platform/ai/utils'
-import { aiAdminApi } from '@/api/aiAdmin'
-import type {
-  AccountDTO,
-  AccountWriteRequest,
-  UpstreamAccountImportPreviewOutputBody,
-  UpstreamAccountImportRequest,
-  UpstreamAccountEndpointDTO,
-  UpstreamAccountEndpointWriteRequest,
-  UpstreamAccountTransferAccountDTO,
-  UpstreamAccountTestImage,
-  UpstreamAccountTestResult,
-  UpstreamModelBindingDTO
-} from '@/api/types/ai'
-import { endpointAuthSchemeOptions, upstreamAPIFormatLabel, upstreamAPIFormatOptions } from './constants'
-import { firstActivePriceBookId } from '@/features/ai/price-books/priceBookSelection'
-import type { PriceBookRecord } from '@/features/ai/price-books/pricingTypes'
-import KeyValueEditor from './components/KeyValueEditor.vue'
-import UpstreamImageTestUpload from './components/UpstreamImageTestUpload.vue'
-import UpstreamModelBindingsPanel from '@/features/ai/upstream-model-bindings/UpstreamModelBindingsPanel.vue'
-import UpstreamAccountStatusControl from './components/UpstreamAccountStatusControl.vue'
-import {
-  upstreamAccountStatusLabel,
-  upstreamAccountStatusTagType
-} from './components/status'
+import { computed, nextTick, onMounted, reactive, ref, shallowRef, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { Download, Plus, Refresh, Upload, VideoPlay } from '@element-plus/icons-vue'
+import { Database, Search } from 'lucide-vue-next'
 
+import { aiAdminApi } from '@/api/aiAdmin'
+import type { AccountDTO, UpstreamAccountImportPreviewOutputBody, UpstreamAccountImportRequest, UpstreamAccountTransferAccountDTO, UpstreamAccountTestResult } from '@/api/types/ai'
+import { PortalPagePanel } from '@/platform'
+import { DsFilterBar, DsPagination, DsTable, DsTag, type DsTableColumn } from '@/shared/ui'
+import { formatMultiplier } from '@/platform/ai/utils'
+import type { PriceBookRecord } from '@/features/ai/price-books/pricingTypes'
+import { firstActivePriceBookId } from '@/features/ai/price-books/priceBookSelection'
 import { useUpstreamStability } from '@/features/ai/upstream-stability/useUpstreamStability'
-const stability = useUpstreamStability('direct_upstream')
-const stabilityById = computed(() => new Map(stability.items.value
-  .filter(item => item.window === stability.window.value)
-  .map(item => [item.resource_id, item])))
-const sortedAccounts = computed(() => accounts.value)
+import type { StabilityWindow } from '@/features/ai/upstream-stability/api'
+import UpstreamAccountStatusControl from './components/UpstreamAccountStatusControl.vue'
+import UpstreamAccountEditorDialog from './components/UpstreamAccountEditorDialog.vue'
+import UpstreamAccountTestDialog from './components/UpstreamAccountTestDialog.vue'
+import { accountEndpointHosts, availabilityLabels, availabilityTone, stabilityWindowLabels, successRateLabel, successRateTitle } from './presentation'
+
+const route = useRoute()
+const router = useRouter()
 const loading = shallowRef(false)
 const accounts = shallowRef<AccountDTO[]>([])
 const priceBooks = shallowRef<PriceBookRecord[]>([])
-const selectedAccountId = shallowRef('')
-const endpointStability = useUpstreamStability('direct_upstream', () => selectedAccountId.value, stability.window)
-const endpointSuccessRates = computed(() => {
-  const detail = endpointStability.detail.value
-  const rates = new Map<string, number>()
-  if (!detail || detail.window !== stability.window.value || endpointStability.error.value) return rates
-  const totals = new Map<string, { successes: number; samples: number }>()
-  // 与后端账号成功率保持同一口径，取消及本地拒绝不计入分母。
-  const failures = new Set(['server_error', 'timeout', 'network_error', 'unauthorized', 'rate_limited', 'model_error'])
-  for (const row of detail.models || []) {
-    if (row.outcome !== 'success' && !failures.has(row.outcome)) continue
-    const total = totals.get(row.endpoint_id) || { successes: 0, samples: 0 }
-    total.samples += row.count
-    if (row.outcome === 'success') total.successes += row.count
-    totals.set(row.endpoint_id, total)
-  }
-  for (const [id, total] of totals) {
-    if (total.samples > 0) rates.set(id, total.successes / total.samples * 100)
-  }
-  return rates
-})
-function successRateLabel(rate?: number | null) {
-  return rate == null ? '—' : `${rate.toFixed(1)}%`
-}
-async function refreshWorkspace() {
-  await Promise.all([fetchAccounts(), stability.refresh(), endpointStability.refresh()])
-}
-const selectedExportAccountIds = shallowRef<string[]>([])
+const selectedAccounts = shallowRef<AccountDTO[]>([])
 const updatingAccountStatusId = shallowRef('')
-const accountContentScroll = ref<HTMLElement | null>(null)
-const activeAccountTab = shallowRef('overview')
-const accountDetailTabs = [
-  { key: 'overview', label: '账号概览' },
-  { key: 'endpoints', label: '请求端点' },
-  { key: 'models', label: '模型绑定' }
+const search = shallowRef('')
+const configStatus = shallowRef('all')
+const runtimeStatus = shallowRef('all')
+const page = shallowRef(1)
+const pageSize = shallowRef(20)
+const stabilityWindow = shallowRef<StabilityWindow>('24h')
+const validWindows: StabilityWindow[] = ['1h', '24h', '7d']
+const stability = useUpstreamStability('direct_upstream', undefined, stabilityWindow)
+
+const stabilityById = computed(() => new Map(stability.items.value.filter(item => item.window === stabilityWindow.value).map(item => [item.resource_id, item])))
+const filteredAccounts = computed(() => {
+  const keyword = search.value.trim().toLocaleLowerCase()
+  return accounts.value.filter(account => {
+    if (keyword && !`${account.name} ${account.tenant_display_name || ''} ${accountEndpointHosts(account)}`.toLocaleLowerCase().includes(keyword)) return false
+    if (configStatus.value !== 'all' && account.status !== configStatus.value) return false
+    if (runtimeStatus.value !== 'all' && (stabilityById.value.get(account.id)?.availability || 'unknown') !== runtimeStatus.value) return false
+    return true
+  })
+})
+const totalPages = computed(() => Math.max(1, Math.ceil(filteredAccounts.value.length / pageSize.value)))
+const pageRows = computed(() => filteredAccounts.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value))
+const activePriceBookId = computed(() => firstActivePriceBookId(priceBooks.value))
+const selectedExportAccounts = computed(() => selectedAccounts.value.filter(selected => accounts.value.some(account => account.id === selected.id)))
+const columns: DsTableColumn[] = [
+  { key: 'account', title: '账号', width: 300, wrap: true },
+  { key: 'config', title: '配置状态', width: 132 },
+  { key: 'runtime', title: '运行状态', width: 128 },
+  { key: 'endpoints', title: '端点', width: 80, align: 'right' },
+  { key: 'visibility', title: '租户可见性', width: 110 },
+  { key: 'multiplier', title: '倍率', width: 90, align: 'right' },
+  { key: 'actions', title: '操作', width: 190, align: 'right' }
 ]
 
-const activePriceBookId = computed(() => firstActivePriceBookId(priceBooks.value))
-const selectedAccount = computed(() => accounts.value.find((account) => account.id === selectedAccountId.value))
-const selectedExportAccounts = computed(() => accounts.value.filter((account) => selectedExportAccountIds.value.includes(account.id)))
-const priceBookName = (id?: string) => priceBooks.value.find((priceBook) => priceBook.id === id)?.name || '-'
-// 列表只显示 base_url 的 host:名称虽然唯一,但「某中转 A / B」这类近似命名很常见,
-// 去掉地址后无法分辨是哪个上游;host 不含路径与查询串,不暴露完整上游地址。
-function accountHost(baseUrl?: string) {
-  if (!baseUrl) return ''
-  try {
-    return new URL(baseUrl).host
-  } catch {
-    return baseUrl.replace(/^https?:\/\//, '').split('/')[0]
-  }
+function stringQuery(value: unknown) { return typeof value === 'string' ? value : '' }
+function positiveInt(value: unknown, fallback: number) { const parsed = Number(stringQuery(value)); return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback }
+function applyRouteQuery() {
+  if (route.path !== '/admin/ai/upstreams/accounts') return
+  search.value = stringQuery(route.query.q)
+  configStatus.value = ['active', 'disabled', 'invalid'].includes(stringQuery(route.query.status)) ? stringQuery(route.query.status) : 'all'
+  runtimeStatus.value = ['available', 'partial', 'unavailable', 'unknown'].includes(stringQuery(route.query.runtime)) ? stringQuery(route.query.runtime) : 'all'
+  page.value = positiveInt(route.query.page, 1)
+  const size = positiveInt(route.query.size, 20)
+  pageSize.value = [20, 50, 100].includes(size) ? size : 20
+  const window = stringQuery(route.query.window) as StabilityWindow
+  stabilityWindow.value = validWindows.includes(window) ? window : '24h'
 }
-function accountEndpointHosts(account: AccountDTO) {
-  return [...new Set(account.endpoints.map((endpoint) => accountHost(endpoint.base_url)).filter(Boolean))].join(' · ')
-}
-function accountAPIFormats(account: AccountDTO) {
-  return account.endpoints.map((endpoint) => upstreamAPIFormatLabel(endpoint.api_format)).join('、') || '-'
-}
-// 展示名与名称一致时不重复渲染,只留倍率。
-// formatMultiplier 返回纯数字,列表里没有 label 承载语义,故补 × 前缀;未设置时留空不占位。
-function accountSubtitle(account: AccountDTO) {
-  const raw = formatMultiplier(account.tenant_multiplier)
-  const multiplier = raw === '-' ? '' : `×${raw}`
-  const displayName = account.tenant_display_name || ''
-  if (!displayName || displayName === account.name) return multiplier
-  return multiplier ? `对外:${displayName} · ${multiplier}` : `对外:${displayName}`
-}
-// ── 账号 CRUD ────────────────────────────────────────────────────────────────
-const accountDialog = shallowRef(false)
-const editingAccountId = shallowRef('')
-const submittingAccount = shallowRef(false)
-const isEditingAccount = computed(() => Boolean(editingAccountId.value))
-
-type EndpointDraft = Omit<UpstreamAccountEndpointWriteRequest, 'extra_headers'> & {
-  id?: string
-  extra_headers?: Record<string, unknown>
-}
-
-interface AccountForm {
-  name: string
-  description: string
-  tenant_display_name: string
-  tenant_access_mode: 'public' | 'restricted'
-  api_key: string
-  endpoints: EndpointDraft[]
-  concurrency_limit: number | null
-  price_book_id: string
-  tenant_multiplier: number | null
-}
-
-function blankEndpoint(): EndpointDraft {
+function normalizedQuery() {
   return {
-    api_format: 'openai_responses',
-    base_url: '',
-    path_override: '',
-    auth_scheme: 'format_default',
-    auth_header: '',
-    extra_headers: {},
-    status: 'active'
+    ...(search.value ? { q: search.value } : {}),
+    ...(configStatus.value !== 'all' ? { status: configStatus.value } : {}),
+    ...(runtimeStatus.value !== 'all' ? { runtime: runtimeStatus.value } : {}),
+    ...(page.value !== 1 ? { page: String(page.value) } : {}),
+    ...(pageSize.value !== 20 ? { size: String(pageSize.value) } : {}),
+    ...(stabilityWindow.value !== '24h' ? { window: stabilityWindow.value } : {})
   }
 }
-
-const accountForm = reactive<AccountForm>({
-  name: '', description: '', tenant_display_name: '', tenant_access_mode: 'public', api_key: '',
-  endpoints: [], concurrency_limit: null, price_book_id: '', tenant_multiplier: 1
+applyRouteQuery()
+watch(() => route.query, applyRouteQuery)
+watch([search, configStatus, runtimeStatus, pageSize], () => { page.value = 1 })
+watch([search, configStatus, runtimeStatus, page, pageSize, stabilityWindow], () => {
+  if (route.path !== '/admin/ai/upstreams/accounts') return
+  const query = normalizedQuery()
+  if (JSON.stringify(query) !== JSON.stringify(route.query)) void router.replace({ query })
 })
+watch(totalPages, lastPage => { if (page.value > lastPage) page.value = lastPage })
 
-function endpointPayload(endpoint: EndpointDraft): UpstreamAccountEndpointWriteRequest {
-  return {
-    api_format: endpoint.api_format,
-    base_url: endpoint.base_url.trim(),
-    path_override: endpoint.path_override?.trim() || undefined,
-    auth_scheme: endpoint.auth_scheme || 'format_default',
-    auth_header: endpoint.auth_scheme === 'custom_header' ? endpoint.auth_header?.trim() : undefined,
-    extra_headers: endpoint.extra_headers && Object.keys(endpoint.extra_headers as object).length ? endpoint.extra_headers : undefined,
-    status: endpoint.status || 'active'
-  }
-}
-
-function validateEndpointDrafts(endpoints: EndpointDraft[]) {
-  if (!endpoints.length) {
-    ElMessage.warning('至少配置一个请求端点')
-    return false
-  }
-  const formats = new Set<string>()
-  for (const endpoint of endpoints) {
-    if (!endpoint.base_url.trim()) {
-      ElMessage.warning(`请填写 ${upstreamAPIFormatLabel(endpoint.api_format)} 的 Base URL`)
-      return false
-    }
-    if (formats.has(endpoint.api_format)) {
-      ElMessage.warning(`API 格式不能重复：${upstreamAPIFormatLabel(endpoint.api_format)}`)
-      return false
-    }
-    if (endpoint.auth_scheme === 'custom_header' && !endpoint.auth_header?.trim()) {
-      ElMessage.warning('自定义认证方式必须填写请求头名称')
-      return false
-    }
-    formats.add(endpoint.api_format)
-  }
-  return true
-}
-
-function addAccountEndpointDraft() {
-  const used = new Set(accountForm.endpoints.map((endpoint: EndpointDraft) => endpoint.api_format))
-  const next = upstreamAPIFormatOptions.find((option) => !used.has(option.value))
-  if (!next) {
-    ElMessage.info('所有 API 格式都已配置')
-    return
-  }
-  accountForm.endpoints.push({ ...blankEndpoint(), api_format: next.value })
-}
-
-function removeAccountEndpointDraft(index: string | number) {
-  if (accountForm.endpoints.length <= 1) {
-    ElMessage.warning('账号至少需要一个请求端点')
-    return
-  }
-  accountForm.endpoints.splice(Number(index), 1)
-}
-
-function draftFormatDisabled(format: string, index: string | number) {
-  return accountForm.endpoints.some((endpoint: EndpointDraft, candidateIndex: number) =>
-    candidateIndex !== Number(index) && endpoint.api_format === format
-  )
-}
-
-function blankAccount(): AccountForm {
-  return {
-    name: '', description: '', tenant_display_name: '', tenant_access_mode: 'public', api_key: '',
-    endpoints: [blankEndpoint()], concurrency_limit: null, price_book_id: '', tenant_multiplier: 1
-  }
-}
-
-function resetAccountForm() {
-  editingAccountId.value = ''
-  Object.assign(accountForm, blankAccount(), {
-    price_book_id: activePriceBookId.value
-  })
-}
-
-function openAccountCreate() { resetAccountForm(); accountDialog.value = true }
-function openAccountEdit(row: AccountDTO) {
-  editingAccountId.value = row.id
-  Object.assign(accountForm, {
-    ...blankAccount(),
-    name: row.name,
-    description: row.description || '',
-    tenant_display_name: row.tenant_display_name || row.name,
-    tenant_access_mode: row.tenant_access_mode || 'public',
-    api_key: '',
-    endpoints: [],
-    concurrency_limit: row.concurrency_limit ?? null,
-    price_book_id: row.price_book_id || '',
-    tenant_multiplier: row.tenant_multiplier ?? null
-  })
-  accountDialog.value = true
-}
-
-function buildAccountPayload(): AccountWriteRequest {
-  const p: AccountWriteRequest = {
-    name: accountForm.name.trim(),
-    description: accountForm.description.trim() || undefined,
-    tenant_display_name: accountForm.tenant_display_name.trim() || accountForm.name.trim(),
-    tenant_access_mode: accountForm.tenant_access_mode,
-    concurrency_limit: accountForm.concurrency_limit ?? null,
-    price_book_id: accountForm.price_book_id || undefined,
-    tenant_multiplier: accountForm.tenant_multiplier ?? undefined
-  }
-  if (!isEditingAccount.value) p.endpoints = accountForm.endpoints.map(endpointPayload)
-  if (accountForm.api_key.trim()) p.api_key = accountForm.api_key.trim()
-  return p
-}
-
-async function submitAccount() {
-  if (!accountForm.name.trim()) { ElMessage.warning('请填写账号名称'); return }
-  if (!isEditingAccount.value && !accountForm.api_key.trim()) { ElMessage.warning('请填写上游 API key'); return }
-  if (!isEditingAccount.value && !validateEndpointDrafts(accountForm.endpoints)) return
-  submittingAccount.value = true
+async function fetchAccounts() {
+  loading.value = true
   try {
-    if (isEditingAccount.value) {
-      await aiAdminApi.updateUpstreamAccount(editingAccountId.value, buildAccountPayload())
-      ElMessage.success('账号已更新')
-    } else {
-      const created = await aiAdminApi.createUpstreamAccount(buildAccountPayload())
-      selectedAccountId.value = created.id
-      ElMessage.success('账号已创建')
-    }
-    accountDialog.value = false
-    await fetchAccounts()
-  } catch (e: any) {
-    ElMessage.error(e?.message || '保存失败')
-  } finally {
-    submittingAccount.value = false
-  }
+    const response = await aiAdminApi.listUpstreamAccounts()
+    accounts.value = response.items || []
+    const selectedIds = new Set(selectedAccounts.value.map(account => account.id))
+    selectedAccounts.value = accounts.value.filter(account => selectedIds.has(account.id))
+  } catch (error) { ElMessage.error(error instanceof Error ? error.message : '加载账号失败') }
+  finally { loading.value = false }
+}
+async function fetchPriceBooks() {
+  try { priceBooks.value = (await aiAdminApi.listPriceBooks()).items || [] } catch { priceBooks.value = [] }
+}
+async function refreshWorkspace() { await Promise.all([fetchAccounts(), stability.refresh()]) }
+function updateSelection(value: unknown[]) { selectedAccounts.value = value as AccountDTO[] }
+async function changeAccountStatus(account: AccountDTO, status: 'active' | 'disabled') {
+  updatingAccountStatusId.value = account.id
+  try { await aiAdminApi.updateUpstreamAccountStatus(account.id, status); ElMessage.success(status === 'active' ? '账号已启用' : '账号已停用'); await fetchAccounts() }
+  catch (error) { ElMessage.error(error instanceof Error ? error.message : '操作失败') }
+  finally { updatingAccountStatusId.value = '' }
+}
+function runtimeLabel(account: AccountDTO) { return stability.error.value ? '读取失败' : availabilityLabels[stabilityById.value.get(account.id)?.availability || 'unknown'] || '状态未知' }
+function runtimeTone(account: AccountDTO) { return stability.error.value ? 'warning' as const : availabilityTone(stabilityById.value.get(account.id)?.availability) }
+const scrollKeyPrefix = 'dai:upstream-accounts:scroll:'
+function openDetail(account: AccountDTO) {
+  sessionStorage.setItem(`${scrollKeyPrefix}${route.fullPath}`, String(window.scrollY || document.documentElement.scrollTop || 0))
+  void router.push({ path: `/admin/ai/upstreams/accounts/${encodeURIComponent(account.id)}`, query: { from: route.fullPath } })
 }
 
-async function changeAccountStatus(row: AccountDTO, status: "active" | "disabled") {
-  updatingAccountStatusId.value = row.id
-  try {
-    await aiAdminApi.updateUpstreamAccountStatus(row.id, status)
-    ElMessage.success(status === 'active' ? '账号已启用' : '账号已停用')
-    await fetchAccounts()
-  } catch (e: any) {
-    ElMessage.error(e?.message || '操作失败')
-  } finally {
-    updatingAccountStatusId.value = ''
-  }
-}
+const accountDialog = shallowRef(false)
+const testDialog = shallowRef(false)
+const testAccount = shallowRef<AccountDTO | null>(null)
+function openTest(account: AccountDTO) { testAccount.value = account; testDialog.value = true }
+async function accountTested(result: UpstreamAccountTestResult) { if (result.ok || [401, 403].includes(result.http_status)) await fetchAccounts() }
 
-async function removeAccount(row: AccountDTO) {
-  try {
-    await ElMessageBox.confirm(`删除上游账号「${row.name}」？分组对它的关联会一并解除。`, '确认删除', { type: 'warning' })
-  } catch { return }
-  try {
-    await aiAdminApi.deleteUpstreamAccount(row.id)
-    ElMessage.success('已删除')
-    if (selectedAccountId.value === row.id) selectedAccountId.value = ''
-    await fetchAccounts()
-  } catch (e: any) {
-    ElMessage.error(e?.message || '删除失败')
-  }
-}
-
-// ── 请求端点 CRUD ────────────────────────────────────────────────────────────
-const endpointDialog = shallowRef(false)
-const editingEndpointId = shallowRef('')
-const submittingEndpoint = shallowRef(false)
-const endpointForm = reactive<EndpointDraft>(blankEndpoint())
-const isEditingEndpoint = computed(() => Boolean(editingEndpointId.value))
-
-function openEndpointCreate() {
-  if (!selectedAccount.value) return
-  const used = new Set((selectedAccount.value.endpoints || []).map((endpoint: UpstreamAccountEndpointDTO) => endpoint.api_format))
-  const next = upstreamAPIFormatOptions.find((option) => !used.has(option.value))
-  if (!next) {
-    ElMessage.info('该账号已配置全部 API 格式')
-    return
-  }
-  editingEndpointId.value = ''
-  Object.assign(endpointForm, blankEndpoint(), { api_format: next.value })
-  endpointDialog.value = true
-}
-
-function openEndpointEdit(endpoint: UpstreamAccountEndpointDTO) {
-  editingEndpointId.value = endpoint.id
-  Object.assign(endpointForm, blankEndpoint(), {
-    ...endpoint,
-    extra_headers: endpoint.extra_headers && typeof endpoint.extra_headers === 'object' ? { ...endpoint.extra_headers as object } : {}
-  })
-  endpointDialog.value = true
-}
-
-function endpointFormatDisabled(format: string) {
-  return (selectedAccount.value?.endpoints || []).some((endpoint: UpstreamAccountEndpointDTO) =>
-    endpoint.api_format === format && endpoint.id !== editingEndpointId.value
-  )
-}
-
-async function submitEndpoint() {
-  if (!selectedAccount.value || !validateEndpointDrafts([endpointForm])) return
-  submittingEndpoint.value = true
-  try {
-    if (isEditingEndpoint.value) {
-      await aiAdminApi.updateUpstreamAccountEndpoint(selectedAccount.value.id, editingEndpointId.value, endpointPayload(endpointForm))
-    } else {
-      await aiAdminApi.createUpstreamAccountEndpoint(selectedAccount.value.id, endpointPayload(endpointForm))
-    }
-    endpointDialog.value = false
-    ElMessage.success(isEditingEndpoint.value ? '请求端点已更新' : '请求端点已添加')
-    await fetchAccounts()
-  } catch (e: any) {
-    ElMessage.error(e?.message || '保存请求端点失败')
-  } finally {
-    submittingEndpoint.value = false
-  }
-}
-
-async function removeEndpoint(endpoint: UpstreamAccountEndpointDTO) {
-  if (!selectedAccount.value) return
-  const endpoints = selectedAccount.value.endpoints || []
-  if (endpoints.length <= 1) {
-    ElMessage.warning('账号至少需要一个请求端点')
-    return
-  }
-  if (
-    selectedAccount.value.status === 'active' &&
-    endpoint.status === 'active' &&
-    endpoints.filter((item: UpstreamAccountEndpointDTO) => item.status === 'active').length <= 1
-  ) {
-    ElMessage.warning('启用账号至少需要一个启用中的请求端点')
-    return
-  }
-  try {
-    await ElMessageBox.confirm(`删除请求端点「${upstreamAPIFormatLabel(endpoint.api_format)}」？`, '确认删除', { type: 'warning' })
-  } catch { return }
-  try {
-    await aiAdminApi.deleteUpstreamAccountEndpoint(selectedAccount.value.id, endpoint.id)
-    ElMessage.success('请求端点已删除')
-    await fetchAccounts()
-  } catch (e: any) {
-    ElMessage.error(e?.message || '删除请求端点失败')
-  }
-}
-
-// ── 导入 / 导出 ──────────────────────────────────────────────────────────────
 const exportDialog = shallowRef(false)
 const exportIncludeModelBindings = shallowRef(true)
 const exportingAccounts = shallowRef(false)
-
 const importDialog = shallowRef(false)
 const importFileInput = ref<HTMLInputElement | null>(null)
 const importFileName = shallowRef('')
@@ -406,1156 +138,144 @@ const importPreview = shallowRef<UpstreamAccountImportPreviewOutputBody | null>(
 const previewingImport = shallowRef(false)
 const importingAccounts = shallowRef(false)
 let importPreviewGeneration = 0
-const importSettings = reactive({
-  default_price_book_id: '',
-  default_tenant_multiplier: 1
+const importSettings = reactive({ default_price_book_id: '', default_tenant_multiplier: 1 })
+watch(activePriceBookId, nextId => {
+  if (!nextId || !importDialog.value || importSettings.default_price_book_id) return
+  importSettings.default_price_book_id = nextId
+  if (importAccounts.value.length) void refreshImportPreview()
 })
-
-watch(activePriceBookId, (nextId, previousId) => {
-  if (!nextId || previousId) return
-  if (accountDialog.value && !isEditingAccount.value && !accountForm.price_book_id) {
-    accountForm.price_book_id = nextId
-  }
-  if (importDialog.value && !importSettings.default_price_book_id) {
-    importSettings.default_price_book_id = nextId
-    if (importAccounts.value.length) void refreshImportPreview()
-  }
-})
-
-function isExportSelected(id: string) {
-  return selectedExportAccountIds.value.includes(id)
-}
-
-function toggleExportSelection(id: string, checked: boolean) {
-  const next = new Set(selectedExportAccountIds.value)
-  if (checked) next.add(id)
-  else next.delete(id)
-  selectedExportAccountIds.value = Array.from(next)
-}
-
-function handleExportSelectionChange(id: string, checked: string | number | boolean) {
-  toggleExportSelection(id, Boolean(checked))
-}
-
-function openExportDialog() {
-  if (!selectedExportAccountIds.value.length) {
-    ElMessage.warning('请先选择要导出的上游账号')
-    return
-  }
-  exportDialog.value = true
-}
-
+function openExportDialog() { if (!selectedExportAccounts.value.length) { ElMessage.warning('请先选择要导出的上游账号'); return }; exportDialog.value = true }
 async function confirmExportAccounts() {
   exportingAccounts.value = true
   try {
-    const data = await aiAdminApi.exportUpstreamAccounts({
-      account_ids: selectedExportAccountIds.value,
-      include_model_bindings: exportIncludeModelBindings.value
-    })
-    downloadJSON(data, `upstream-accounts-${new Date().toISOString().slice(0, 10)}.json`)
-    exportDialog.value = false
-    ElMessage.success('导出文件已生成')
-  } catch (e: any) {
-    ElMessage.error(e?.message || '导出失败')
-  } finally {
-    exportingAccounts.value = false
-  }
+    const data = await aiAdminApi.exportUpstreamAccounts({ account_ids: selectedExportAccounts.value.map(account => account.id), include_model_bindings: exportIncludeModelBindings.value })
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json;charset=utf-8' })
+    const url = URL.createObjectURL(blob); const link = document.createElement('a')
+    link.href = url; link.download = `upstream-accounts-${new Date().toISOString().slice(0, 10)}.json`; document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url)
+    exportDialog.value = false; ElMessage.success('导出文件已生成')
+  } catch (error) { ElMessage.error(error instanceof Error ? error.message : '导出失败') }
+  finally { exportingAccounts.value = false }
 }
-
 function openImportDialog() {
-  importPreviewGeneration += 1
-  importFileName.value = ''
-  importAccounts.value = []
-  importPreview.value = null
-  previewingImport.value = false
-  importSettings.default_price_book_id = activePriceBookId.value
-  importSettings.default_tenant_multiplier = 1
-  importDialog.value = true
+  importPreviewGeneration += 1; importFileName.value = ''; importAccounts.value = []; importPreview.value = null; previewingImport.value = false
+  importSettings.default_price_book_id = activePriceBookId.value; importSettings.default_tenant_multiplier = 1; importDialog.value = true
 }
-
-function chooseImportFile() {
-  importFileInput.value?.click()
-}
-
-async function handleImportFileSelected(event: Event) {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  if (!file) return
-  importPreviewGeneration += 1
-  previewingImport.value = false
-  try {
-    const text = await file.text()
-    const parsed = JSON.parse(text)
-    const accountsToImport = parseImportAccounts(parsed)
-    importFileName.value = file.name
-    importAccounts.value = accountsToImport
-    await refreshImportPreview()
-  } catch (e: any) {
-    importFileName.value = ''
-    importAccounts.value = []
-    importPreview.value = null
-    ElMessage.error(e?.message || '导入文件解析失败')
-  } finally {
-    input.value = ''
-  }
-}
-
 function parseImportAccounts(parsed: any): UpstreamAccountTransferAccountDTO[] {
-  if (!Array.isArray(parsed) && parsed?.schema_version !== undefined && parsed.schema_version !== 5 && parsed.schema_version !== 6) {
-    throw new Error(`不支持的上游账号导入版本：${parsed.schema_version}；当前支持 schema_version 5/6`)
-  }
-  const accountsToImport = Array.isArray(parsed) ? parsed : parsed?.accounts
-  if (!Array.isArray(accountsToImport) || accountsToImport.length === 0) {
-    throw new Error('导入文件缺少 accounts 数组')
-  }
-  return accountsToImport
+  if (!Array.isArray(parsed) && parsed?.schema_version !== undefined && ![5, 6].includes(parsed.schema_version)) throw new Error(`不支持的上游账号导入版本：${parsed.schema_version}；当前支持 schema_version 5/6`)
+  const values = Array.isArray(parsed) ? parsed : parsed?.accounts
+  if (!Array.isArray(values) || !values.length) throw new Error('导入文件缺少 accounts 数组')
+  return values
 }
-
 function buildImportRequest(): UpstreamAccountImportRequest {
-  return {
-    accounts: importAccounts.value,
-    default_price_book_id: importSettings.default_price_book_id || undefined,
-    default_tenant_multiplier: importSettings.default_tenant_multiplier || 1,
-    duplicate_account_strategy: 'skip',
-    duplicate_binding_strategy: 'skip'
-  }
+  return { accounts: importAccounts.value, default_price_book_id: importSettings.default_price_book_id || undefined, default_tenant_multiplier: importSettings.default_tenant_multiplier || 1, duplicate_account_strategy: 'skip', duplicate_binding_strategy: 'skip' }
 }
-
 async function refreshImportPreview() {
   if (!importAccounts.value.length) return
-  const generation = ++importPreviewGeneration
-  previewingImport.value = true
-  try {
-    const preview = await aiAdminApi.previewImportUpstreamAccounts(buildImportRequest())
-    if (generation !== importPreviewGeneration) return
-    importPreview.value = preview
-  } catch (e: any) {
-    if (generation !== importPreviewGeneration) return
-    importPreview.value = null
-    ElMessage.error(e?.message || '导入预检失败')
-  } finally {
-    if (generation === importPreviewGeneration) previewingImport.value = false
-  }
+  const generation = ++importPreviewGeneration; previewingImport.value = true
+  try { const preview = await aiAdminApi.previewImportUpstreamAccounts(buildImportRequest()); if (generation === importPreviewGeneration) importPreview.value = preview }
+  catch (error) { if (generation === importPreviewGeneration) { importPreview.value = null; ElMessage.error(error instanceof Error ? error.message : '导入预检失败') } }
+  finally { if (generation === importPreviewGeneration) previewingImport.value = false }
 }
-
+async function handleImportFileSelected(event: Event) {
+  const input = event.target as HTMLInputElement; const file = input.files?.[0]; if (!file) return
+  importPreviewGeneration += 1
+  try { importAccounts.value = parseImportAccounts(JSON.parse(await file.text())); importFileName.value = file.name; await refreshImportPreview() }
+  catch (error) { importFileName.value = ''; importAccounts.value = []; importPreview.value = null; ElMessage.error(error instanceof Error ? error.message : '导入文件解析失败') }
+  finally { input.value = '' }
+}
 async function confirmImportAccounts() {
   if (!importAccounts.value.length || !importPreview.value?.summary.create_accounts) return
   importingAccounts.value = true
-  try {
-    const result = await aiAdminApi.importUpstreamAccounts(buildImportRequest())
-    ElMessage.success(`已导入 ${result.summary.create_accounts} 个账号，${result.summary.create_model_bindings} 条模型绑定`)
-    importDialog.value = false
-    await fetchAccounts()
-  } catch (e: any) {
-    ElMessage.error(e?.message || '导入失败')
-  } finally {
-    importingAccounts.value = false
-  }
+  try { const result = await aiAdminApi.importUpstreamAccounts(buildImportRequest()); ElMessage.success(`已导入 ${result.summary.create_accounts} 个账号，${result.summary.create_model_bindings} 条模型绑定`); importDialog.value = false; await fetchAccounts() }
+  catch (error) { ElMessage.error(error instanceof Error ? error.message : '导入失败') }
+  finally { importingAccounts.value = false }
 }
-
-function downloadJSON(data: unknown, filename: string) {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filename
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
-  URL.revokeObjectURL(url)
-}
-
-function importActionTone(action: string): 'positive' | 'danger' | 'info' {
-  if (action === 'create') return 'positive'
-  if (action === 'error') return 'danger'
-  return 'info'
-}
-
-function importActionLabel(action: string) {
-  if (action === 'create') return '创建'
-  if (action === 'error') return '错误'
-  return '跳过'
-}
-
-// DsTag tone 与 element-plus tag type 的映射(组件 status.ts 仍返回 el 语义,供未迁移弹窗使用)
-function statusTone(status: string): 'positive' | 'danger' | 'info' {
-  const type = upstreamAccountStatusTagType(status)
-  return type === 'success' ? 'positive' : type
-}
-
+function importActionTone(action: string): 'positive' | 'danger' | 'info' { return action === 'create' ? 'positive' : action === 'error' ? 'danger' : 'info' }
+function importActionLabel(action: string) { return action === 'create' ? '创建' : action === 'error' ? '错误' : '跳过' }
 const importPreviewColumns: DsTableColumn[] = [
-  { key: 'name', title: '账号' },
-  { key: 'endpoint_count', title: '请求端点', width: 96, align: 'right' },
-  { key: 'action', title: '动作', width: 86 },
-  { key: 'model_binding_count', title: '模型绑定', width: 96, align: 'right' },
-  { key: 'reason', title: '说明' }
+  { key: 'name', title: '账号' }, { key: 'endpoint_count', title: '请求端点', width: 96, align: 'right' }, { key: 'action', title: '动作', width: 86 },
+  { key: 'model_binding_count', title: '模型绑定', width: 96, align: 'right' }, { key: 'reason', title: '说明' }
 ]
-
-// ── 数据加载 ─────────────────────────────────────────────────────────────────
-async function fetchAccounts() {
-  loading.value = true
-  try {
-    const res = await aiAdminApi.listUpstreamAccounts()
-    accounts.value = res.items || []
-    if (!accounts.value.some((account) => account.id === selectedAccountId.value)) {
-      selectedAccountId.value = accounts.value[0]?.id || ''
-    }
-    const validIds = new Set(accounts.value.map((account) => account.id))
-    selectedExportAccountIds.value = selectedExportAccountIds.value.filter((id) => validIds.has(id))
-  } catch (e: any) {
-    ElMessage.error(e?.message || '加载账号失败')
-  } finally {
-    loading.value = false
-  }
-}
-
-async function fetchPriceBooks() {
-  try {
-    const res = await aiAdminApi.listPriceBooks()
-    priceBooks.value = res.items || []
-  } catch { priceBooks.value = [] }
-}
-
-function selectAccount(id: string) {
-  selectedAccountId.value = id
-}
-
-// 详情区是独立滚动容器。切换账号时回到详情顶部，避免沿用上一个账号的滚动位置。
-watch(selectedAccountId, () => {
-  activeAccountTab.value = 'overview'
-  void nextTick(() => accountContentScroll.value?.scrollTo?.({ top: 0, behavior: 'auto' }))
-})
-
-// ── 列表增量渲染(接口全量返回,前端分批挂载) ──────────────────────────────────
-const LIST_PAGE_SIZE = 20
-const visibleCount = shallowRef(LIST_PAGE_SIZE)
-const accountListEl = ref<HTMLElement | null>(null)
-const listSentinelEl = ref<HTMLElement | null>(null)
-const visibleAccounts = computed(() => sortedAccounts.value.slice(0, visibleCount.value))
-const hasMoreAccounts = computed(() => visibleCount.value < sortedAccounts.value.length)
-
-let listObserver: IntersectionObserver | null = null
-
-function revealMoreAccounts() {
-  if (!hasMoreAccounts.value) return
-  visibleCount.value = Math.min(visibleCount.value + LIST_PAGE_SIZE, sortedAccounts.value.length)
-}
-
-// 账号数据变化(刷新/增删/导入)后回到第一批,哨兵进入视口再继续追加
-watch(accounts, () => {
-  visibleCount.value = listObserver ? LIST_PAGE_SIZE : sortedAccounts.value.length
-})
-
-function setupListObserver() {
-  // 测试环境(happy-dom)没有 IntersectionObserver,直接全量渲染兜底
-  if (typeof IntersectionObserver === 'undefined') {
-    visibleCount.value = sortedAccounts.value.length
-    return
-  }
-  listObserver = new IntersectionObserver(
-    (entries) => {
-      if (entries.some((entry) => entry.isIntersecting)) revealMoreAccounts()
-    },
-    { root: accountListEl.value, rootMargin: '120px' }
-  )
-  if (listSentinelEl.value) listObserver.observe(listSentinelEl.value)
-}
-
-// ── 连通性测试 ───────────────────────────────────────────────────────────────
-const testDialog = shallowRef(false)
-const testAccount = shallowRef<AccountDTO | null>(null)
-const testModels = ref<{ model_code: string; capability_type: string }[]>([])
-const testModelsLoading = shallowRef(false)
-const testForm = reactive({ modelCode: '', apiFormat: '', prompt: '', imageEdit: false })
-const testImage = shallowRef<UpstreamAccountTestImage | null>(null)
-const testing = shallowRef(false)
-const testResult = shallowRef<UpstreamAccountTestResult | null>(null)
-const testError = shallowRef('')
-
-const testSelectedBinding = computed(() => testModels.value.find((m) => m.model_code === testForm.modelCode))
-const testSelectedCapability = computed(() => testSelectedBinding.value?.capability_type ?? '')
-const testIsImage = computed(() => testSelectedCapability.value === 'image')
-const testEndpoints = computed<UpstreamAccountEndpointDTO[]>(() => {
-  const endpoints = (testAccount.value?.endpoints || []).filter((endpoint: UpstreamAccountEndpointDTO) => endpoint.status === 'active')
-  if (testSelectedCapability.value === 'image') {
-    return endpoints.filter((endpoint: UpstreamAccountEndpointDTO) => ['openai_images', 'gemini_generate'].includes(endpoint.api_format))
-  }
-  if (testSelectedCapability.value === 'embedding') {
-    return endpoints.filter((endpoint: UpstreamAccountEndpointDTO) => ['openai_embeddings', 'gemini_embeddings'].includes(endpoint.api_format))
-  }
-  if (testSelectedCapability.value === 'chat') {
-    return endpoints.filter((endpoint: UpstreamAccountEndpointDTO) =>
-      ['openai_chat', 'openai_responses', 'anthropic_messages', 'gemini_generate'].includes(endpoint.api_format)
-    )
-  }
-  return []
-})
-const testSupportsImageEdit = computed(() => testIsImage.value && testForm.apiFormat === 'openai_images')
-const testCanRun = computed(() => Boolean(testForm.modelCode && testForm.apiFormat) && (!testForm.imageEdit || Boolean(testImage.value)))
-
-watch([() => testForm.modelCode, testEndpoints], () => {
-  if (!testEndpoints.value.some((endpoint) => endpoint.api_format === testForm.apiFormat)) {
-    testForm.apiFormat = testEndpoints.value[0]?.api_format || ''
-  }
-})
-
-watch(testSupportsImageEdit, (supported) => {
-  if (!supported) testForm.imageEdit = false
-})
-
-watch(() => testForm.imageEdit, (imageEdit) => {
-  if (!imageEdit) testImage.value = null
-})
-
-async function openTestDialog(account: AccountDTO) {
-  if (!account) return
-  testAccount.value = account
-  testForm.modelCode = ''
-  testForm.apiFormat = ''
-  testForm.prompt = ''
-  testForm.imageEdit = false
-  testImage.value = null
-  testResult.value = null
-  testError.value = ''
-  testDialog.value = true
-  testModelsLoading.value = true
-  try {
-    const data = await aiAdminApi.listAccountModelBindings(account.id)
-    testModels.value = (data.items ?? []).map((binding: UpstreamModelBindingDTO) => ({
-      model_code: binding.model_code,
-      capability_type: binding.capability_type
-    }))
-    if (testModels.value.length) testForm.modelCode = testModels.value[0].model_code
-  } catch (e: any) {
-    ElMessage.error(e?.message || '加载模型绑定失败')
-  } finally {
-    testModelsLoading.value = false
-  }
-}
-
-async function runAccountTest() {
-  if (!testAccount.value || !testForm.modelCode) return
-  if (testForm.imageEdit && !testImage.value) {
-    ElMessage.warning('请选择图片编辑测试使用的参考图片')
-    return
-  }
-  testing.value = true
-  testResult.value = null
-  testError.value = ''
-  try {
-    const previousStatus = testAccount.value.status
-    testResult.value = await aiAdminApi.testUpstreamAccount(testAccount.value.id, {
-      model_code: testForm.modelCode,
-      api_format: testForm.apiFormat,
-      prompt: testForm.prompt.trim() || undefined,
-      image_edit: testIsImage.value && testForm.imageEdit,
-      image: testIsImage.value && testForm.imageEdit ? testImage.value || undefined : undefined
-    })
-    if (!testResult.value.ok) {
-      testError.value = testResult.value.error || '上游未返回可用结果'
-    }
-    if (testResult.value.ok || [401, 403].includes(testResult.value.http_status)) {
-      await fetchAccounts()
-      testAccount.value = accounts.value.find((account) => account.id === testAccount.value?.id) || testAccount.value
-      if (testResult.value.ok && previousStatus === 'invalid') {
-        ElMessage.success('验证成功，账号已恢复启用')
-      }
-    }
-  } catch (e: any) {
-    testError.value = e?.message || '测试请求失败'
-  } finally {
-    testing.value = false
-  }
-}
-
-function testModelLabel(m: { model_code: string; capability_type: string }) {
-  const cap = m.capability_type === 'image' ? '生图' : m.capability_type === 'chat' ? '对话' : m.capability_type
-  return `${m.model_code} · ${cap}`
-}
-
-function imageTestStreamLabel(value?: string) {
-  return value === 'force_stream' ? '流式' : '非流式'
-}
-
-function imageTestFormatLabel(value?: string) {
-  return value === 'url' ? 'URL' : value === 'b64_json' ? 'Base64' : '-'
-}
-
-function imageTestTransportLabel(value?: string) {
-  return value === 'application/json' ? 'JSON 图片 URL' : value === 'multipart/form-data' ? 'Multipart 文件上传' : '-'
-}
-
 onMounted(async () => {
-  await Promise.all([fetchAccounts(), fetchPriceBooks()])
-  setupListObserver()
-})
-
-onBeforeUnmount(() => {
-  listObserver?.disconnect()
-  listObserver = null
+  await Promise.all([fetchAccounts(), fetchPriceBooks()]); await nextTick()
+  const saved = sessionStorage.getItem(`${scrollKeyPrefix}${route.fullPath}`)
+  if (saved) requestAnimationFrame(() => window.scrollTo({ top: Number(saved), behavior: 'auto' }))
 })
 </script>
 
 <template>
   <div class="page-container accounts-view">
-    <PortalPagePanel
-      :icon="Database"
-      :breadcrumbs="[{ label: '智能服务' }, { label: '网关配置' }, { label: '上游账号' }]"
-      description="维护上游连接、公共模型、价格表和租户倍率。租户只会看到安全的账号目录与公开价格。"
-      fill
-    >
+    <PortalPagePanel :icon="Database" :breadcrumbs="[{ label: '智能服务' }, { label: '网关配置' }, { label: '上游账号' }]" description="查找、比较和管理上游账号；进入详情可配置端点、模型及查看运行诊断。" fill>
       <template #actions>
         <el-button :icon="Refresh" :loading="loading" @click="refreshWorkspace">刷新</el-button>
         <el-button :icon="Upload" @click="openImportDialog">导入</el-button>
-        <el-button :icon="Download" :disabled="!selectedExportAccountIds.length" @click="openExportDialog">
-          导出<span v-if="selectedExportAccountIds.length">({{ selectedExportAccountIds.length }})</span>
-        </el-button>
-        <el-button type="primary" :icon="Plus" @click="openAccountCreate">新增账号</el-button>
+        <el-button :icon="Download" :disabled="!selectedExportAccounts.length" @click="openExportDialog">导出<span v-if="selectedExportAccounts.length">（{{ selectedExportAccounts.length }}）</span></el-button>
+        <el-button type="primary" :icon="Plus" @click="accountDialog = true">新增账号</el-button>
       </template>
-
-      <!-- 主从布局:body 无内边距,用 24px 容器承载原栅格 -->
-      <div class="accounts-body">
-        <el-row :gutter="16" class="accounts-main-row">
-      <!-- 账号列表 -->
-      <el-col :span="7" class="accounts-list-col">
-        <PortalContentCard title="上游账号" body-padding="none" class="accounts-list-card">
-          <div class="account-time-filter">
-            <div class="account-time-filter__label">
-              <span>成功率统计</span>
-              <span v-if="stability.loading.value || endpointStability.loading.value">更新中…</span>
-            </div>
-            <el-select v-model="stability.window.value" aria-label="成功率统计范围">
-              <el-option label="最近 1 小时" value="1h" />
-              <el-option label="最近 24 小时" value="24h" />
-              <el-option label="最近 7 天" value="7d" />
-            </el-select>
-          </div>
-          <el-alert v-if="stability.error.value" title="成功率加载失败" :description="stability.error.value" type="warning" :closable="false" />
-          <div v-loading="loading" ref="accountListEl" class="account-list">
-            <div
-              v-for="a in visibleAccounts"
-              :key="a.id"
-              class="account-item"
-              :class="{ active: a.id === selectedAccountId }"
-              @click="selectAccount(a.id)"
-            >
-              <div class="account-item-header">
-                <div class="account-item-title">
-                  <el-checkbox
-                    :model-value="isExportSelected(a.id)"
-                    @click.stop
-                    @change="handleExportSelectionChange(a.id, $event)"
-                  />
-                  <span class="account-item-name truncate" :title="a.name">{{ a.name }}</span>
-                </div>
-                <UpstreamAccountStatusControl
-                  :status="a.status"
-                  :invalid-reason="a.invalid_reason"
-                  :loading="updatingAccountStatusId === a.id"
-                  @change="changeAccountStatus(a, $event)"
-                  @verify="openTestDialog(a)"
-                />
-              </div>
-              <div class="account-item-body">
-                <div class="account-item-meta">
-                  <DsTag :tone="a.tenant_access_mode === 'restricted' ? 'warning' : 'positive'">
-                    {{ a.tenant_access_mode === 'restricted' ? '专属' : '公开' }}
-                  </DsTag>
-                  <span v-if="accountSubtitle(a)" class="truncate" :title="accountSubtitle(a)">{{ accountSubtitle(a) }}</span>
-                </div>
-                <div v-if="accountEndpointHosts(a)" class="account-item-host truncate" :title="accountEndpointHosts(a)">{{ accountEndpointHosts(a) }}</div>
-                <div v-if="!stability.error.value && stabilityById.get(a.id)?.success_rate != null" class="account-item-rate">
-                  <span>成功率</span><strong>{{ successRateLabel(stabilityById.get(a.id)?.success_rate) }}</strong>
-                </div>
-              </div>
-            </div>
-            <div ref="listSentinelEl" class="account-list-sentinel" aria-hidden="true">
-              <span v-if="hasMoreAccounts">加载中…</span>
-              <span v-else-if="sortedAccounts.length > LIST_PAGE_SIZE">共 {{ sortedAccounts.length }} 条</span>
-            </div>
-            <DsEmpty
-              v-if="!accounts.length && !loading"
-              title="暂无上游账号"
-              description="先新增一个上游账号,或从 JSON 文件导入"
-            >
-              <template #action>
-                <el-button type="primary" :icon="Plus" @click="openAccountCreate">新增账号</el-button>
-              </template>
-            </DsEmpty>
-          </div>
-        </PortalContentCard>
-      </el-col>
-
-      <!-- 账号详情 + 路由配置 -->
-      <el-col :span="17" class="account-content-column">
-        <div ref="accountContentScroll" class="account-content-scroll">
-          <div v-if="selectedAccount" class="account-content-stack">
-            <div class="account-detail-tabs">
-              <div class="account-detail-tabs__meta">
-                <div class="account-detail-tabs__title">
-                  <strong>账号详情</strong>
-                  <span>{{ selectedAccount.name }}</span>
-                </div>
-                <div class="account-detail-tabs__actions">
-                  <el-button size="small" type="success" plain :icon="VideoPlay" @click="openTestDialog(selectedAccount)">测试连通</el-button>
-                  <el-button size="small" :icon="Edit" @click="openAccountEdit(selectedAccount)">编辑账号</el-button>
-                  <el-button size="small" type="danger" plain :icon="Delete" @click="removeAccount(selectedAccount)">删除</el-button>
-                </div>
-              </div>
-              <DsTabs v-model="activeAccountTab" :tabs="accountDetailTabs" />
-            </div>
-
-            <div v-show="activeAccountTab === 'overview'" class="account-detail-pane">
-              <PortalContentCard title="账号概览" :description="`当前账号:${selectedAccount.name}`">
-                <el-descriptions :key="selectedAccountId" :column="2" size="small" border>
-                  <el-descriptions-item label="成功率">{{ successRateLabel(stability.error.value ? null : stabilityById.get(selectedAccount.id)?.success_rate) }}</el-descriptions-item>
-                  <el-descriptions-item label="请求端点">{{ selectedAccount.endpoints?.length || 0 }} 个</el-descriptions-item>
-                  <el-descriptions-item label="API 格式">
-                    {{ accountAPIFormats(selectedAccount) }}
-                  </el-descriptions-item>
-                  <el-descriptions-item label="最大并发">{{ selectedAccount.concurrency_limit ? `${selectedAccount.concurrency_limit} 并发` : '不限制' }}</el-descriptions-item>
-                  <el-descriptions-item label="配置状态">
-                    <DsTag :tone="statusTone(selectedAccount.status)">
-                      {{ upstreamAccountStatusLabel(selectedAccount.status) }}
-                    </DsTag>
-                  </el-descriptions-item>
-                  <el-descriptions-item label="租户可见性">{{ selectedAccount.tenant_access_mode === 'restricted' ? '专属' : '公开' }}</el-descriptions-item>
-                  <el-descriptions-item label="账号描述" :span="2">
-                    <span :class="{ 'account-overview-description-empty': !selectedAccount.description }">
-                      {{ selectedAccount.description || '暂无描述' }}
-                    </span>
-                  </el-descriptions-item>
-                  <el-descriptions-item label="价格表">{{ priceBookName(selectedAccount.price_book_id) }}</el-descriptions-item>
-                  <el-descriptions-item label="租户倍率">{{ formatMultiplier(selectedAccount.tenant_multiplier) }}</el-descriptions-item>
-                  <el-descriptions-item v-if="selectedAccount.status === 'invalid'" label="失效原因" :span="2">
-                    {{ selectedAccount.invalid_reason || '上游拒绝了账号凭据' }}
-                  </el-descriptions-item>
-                </el-descriptions>
-              </PortalContentCard>
-            </div>
-
-            <div v-show="activeAccountTab === 'endpoints'" class="account-detail-pane">
-              <PortalContentCard title="请求端点" description="声明该账号真正支持的请求格式。每种 API 格式只能配置一个 Base URL。">
-                <template #actions>
-                  <el-button size="small" type="primary" :icon="Plus" @click="openEndpointCreate">添加端点</el-button>
-                </template>
-                <el-alert v-if="endpointStability.error.value" title="端点成功率加载失败" type="warning" :closable="false" />
-                <el-table :key="selectedAccount.id" :data="selectedAccount.endpoints || []" border stripe>
-                  <el-table-column label="API 格式" min-width="190">
-                    <template #default="{ row }">{{ upstreamAPIFormatLabel(row.api_format) }}</template>
-                  </el-table-column>
-                  <el-table-column prop="base_url" label="Base URL" min-width="220" show-overflow-tooltip />
-                  <el-table-column prop="path_override" label="路径覆盖" min-width="150" show-overflow-tooltip>
-                    <template #default="{ row }">{{ row.path_override || '使用格式默认路径' }}</template>
-                  </el-table-column>
-                  <el-table-column label="成功率" width="110" align="right">
-                    <template #default="{ row }"><span class="endpoint-success-rate">{{ successRateLabel(endpointSuccessRates.get(row.id)) }}</span></template>
-                  </el-table-column>
-                  <el-table-column label="状态" width="105">
-                    <template #default="{ row }">
-                      <DsTag :tone="row.status === 'active' ? (row.health_status === 'unhealthy' ? 'danger' : 'positive') : 'info'">
-                        {{ row.status === 'active' ? (row.health_status === 'unhealthy' ? '异常' : '启用') : '停用' }}
-                      </DsTag>
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="操作" width="130" fixed="right">
-                    <template #default="{ row }">
-                      <el-button link type="primary" @click="openEndpointEdit(row)">编辑</el-button>
-                      <el-button link type="danger" @click="removeEndpoint(row)">删除</el-button>
-                    </template>
-                  </el-table-column>
-                </el-table>
-              </PortalContentCard>
-            </div>
-
-            <div v-show="activeAccountTab === 'models'" class="account-detail-pane">
-              <UpstreamModelBindingsPanel
-                target-kind="account"
-                :target-id="selectedAccount.id"
-                title="上游账号显式模型绑定"
-                description="声明这个账号可用的模型；API 格式由上方请求端点统一提供。"
-                empty-text="当前账号暂无显式模型绑定。可先从上游发现模型，再补充精细化编辑。"
-                import-button-label="发现上游模型"
-                import-dialog-title="发现上游模型"
-                import-alert-title="从上游 /v1/models 拉取，勾选后创建该账号的显式上游模型绑定。"
-              />
-            </div>
-          </div>
-        </div>
-      </el-col>
-        </el-row>
+      <template #filters>
+        <DsFilterBar>
+          <label class="filter-field filter-field--search"><span>账号或域名</span><el-input v-model="search" clearable placeholder="搜索名称、展示名称或域名"><template #prefix><Search :size="14" /></template></el-input></label>
+          <label class="filter-field"><span>配置状态</span><el-select v-model="configStatus"><el-option label="全部" value="all" /><el-option label="已启用" value="active" /><el-option label="已停用" value="disabled" /><el-option label="凭据失效" value="invalid" /></el-select></label>
+          <label class="filter-field"><span>运行状态</span><el-select v-model="runtimeStatus"><el-option label="全部" value="all" /><el-option label="全部可用" value="available" /><el-option label="部分受限" value="partial" /><el-option label="全部受限" value="unavailable" /><el-option label="状态未知" value="unknown" /></el-select></label>
+          <label class="filter-field"><span>成功率统计</span><el-select v-model="stabilityWindow"><el-option v-for="(label, value) in stabilityWindowLabels" :key="value" :label="label" :value="value" /></el-select></label>
+        </DsFilterBar>
+        <el-alert v-if="stability.error.value" class="stability-alert" title="成功率与运行状态加载失败" :description="stability.error.value" type="warning" :closable="false" />
+      </template>
+      <div class="accounts-table-shell">
+        <DsTable :columns="columns" :rows="pageRows" row-key="id" :loading="loading" selectable :selection="selectedAccounts" :frame="false" aria-label="上游账号列表" empty-title="没有符合条件的上游账号" empty-description="调整筛选条件，或新增一个上游账号。" @update:selection="updateSelection">
+          <template #cell-account="{ row }"><div class="account-cell"><div class="account-cell__title"><button type="button" @click="openDetail(row)">{{ row.name }}</button><DsTag v-if="!stability.error.value && stabilityById.get(row.id)?.success_rate != null" tone="neutral" :title="successRateTitle(stabilityById.get(row.id)!, stabilityWindow)">成功率 {{ successRateLabel(stabilityById.get(row.id)?.success_rate) }}</DsTag><span v-if="(stabilityById.get(row.id)?.samples || 0) > 0 && (stabilityById.get(row.id)?.samples || 0) < 20" class="sample-hint">样本较少</span></div><span class="account-cell__host" :title="accountEndpointHosts(row)">{{ accountEndpointHosts(row) || '尚未配置域名' }}</span></div></template>
+          <template #cell-config="{ row }"><UpstreamAccountStatusControl :status="row.status" :invalid-reason="row.invalid_reason" :loading="updatingAccountStatusId === row.id" @change="changeAccountStatus(row, $event)" @verify="openTest(row)" /></template>
+          <template #cell-runtime="{ row }"><DsTag :tone="runtimeTone(row)">{{ runtimeLabel(row) }}</DsTag></template>
+          <template #cell-endpoints="{ row }"><span class="numeric-cell">{{ row.endpoints?.length || 0 }}</span></template>
+          <template #cell-visibility="{ row }"><DsTag :tone="row.tenant_access_mode === 'restricted' ? 'warning' : 'positive'">{{ row.tenant_access_mode === 'restricted' ? '专属' : '公开' }}</DsTag></template>
+          <template #cell-multiplier="{ row }"><span class="numeric-cell">{{ formatMultiplier(row.tenant_multiplier) }}</span></template>
+          <template #cell-actions="{ row }"><div class="row-actions"><el-button link type="primary" @click="openDetail(row)">查看详情</el-button><el-button link type="success" :icon="VideoPlay" @click="openTest(row)">测试连通</el-button></div></template>
+        </DsTable>
       </div>
+      <template #pagination><DsPagination v-model:page="page" v-model:page-size="pageSize" :page-sizes="[20, 50, 100]" :total="filteredAccounts.length" /></template>
     </PortalPagePanel>
 
-    <!-- 连通性测试弹窗 -->
-    <el-dialog v-model="testDialog" title="测试账号连通" width="620px">
-      <div v-if="testAccount" class="test-dialog">
-        <div class="test-account-head">
-          <el-icon class="test-account-icon"><VideoPlay /></el-icon>
-          <div class="test-account-meta">
-            <span class="test-account-name">{{ testAccount.name }}</span>
-            <span class="test-account-sub">直连上游账号测试</span>
-          </div>
-          <el-tag :type="upstreamAccountStatusTagType(testAccount.status)" size="small" effect="light">
-            {{ upstreamAccountStatusLabel(testAccount.status) }}
-          </el-tag>
-        </div>
-
-        <el-form label-position="top" class="test-form">
-          <el-form-item label="选择测试模型">
-            <el-select
-              v-model="testForm.modelCode"
-              :loading="testModelsLoading"
-              placeholder="选择该账号下的显式绑定模型"
-              style="width: 100%"
-            >
-              <el-option
-                v-for="m in testModels"
-                :key="m.model_code"
-                :label="testModelLabel(m)"
-                :value="m.model_code"
-              />
-            </el-select>
-            <p v-if="!testModelsLoading && !testModels.length" class="test-empty-hint">
-              该账号暂无显式模型绑定，请先在下方「显式模型绑定」里发现/添加模型。
-            </p>
-          </el-form-item>
-
-          <el-form-item label="选择请求端点" required>
-            <el-select v-model="testForm.apiFormat" placeholder="选择与模型能力兼容的请求格式" style="width: 100%">
-              <el-option
-                v-for="endpoint in testEndpoints"
-                :key="endpoint.id"
-                :label="`${upstreamAPIFormatLabel(endpoint.api_format)} · ${accountHost(endpoint.base_url)}`"
-                :value="endpoint.api_format"
-              />
-            </el-select>
-            <p v-if="testForm.modelCode && !testEndpoints.length" class="test-empty-hint">
-              当前账号没有与该模型能力兼容的启用端点。
-            </p>
-          </el-form-item>
-
-          <el-form-item :label="testIsImage ? '生图提示词' : testSelectedCapability === 'embedding' ? '向量输入文本' : '对话提示词'">
-            <el-input
-              v-model="testForm.prompt"
-              type="textarea"
-              :rows="3"
-              :placeholder="testIsImage
-                ? 'Generate a cute orange cat astronaut sticker on a clean pastel background.'
-                : testSelectedCapability === 'embedding' ? 'A short sentence for embedding validation.' : '留空使用带代码、需求和回归场景的代码审查示例，要求简短回复；也可输入实际业务内容。'"
-            />
-            <p class="test-hint">
-              {{ testIsImage
-                ? '选择图片模型后，这里会直接发起生图测试，并在下方展示返回图片。'
-                : testSelectedCapability === 'embedding'
-                  ? '选择向量模型后，这里会发送一段输入文本并验证返回向量。'
-                  : '默认使用带上下文的代码审查示例；输入提示词后替换默认示例。使用业务网络出口并验证完整响应，上游可能计费。' }}
-            </p>
-          </el-form-item>
-          <el-form-item v-if="testIsImage" label="测试类型">
-            <el-radio-group v-model="testForm.imageEdit">
-              <el-radio :value="false">图片生成</el-radio>
-              <el-radio :value="true" :disabled="!testSupportsImageEdit">图片编辑</el-radio>
-            </el-radio-group>
-          </el-form-item>
-          <el-form-item v-if="testIsImage && testForm.imageEdit" label="参考图片" required>
-            <UpstreamImageTestUpload v-model="testImage" />
-          </el-form-item>
-        </el-form>
-
-        <!-- 结果区 -->
-        <div class="test-console">
-          <template v-if="testing">
-            <span class="test-line test-warn">⟳ 连接上游中…</span>
-            <span class="test-line test-muted">模型：{{ testForm.modelCode }}（{{ testIsImage ? '生图' : '对话' }}）</span>
-          </template>
-          <template v-else-if="testResult">
-            <span class="test-line" :class="testResult.ok ? 'test-ok' : 'test-err'">
-              {{ testResult.ok ? '✓ 测试成功' : '✗ 测试失败' }}
-            </span>
-            <span class="test-line test-muted">HTTP {{ testResult.http_status }} · {{ formatDuration(testResult.latency_ms) }} · {{ testResult.api_format }}</span>
-            <span class="test-line test-muted">上游模型 ID：{{ testResult.upstream_model }}</span>
-            <span v-if="testIsImage" class="test-line test-muted">
-              上游请求：{{ imageTestStreamLabel(testResult.image_stream_mode) }}<template v-if="testForm.imageEdit"> · {{ imageTestTransportLabel(testResult.image_edit_transport) }}</template> · 返回格式配置：{{ imageTestFormatLabel(testResult.image_upstream_response_format) }}
-            </span>
-            <span v-if="testIsImage && testResult.actual_image_format" class="test-line test-muted">
-              上游响应：{{ imageTestFormatLabel(testResult.actual_image_format) }}
-            </span>
-            <span
-              v-if="testResult.total_tokens"
-              class="test-line test-muted"
-            >tokens：in {{ testResult.prompt_tokens ?? 0 }} / out {{ testResult.output_tokens ?? 0 }} / total {{ testResult.total_tokens }}</span>
-            <span v-if="testError" class="test-line test-err">{{ testError }}</span>
-            <template v-if="testResult.ok && !testIsImage && testResult.reply_text">
-              <span class="test-line test-muted">回复：</span>
-              <span class="test-line test-reply">{{ testResult.reply_text }}</span>
-            </template>
-            <div v-if="testResult.ok && testIsImage" class="test-image-wrap">
-              <img
-                v-if="testResult.image_b64"
-                :src="`data:${testResult.image_mime || 'image/png'};base64,${testResult.image_b64}`"
-                alt="生图测试结果"
-                class="test-image"
-              />
-              <img v-else-if="testResult.image_url" :src="testResult.image_url" alt="生图测试结果" class="test-image" />
-            </div>
-          </template>
-          <span v-if="testResult?.response_content_type" class="test-line test-muted">响应类型：{{ testResult.response_content_type }}</span>
-          <span v-if="testResult?.upstream_request_id" class="test-line test-muted">上游请求 ID：{{ testResult.upstream_request_id }}</span>
-          <span v-if="!testResult && testError" class="test-line test-err">{{ testError }}</span>
-          <span v-if="!testing && !testResult && !testError" class="test-line test-muted">尚未测试。选择模型后点击「开始测试」。</span>
-        </div>
-      </div>
-      <template #footer>
-        <el-button @click="testDialog = false">关闭</el-button>
-        <el-button
-          type="primary"
-          :loading="testing"
-          :disabled="!testCanRun"
-          :icon="VideoPlay"
-          @click="runAccountTest"
-        >
-          {{ testing ? '测试中…' : '开始测试' }}
-        </el-button>
-      </template>
-    </el-dialog>
-
-    <!-- 账号弹窗 -->
-    <el-dialog v-model="accountDialog" :title="isEditingAccount ? '编辑上游账号' : '新增上游账号'" width="640px">
-      <el-form label-width="130px">
-        <el-form-item label="名称" required>
-          <el-input v-model="accountForm.name" placeholder="如 OpenAI 官方 / 某中转" />
-        </el-form-item>
-        <el-form-item label="描述">
-          <el-input v-model="accountForm.description" type="textarea" :rows="2" maxlength="200" show-word-limit placeholder="给租户展示的一句话说明（可选）" />
-        </el-form-item>
-        <el-form-item label="展示名称" required>
-          <el-input v-model="accountForm.tenant_display_name" placeholder="租户目录中显示的名称" />
-        </el-form-item>
-        <el-form-item label="租户专属">
-          <el-switch
-            v-model="accountForm.tenant_access_mode"
-            active-value="restricted"
-            inactive-value="public"
-            active-text="开启"
-            inactive-text="关闭"
-          />
-        </el-form-item>
-        <el-form-item label="API Key" :required="!isEditingAccount">
-          <el-input
-            v-model="accountForm.api_key"
-            type="password"
-            show-password
-            :placeholder="isEditingAccount ? '留空不改；密文存储' : '输入上游 API Key（密文存储）'"
-          />
-        </el-form-item>
-        <div v-if="!isEditingAccount" class="endpoint-drafts">
-          <div class="endpoint-drafts-head">
-            <div>
-              <strong>请求端点</strong>
-              <p>一个账号可支持多种 API 格式；同一种格式不能重复配置。</p>
-            </div>
-            <el-button size="small" :icon="Plus" @click="addAccountEndpointDraft">添加格式</el-button>
-          </div>
-          <div v-for="(endpoint, index) in accountForm.endpoints" :key="index" class="endpoint-draft-card">
-            <div class="endpoint-draft-title">
-              <span>端点 {{ Number(index) + 1 }}</span>
-              <el-button link type="danger" :disabled="accountForm.endpoints.length <= 1" @click="removeAccountEndpointDraft(index)">移除</el-button>
-            </div>
-            <el-form-item label="API 格式" required>
-              <el-select v-model="endpoint.api_format" class="w-full">
-                <el-option
-                  v-for="option in upstreamAPIFormatOptions"
-                  :key="option.value"
-                  :label="option.label"
-                  :value="option.value"
-                  :disabled="draftFormatDisabled(option.value, index)"
-                />
-              </el-select>
-            </el-form-item>
-            <el-form-item label="Base URL" required>
-              <el-input v-model="endpoint.base_url" placeholder="https://api.example.com" />
-            </el-form-item>
-            <el-form-item label="路径覆盖">
-              <el-input v-model="endpoint.path_override" placeholder="留空使用该 API 格式的默认路径" />
-            </el-form-item>
-            <el-form-item label="认证方式">
-              <el-select v-model="endpoint.auth_scheme" class="w-full">
-                <el-option v-for="option in endpointAuthSchemeOptions" :key="option.value" :label="option.label" :value="option.value" />
-              </el-select>
-            </el-form-item>
-            <el-form-item v-if="endpoint.auth_scheme === 'custom_header'" label="认证请求头" required>
-              <el-input v-model="endpoint.auth_header" placeholder="如 X-API-Key" />
-            </el-form-item>
-            <el-form-item label="附加请求头">
-              <KeyValueEditor v-model="endpoint.extra_headers" />
-            </el-form-item>
-          </div>
-        </div>
-        <el-alert v-else type="info" :closable="false" title="请求端点在账号详情页单独管理，修改账号资料不会覆盖端点配置。" />
-        <el-form-item label="最大并发数">
-          <DsNumberInput v-model="accountForm.concurrency_limit" :min="1" :step="1" />
-          <span class="hint">
-            留空表示不限制；指该账号同时在飞的上游请求数上限。
-            上游若按每分钟请求数给配额，可按「RPM ÷ 60 × 平均请求秒数」估算
-          </span>
-        </el-form-item>
-        <el-form-item label="价格表">
-          <el-select
-            v-model="accountForm.price_book_id"
-            clearable
-            class="w-full"
-            :placeholder="activePriceBookId ? '该账号成本基准' : '暂无启用价格表'"
-          >
-            <el-option v-for="b in priceBooks" :key="b.id" :label="b.name" :value="b.id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="租户倍率">
-          <DsNumberInput v-model="accountForm.tenant_multiplier" :min="0" :step="0.1" :precision="4" />
-          <span class="hint">租户扣费=价格表 USD × 默认倍率；默认 1</span>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="accountDialog = false">取消</el-button>
-        <el-button type="primary" :loading="submittingAccount" @click="submitAccount">保存</el-button>
-      </template>
-    </el-dialog>
-
-    <el-dialog v-model="endpointDialog" :title="isEditingEndpoint ? '编辑请求端点' : '添加请求端点'" width="640px">
-      <el-form label-width="120px">
-        <el-form-item label="API 格式" required>
-          <el-select v-model="endpointForm.api_format" class="w-full">
-            <el-option
-              v-for="option in upstreamAPIFormatOptions"
-              :key="option.value"
-              :label="option.label"
-              :value="option.value"
-              :disabled="endpointFormatDisabled(option.value)"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="Base URL" required>
-          <el-input v-model="endpointForm.base_url" placeholder="https://api.example.com" />
-        </el-form-item>
-        <el-form-item label="路径覆盖">
-          <el-input v-model="endpointForm.path_override" placeholder="留空使用该 API 格式的默认路径" />
-        </el-form-item>
-        <el-form-item label="认证方式">
-          <el-select v-model="endpointForm.auth_scheme" class="w-full">
-            <el-option v-for="option in endpointAuthSchemeOptions" :key="option.value" :label="option.label" :value="option.value" />
-          </el-select>
-        </el-form-item>
-        <el-form-item v-if="endpointForm.auth_scheme === 'custom_header'" label="认证请求头" required>
-          <el-input v-model="endpointForm.auth_header" placeholder="如 X-API-Key" />
-        </el-form-item>
-        <el-form-item label="状态">
-          <el-radio-group v-model="endpointForm.status">
-            <el-radio value="active">启用</el-radio>
-            <el-radio value="disabled">停用</el-radio>
-          </el-radio-group>
-        </el-form-item>
-        <el-form-item label="附加请求头">
-          <KeyValueEditor v-model="endpointForm.extra_headers" />
-          <span class="hint">敏感值显示为 ***REDACTED***；保持该值会保留原配置，删除该项才会移除请求头。</span>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="endpointDialog = false">取消</el-button>
-        <el-button type="primary" :loading="submittingEndpoint" @click="submitEndpoint">保存</el-button>
-      </template>
-    </el-dialog>
-
+    <UpstreamAccountEditorDialog v-model="accountDialog" :price-books="priceBooks" @saved="fetchAccounts" />
+    <UpstreamAccountTestDialog v-model="testDialog" :account="testAccount" @tested="accountTested" />
     <el-dialog v-model="exportDialog" title="导出上游账号" width="560px">
-      <el-alert
-        title="导出文件会包含上游 API key 明文，请只在可信环境保存和传输。"
-        type="warning"
-        show-icon
-        :closable="false"
-      />
-      <div class="transfer-panel">
-        <div class="transfer-summary">
-          <span>已选择</span>
-          <strong>{{ selectedExportAccounts.length }}</strong>
-          <span>个上游账号</span>
-        </div>
-        <div class="transfer-account-tags">
-          <el-tag v-for="account in selectedExportAccounts" :key="account.id" size="small">{{ account.name }}</el-tag>
-        </div>
-        <el-checkbox v-model="exportIncludeModelBindings">同时导出显式模型绑定</el-checkbox>
-      </div>
-      <template #footer>
-        <el-button @click="exportDialog = false">取消</el-button>
-        <el-button type="primary" :loading="exportingAccounts" @click="confirmExportAccounts">导出 JSON</el-button>
-      </template>
+      <el-alert title="导出文件会包含上游 API key 明文，请只在可信环境保存和传输。" type="warning" show-icon :closable="false" />
+      <div class="transfer-panel"><div class="transfer-summary"><span>已选择</span><strong>{{ selectedExportAccounts.length }}</strong><span>个上游账号</span></div><div class="transfer-tags"><el-tag v-for="account in selectedExportAccounts" :key="account.id" size="small">{{ account.name }}</el-tag></div><el-checkbox v-model="exportIncludeModelBindings">同时导出显式模型绑定</el-checkbox></div>
+      <template #footer><el-button @click="exportDialog = false">取消</el-button><el-button type="primary" :loading="exportingAccounts" @click="confirmExportAccounts">导出 JSON</el-button></template>
     </el-dialog>
-
     <el-dialog v-model="importDialog" title="导入上游账号" width="780px">
-      <el-alert
-        title="导入文件中的 API key 会按当前系统密钥重新加密；价格表不从文件继承，需要在本窗口选择。"
-        type="warning"
-        show-icon
-        :closable="false"
-      />
-      <div class="import-file-row">
-        <el-button :icon="Upload" @click="chooseImportFile">选择 JSON 文件</el-button>
-        <span class="import-file-name">{{ importFileName || '未选择文件' }}</span>
-        <input ref="importFileInput" type="file" accept="application/json,.json" class="hidden-file-input" @change="handleImportFileSelected" />
-      </div>
-      <el-form v-if="importAccounts.length" label-width="110px" class="import-form">
-        <el-form-item label="价格表">
-          <el-select
-            v-model="importSettings.default_price_book_id"
-            clearable
-            class="w-full"
-            :placeholder="activePriceBookId ? '不绑定价格表' : '暂无启用价格表'"
-            @change="refreshImportPreview"
-          >
-            <el-option v-for="b in priceBooks" :key="b.id" :label="b.name" :value="b.id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="租户倍率">
-          <DsNumberInput
-            v-model="importSettings.default_tenant_multiplier"
-            :min="0"
-            :step="0.1"
-            :precision="4"
-            class="plain-number-input"
-            @change="refreshImportPreview"
-          />
-        </el-form-item>
-      </el-form>
-
-      <div v-if="importPreview" v-loading="previewingImport" class="import-preview">
-        <div class="import-stats">
-          <span>创建账号 <strong>{{ importPreview.summary.create_accounts }}</strong></span>
-          <span>跳过账号 <strong>{{ importPreview.summary.skip_accounts }}</strong></span>
-          <span>错误账号 <strong>{{ importPreview.summary.error_accounts }}</strong></span>
-          <span>创建模型绑定 <strong>{{ importPreview.summary.create_model_bindings }}</strong></span>
-          <span>跳过模型绑定 <strong>{{ importPreview.summary.skip_model_bindings }}</strong></span>
-        </div>
-        <div class="import-preview-table">
-          <DsTable
-            :columns="importPreviewColumns"
-            :rows="importPreview.items"
-            row-key="name"
-            empty-title="暂无预检结果"
-          >
-            <template #cell-action="{ row }">
-              <DsTag :tone="importActionTone(row.action)">{{ importActionLabel(row.action) }}</DsTag>
-            </template>
-            <template #cell-reason="{ row }">
-              {{ row.reason || row.warnings?.join('；') || '—' }}
-            </template>
-          </DsTable>
-        </div>
-      </div>
-
-      <template #footer>
-        <el-button @click="importDialog = false">取消</el-button>
-        <el-button
-          type="primary"
-          :loading="importingAccounts"
-          :disabled="!importPreview?.summary.create_accounts"
-          @click="confirmImportAccounts"
-        >
-          导入可创建项
-        </el-button>
-      </template>
+      <el-alert title="导入文件中的 API key 会按当前系统密钥重新加密；价格表不从文件继承，需要在本窗口选择。" type="warning" show-icon :closable="false" />
+      <div class="import-file-row"><el-button :icon="Upload" @click="importFileInput?.click()">选择 JSON 文件</el-button><span>{{ importFileName || '未选择文件' }}</span><input ref="importFileInput" type="file" accept="application/json,.json" class="hidden-file-input" @change="handleImportFileSelected" /></div>
+      <el-form v-if="importAccounts.length" label-width="110px" class="import-form"><el-form-item label="价格表"><el-select v-model="importSettings.default_price_book_id" clearable class="w-full" :placeholder="activePriceBookId ? '不绑定价格表' : '暂无启用价格表'" @change="refreshImportPreview"><el-option v-for="book in priceBooks" :key="book.id" :label="book.name" :value="book.id" /></el-select></el-form-item><el-form-item label="租户倍率"><el-input-number v-model="importSettings.default_tenant_multiplier" :min="0" :step="0.1" :precision="4" @change="refreshImportPreview" /></el-form-item></el-form>
+      <div v-if="importPreview" v-loading="previewingImport" class="import-preview"><div class="import-stats"><span>创建账号 <strong>{{ importPreview.summary.create_accounts }}</strong></span><span>跳过账号 <strong>{{ importPreview.summary.skip_accounts }}</strong></span><span>错误账号 <strong>{{ importPreview.summary.error_accounts }}</strong></span><span>创建模型绑定 <strong>{{ importPreview.summary.create_model_bindings }}</strong></span></div><DsTable :columns="importPreviewColumns" :rows="importPreview.items" row-key="name" empty-title="暂无预检结果"><template #cell-action="{ row }"><DsTag :tone="importActionTone(row.action)">{{ importActionLabel(row.action) }}</DsTag></template><template #cell-reason="{ row }">{{ row.reason || row.warnings?.join('；') || '—' }}</template></DsTable></div>
+      <template #footer><el-button @click="importDialog = false">取消</el-button><el-button type="primary" :loading="importingAccounts" :disabled="!importPreview?.summary.create_accounts" @click="confirmImportAccounts">导入可创建项</el-button></template>
     </el-dialog>
-
   </div>
 </template>
 
 <style scoped>
-.account-time-filter { padding: 14px; border-bottom: 1px solid var(--ds-line); }
-.account-time-filter__label { display: flex; justify-content: space-between; margin-bottom: 8px; color: var(--ds-muted); font-size: 12px; }
-.account-time-filter :deep(.el-select) { width: 100%; }
-.accounts-view {
-  flex: 0 1 auto;
-  min-height: 0;
-  height: calc(100dvh - 56px - 72px);
-  max-height: calc(100dvh - 56px - 72px);
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  overflow: hidden;
-}
-
-.account-list {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding: 8px 12px;
-  scrollbar-gutter: stable;
-}
-.account-list-sentinel { text-align: center; font-size: 12px; color: var(--ds-faint); }
-.account-list-sentinel span { display: block; padding: 4px 0 10px; }
-.account-item { padding: 12px 12px 11px; border-radius: var(--ds-radius-control); cursor: pointer; border: 1px solid transparent; margin-bottom: 6px; transition: background .16s ease, border-color .16s ease; }
-.account-item:hover { background: var(--ds-panel-muted); }
-.account-item.active { background: var(--ds-accent-soft); border-color: color-mix(in srgb, var(--ds-accent) 40%, var(--ds-line)); }
-.account-item-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; min-width: 0; }
-.account-item-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.account-item-name { color: var(--ds-ink); font-weight: 600; }
-.account-item-body { display: grid; gap: 7px; margin: 6px 0 0 24px; min-width: 0; }
-.account-item-meta { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--ds-muted); font-size: 12px; }
-.account-item-host { font-size: 12px; color: var(--ds-faint); }
-.account-item-rate { display: flex; justify-content: space-between; align-items: center; color: var(--ds-muted); font-size: 12px; }
-.account-item-rate strong { color: var(--ds-ink); font-weight: 600; font-variant-numeric: tabular-nums; }
-.endpoint-success-rate { font-variant-numeric: tabular-nums; }
-.account-overview-description-empty { color: var(--ds-faint); }
-.account-content-scroll {
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
-  padding: 0 2px 2px 0;
-}
-.account-content-stack { display: flex; flex-direction: column; gap: 16px; min-height: 100%; }
-.account-detail-tabs { padding: 14px; border: 1px solid var(--ds-line); border-radius: var(--ds-radius-panel); background: var(--ds-panel); }
-.account-detail-tabs__meta { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 12px; }
-.account-detail-tabs__title { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.account-detail-tabs__title strong { color: var(--ds-ink); font-size: 14px; }
-.account-detail-tabs__title span { color: var(--ds-muted); font-size: 12px; line-height: 1.5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.account-detail-tabs__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
-.account-detail-pane { min-width: 0; }
-.hint { color: var(--ds-faint); font-size: 12px; margin-left: 8px; }
-.endpoint-drafts { display: flex; flex-direction: column; gap: 12px; margin: 8px 0 18px; }
-.endpoint-drafts-head, .endpoint-draft-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.endpoint-drafts-head p { margin: 4px 0 0; color: var(--ds-muted); font-size: 12px; }
-.endpoint-draft-card { padding: 14px 14px 2px; border: 1px solid var(--ds-line); border-radius: var(--ds-radius-control); background: var(--ds-panel-muted); }
-.endpoint-draft-title { margin-bottom: 10px; color: var(--ds-ink); font-weight: 700; }
+.accounts-view { display: flex; min-height: 0; flex: 1; flex-direction: column; }
+.filter-field { display: flex; width: 170px; min-width: 0; flex-direction: column; gap: 6px; color: var(--ds-muted); font-size: 12px; font-weight: 600; }
+.filter-field--search { width: min(320px, 100%); }
+.filter-field :deep(.el-select), .filter-field :deep(.el-input) { width: 100%; }
+.stability-alert { margin-top: 12px; }
+.accounts-table-shell { overflow: auto; height: 100%; min-height: 0; }
+.account-cell { display: flex; min-width: 0; flex-direction: column; gap: 5px; }
+.account-cell__title { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 6px; }
+.account-cell__title button { overflow: hidden; max-width: 190px; padding: 0; border: 0; background: transparent; color: var(--ds-accent); font: inherit; font-weight: 650; text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.account-cell__host { overflow: hidden; color: var(--ds-faint); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.sample-hint { color: var(--ds-warning); font-size: 11px; white-space: nowrap; }
+.numeric-cell { color: var(--ds-ink-soft); font-variant-numeric: tabular-nums; }
+.row-actions { display: flex; justify-content: flex-end; white-space: nowrap; }
 .transfer-panel { display: flex; flex-direction: column; gap: 14px; margin-top: 16px; }
 .transfer-summary { display: inline-flex; align-items: baseline; gap: 6px; color: var(--ds-muted); }
-.transfer-summary strong { color: var(--ds-ink); font-size: 20px; line-height: 1; }
-.transfer-account-tags { display: flex; flex-wrap: wrap; gap: 8px; }
-.import-file-row { display: flex; align-items: center; gap: 12px; margin: 16px 0; }
-.import-file-name { min-width: 0; color: var(--ds-muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.transfer-summary strong { color: var(--ds-ink); font-size: 20px; }
+.transfer-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+.import-file-row { display: flex; align-items: center; gap: 12px; margin: 16px 0; color: var(--ds-muted); font-size: 13px; }
 .hidden-file-input { display: none; }
 .import-form { padding: 12px 0 2px; border-top: 1px solid var(--ds-line); }
-.plain-number-input { width: 100%; }
-.import-preview { margin-top: 10px; }
-.import-preview-table { max-height: 260px; overflow-y: auto; }
+.import-preview { overflow: auto; max-height: 360px; margin-top: 10px; }
 .import-stats { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; color: var(--ds-muted); font-size: 13px; }
 .import-stats span { padding: 6px 10px; border: 1px solid var(--ds-line); border-radius: var(--ds-radius-control); background: var(--ds-panel-muted); }
 .import-stats strong { color: var(--ds-ink); }
-
-@media (max-width: 768px) {
-  .runtime-filter-grid { grid-template-columns: 1fr; }
-  .runtime-filter-field--wide { grid-column: auto; }
-  .account-detail-tabs__meta { flex-direction: column; }
-  .account-detail-tabs__actions { justify-content: flex-start; }
-}
-
-/* 主从布局：限制在页面剩余高度内，左右两栏各自滚动，避免列表把整个页面向下撑开。 */
-.accounts-body {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  padding: 24px;
-}
-.accounts-main-row {
-  flex: 1 1 auto;
-  height: 100%;
-  min-height: 0;
-  align-items: stretch;
-  overflow: hidden;
-}
-.accounts-list-col,
-.account-content-column {
-  display: flex;
-  height: 100%;
-  max-height: 100%;
-  min-width: 0;
-  min-height: 0;
-  flex-direction: column;
-}
-.accounts-list-card { height: 100%; }
-:deep(.accounts-list-card.portal-content-card) { display: flex; flex-direction: column; height: 100%; }
-:deep(.accounts-list-card .portal-content-card__body) { display: flex; flex-direction: column; flex: 1; min-height: 0; }
-
-@media (max-width: 1200px) {
-  .accounts-body { padding: 16px; }
-}
-
-@media (max-width: 768px) {
-  .accounts-view {
-    max-height: none;
-    height: auto;
-    overflow: visible;
-  }
-
-  .accounts-body {
-    overflow: visible;
-    padding: 16px;
-  }
-
-  .accounts-main-row {
-    height: auto;
-    overflow: visible;
-  }
-
-  .accounts-list-col {
-    height: min(420px, 52dvh);
-    margin-bottom: 16px;
-  }
-
-  .account-content-column {
-    overflow: visible;
-  }
-
-  .account-content-scroll {
-    overflow: visible;
-  }
-}
-
-/* ── 连通性测试弹窗 ── */
-.test-dialog { display: flex; flex-direction: column; gap: 16px; }
-.test-account-head {
-  display: flex; align-items: center; gap: 12px;
-  padding: 12px 14px; border: 1px solid var(--el-border-color-lighter);
-  border-radius: var(--ds-radius-panel); background: var(--el-fill-color-lighter);
-}
-.test-account-icon {
-  width: 40px; height: 40px; border-radius: var(--ds-radius-panel);
-  display: flex; align-items: center; justify-content: center;
-  background: var(--el-color-success); color: var(--ds-accent-contrast); font-size: 18px; flex: none;
-}
-.test-account-meta { display: flex; flex-direction: column; flex: 1; min-width: 0; }
-.test-account-name { font-weight: 600; }
-.test-account-sub { font-size: 12px; color: var(--el-text-color-secondary); }
-.test-form { margin: 0; }
-.test-hint, .test-empty-hint { margin: 6px 0 0; font-size: 12px; color: var(--el-text-color-secondary); }
-.test-empty-hint { color: var(--el-color-warning); }
-.test-console {
-  /* 深色控制台局部色板:全部由 ds token + color-mix 推导,语义 = 成功绿/失败红/警告黄/次要灰 */
-  --console-bg: color-mix(in srgb, var(--ds-ink) 94%, var(--ds-panel));
-  --console-fg: color-mix(in srgb, var(--ds-panel) 80%, var(--ds-ink));
-  --console-ok: color-mix(in srgb, var(--ds-positive) 65%, var(--ds-panel));
-  --console-err: color-mix(in srgb, var(--ds-danger) 60%, var(--ds-panel));
-  --console-warn: color-mix(in srgb, var(--ds-warning) 70%, var(--ds-panel));
-  --console-muted: var(--ds-faint);
-  --console-reply: var(--ds-line);
-  --console-border: color-mix(in srgb, var(--ds-faint) 30%, transparent);
-  border-radius: var(--ds-radius-panel); padding: 14px 16px;
-  background: var(--console-bg); color: var(--console-fg);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 13px; line-height: 1.7; max-height: 320px; overflow: auto;
-  display: flex; flex-direction: column;
-}
-.test-line { white-space: pre-wrap; word-break: break-word; }
-.test-ok { color: var(--console-ok); }
-.test-err { color: var(--console-err); }
-.test-warn { color: var(--console-warn); }
-.test-muted { color: var(--console-muted); }
-.test-reply { color: var(--console-reply); }
-.test-image-wrap { margin-top: 10px; }
-.test-image {
-  max-width: 100%; max-height: 240px; border-radius: var(--ds-radius-control);
-  border: 1px solid var(--console-border);
-}
+@media (max-width: 768px) { .filter-field, .filter-field--search { width: 100%; } .accounts-table-shell { min-height: 480px; } }
 </style>

@@ -1,16 +1,27 @@
 <script setup lang="ts">
 import { formatDuration } from "@/platform/ai/usage";
-import { computed, shallowRef } from 'vue';
+import { computed, shallowRef, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import { DsMetricCard, DsTable, DsTag, type DsTableColumn } from '@/shared/ui';
 import { PortalContentCard } from '@/platform';
-import { stabilityApi, type ResourceKind } from './api';
+import { stabilityApi, type ResourceKind, type Stability, type StabilityWindow } from './api';
 import { useUpstreamStability } from './useUpstreamStability';
 
-const props = defineProps<{ kind: ResourceKind; resourceId: string }>();
-const runtime = useUpstreamStability(props.kind, () => props.resourceId);
+const props = withDefaults(defineProps<{ kind: ResourceKind; resourceId: string; window?: StabilityWindow }>(), { window: '24h' });
+const emit = defineEmits<{
+  'update:window': [value: StabilityWindow];
+  'update:error': [value: string];
+  snapshot: [value: Stability | null];
+}>();
+const activeWindow = shallowRef<StabilityWindow>(props.window);
+const runtime = useUpstreamStability(props.kind, () => props.resourceId, activeWindow);
 const detail = runtime.detail;
 const resuming = shallowRef(false);
+
+watch(() => props.window, (value) => { if (value !== activeWindow.value) activeWindow.value = value; });
+watch(activeWindow, (value) => emit('update:window', value));
+watch(detail, (value) => emit('snapshot', value), { immediate: true });
+watch(runtime.error, (value) => emit('update:error', value), { immediate: true });
 
 const availabilityLabels: Record<string, string> = {
   available: '全部可用',
@@ -141,7 +152,7 @@ async function resume() {
 </script>
 
 <template>
-  <PortalContentCard title="运行状态与稳定性" description="统计真实上游尝试；取消、冷却跳过和本地拒绝不计入成功率。">
+  <PortalContentCard title="运行状态与稳定性" description="按账号、模型和结果聚合真实上游尝试，不是单条请求日志；取消、冷却跳过和本地拒绝不计入成功率。">
     <div class="stability-toolbar">
       <label class="stability-toolbar__field">
         <span>统计范围</span>
