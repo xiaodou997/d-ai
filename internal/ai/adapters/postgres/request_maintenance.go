@@ -60,7 +60,7 @@ func (s *RequestStore) RecoverRequests(ctx context.Context) error {
 }
 
 func (s *RequestStore) MaintainRecords(ctx context.Context) error {
-	if _, err := s.financialPool.Exec(ctx, `SELECT ensure_request_record_partitions(now())`); err != nil {
+	if err := s.ensureRecordPartitions(ctx); err != nil {
 		return err
 	}
 	if err := s.RecoverRequests(ctx); err != nil {
@@ -146,6 +146,11 @@ func (s *RequestStore) MaintainRecords(ctx context.Context) error {
 		return err
 	}
 	return tx.Commit(ctx)
+}
+
+func (s *RequestStore) ensureRecordPartitions(ctx context.Context) error {
+	_, err := s.financialPool.Exec(ctx, `SELECT ensure_request_record_partitions(now())`)
+	return err
 }
 func dayStart(t time.Time) time.Time {
 	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)

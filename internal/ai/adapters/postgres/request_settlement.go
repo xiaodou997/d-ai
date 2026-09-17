@@ -22,6 +22,9 @@ func (s *RequestStore) Start(ctx context.Context) {
 	run, cancel := context.WithCancel(ctx)
 	s.cancel = cancel
 	s.done = make(chan struct{})
+	if err := s.ensureRecordPartitions(run); err != nil {
+		s.logger.Error("initial record partition maintenance", zap.Error(err))
+	}
 	go func() {
 		defer close(s.done)
 		tick := time.NewTicker(500 * time.Millisecond)
