@@ -112,6 +112,7 @@ type usageMetadata struct {
 	BillingSource                      string         `json:"billing_source"`
 	SubscriptionID                     pgtype.UUID    `json:"subscription_id"`
 }
+
 func usageUserMultiplierOverrideSnapshot(billing domain.BillingResult) pgtype.Numeric {
 	if billing.UserMultiplierOverride != nil {
 		return floatPtrToNumeric(billing.UserMultiplierOverride)
