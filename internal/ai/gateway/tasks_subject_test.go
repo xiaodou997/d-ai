@@ -93,3 +93,93 @@ func TestTaskSubjectResolverReloadsAPIKeyAuthorization(t *testing.T) {
 		t.Fatal("active API key resolved after its tenant owner became inactive")
 	}
 }
+
+
+func TestTaskSubjectResolverRevalidatesJWTSessionAndScope(t *testing.T) {
+	ctx := context.Background()
+	pool, cleanup, err := testsupport.OpenAsyncTaskTestPool(ctx, testsupport.AsyncTaskPoolOptions{MaxConns: 4})
+	if err != nil {
+		t.Skipf("async task test database unavailable: %v", err)
+	}
+	t.Cleanup(func() { _ = cleanup(context.Background()) })
+
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO iam_tenants (tenant_id, tenant_name, status)
+		VALUES
+		  ('jwt-task-user-tenant', 'JWT Task User Tenant', 'active'),
+		  ('jwt-task-ops-tenant', 'JWT Task Ops Tenant', 'active');
+		INSERT INTO iam_accounts (
+			user_id, tenant_id, username, password_hash, user_type, status, credential_version
+		) VALUES
+		  ('jwt-task-user', 'jwt-task-user-tenant', 'jwt-task-user', 'unused', 4, 'active', 1),
+		  ('jwt-task-operator', NULL, 'jwt-task-operator', 'unused', 2, 'active', 1);
+		INSERT INTO auth_sessions (
+			session_id, user_id, credential_version, expires_at
+		) VALUES
+		  ('81000000-0000-0000-0000-000000000001'::uuid, 'jwt-task-user', 1, now() + interval '1 hour'),
+		  ('81000000-0000-0000-0000-000000000002'::uuid, 'jwt-task-operator', 1, now() + interval '1 hour')
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	resolver := NewTaskSubjectResolver(pool, dbgen.New(pool))
+	userRef := asynctask.SubjectRef{
+		AuthMethod:           coreidentity.AuthMethodJWT,
+		TenantID:             "jwt-task-user-tenant",
+		UserID:               "jwt-task-user",
+		JWTAuthUserID:        "jwt-task-user",
+		JWTAuthUserType:      4,
+		JWTSessionID:         "81000000-0000-0000-0000-000000000001",
+		JWTCredentialVersion: 1,
+	}
+	userSubject, err := resolver.Resolve(ctx, userRef)
+	if err != nil {
+		t.Fatalf("resolve active user JWT task: %v", err)
+	}
+	if userSubject.Scope != coreidentity.ScopeUser || userSubject.UserID != "jwt-task-user" {
+		t.Fatalf("resolved user JWT subject = %#v", userSubject)
+	}
+	if _, err := pool.Exec(ctx, `
+		UPDATE iam_accounts
+		SET credential_version = credential_version + 1
+		WHERE user_id = 'jwt-task-user'
+	`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := resolver.Resolve(ctx, userRef); err == nil {
+		t.Fatal("queued user JWT task survived a credential change")
+	}
+
+	opsRef := asynctask.SubjectRef{
+		AuthMethod:           coreidentity.AuthMethodJWT,
+		TenantID:             "jwt-task-ops-tenant",
+		JWTAuthUserID:        "jwt-task-operator",
+		JWTAuthUserType:      2,
+		JWTSessionID:         "81000000-0000-0000-0000-000000000002",
+		JWTCredentialVersion: 1,
+	}
+	opsSubject, err := resolver.Resolve(ctx, opsRef)
+	if err != nil {
+		t.Fatalf("resolve active tenant-operations JWT task: %v", err)
+	}
+	if opsSubject.Scope != coreidentity.ScopeTenant || opsSubject.UserID != "" ||
+		opsSubject.JWTAuthUserID != "jwt-task-operator" {
+		t.Fatalf("resolved tenant-operations subject = %#v", opsSubject)
+	}
+	if _, err := pool.Exec(ctx, `
+		UPDATE iam_tenants SET status = 'disabled'
+		WHERE tenant_id = 'jwt-task-ops-tenant'
+	`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := resolver.Resolve(ctx, opsRef); err == nil {
+		t.Fatal("queued tenant-operations task survived target tenant disable")
+	}
+
+	if _, err := resolver.Resolve(ctx, asynctask.SubjectRef{
+		AuthMethod: coreidentity.AuthMethodJWT,
+		TenantID:   "jwt-task-ops-tenant",
+	}); err == nil {
+		t.Fatal("historical JWT task without session reference did not fail closed")
+	}
+}
