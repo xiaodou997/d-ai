@@ -3,7 +3,7 @@
 
 Source: `contracts/openapi.yaml`
 
-Contract SHA-256: `03876292b7257bcd87641f108794df4cf0a6280d1d8f80312e74ac60bcc251e5`
+Contract SHA-256: `4a0c07b0e6c595c2794b4237fd5c432fd1f87c348aaf98c5a7e314835e9cccb7`
 
 Coverage: **341/341 operations (100%)**
 
