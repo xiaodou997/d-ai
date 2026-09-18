@@ -80,7 +80,6 @@ func TestMFAChallengeIsConsumedByOnlyOneConcurrentVerifier(t *testing.T) {
 	}
 }
 
-
 func TestMFAConcurrentEnrollKeepsOnePendingSecret(t *testing.T) {
 	ctx := context.Background()
 	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 4})
