@@ -98,14 +98,14 @@ func (s *Console) consoleRuntimeSubject(w http.ResponseWriter, r *http.Request) 
 	}
 	httpx.SetIdentity(r.Context(), claims.TenantID, userID, string(role))
 	return &coreidentity.Subject{
-		AuthMethod:               coreidentity.AuthMethodJWT,
-		RequestSource:            coreidentity.RequestSourceWebChat,
-		Scope:                    scope,
-		TenantID:                 claims.TenantID,
-		UserID:                   userID,
-		JWTAuthUserID:            claims.UserID,
-		JWTAuthUserType:          authUserType,
-		JWTSessionID:             claims.SessionID,
-		JWTCredentialVersion:     claims.CredentialVersion,
+		AuthMethod:           coreidentity.AuthMethodJWT,
+		RequestSource:        coreidentity.RequestSourceWebChat,
+		Scope:                scope,
+		TenantID:             claims.TenantID,
+		UserID:               userID,
+		JWTAuthUserID:        claims.UserID,
+		JWTAuthUserType:      authUserType,
+		JWTSessionID:         claims.SessionID,
+		JWTCredentialVersion: claims.CredentialVersion,
 	}, true
 }
