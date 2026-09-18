@@ -555,7 +555,6 @@ func decodePersistedConsoleImageEditRequest(inputPayload []byte) (imageedit.Requ
 	return req, nil
 }
 
-const defaultConsoleImageResponseFormat = domain.ImageResponseFormatURL
 
 func effectiveConsoleImageResponseFormat(value string) string {
 	value = strings.TrimSpace(value)
