@@ -243,7 +243,7 @@ func (r *BanReconciler) trueBannedUsers(ctx context.Context) (map[string]struct{
 	out := make(map[string]struct{})
 	rows, err := r.pool.Query(ctx, `
 		SELECT user_id FROM iam_accounts
-		WHERE status IN ('disabled', 'inherited_disabled', 'deleted')
+		WHERE status <> 'active'
 	`)
 	if err != nil {
 		return nil, err
@@ -261,7 +261,7 @@ func (r *BanReconciler) trueBannedUsers(ctx context.Context) (map[string]struct{
 
 func (r *BanReconciler) trueBannedTenants(ctx context.Context) (map[string]struct{}, error) {
 	out := make(map[string]struct{})
-	rows, err := r.pool.Query(ctx, `SELECT tenant_id FROM iam_tenants WHERE status = 'disabled'`)
+	rows, err := r.pool.Query(ctx, `SELECT tenant_id FROM iam_tenants WHERE status <> 'active'`)
 	if err != nil {
 		return nil, err
 	}
