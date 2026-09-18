@@ -115,16 +115,22 @@ func extractRuntimeAPIKey(headers http.Header) (string, error) {
 
 // resolveAPIKey checks cache first, falls back to DB, and writes back on miss.
 func (s *Gateway) resolveAPIKey(ctx context.Context, keyHash string) (dbgen.GetAPIKeyByHashRow, error) {
-	if s.apiKeyCache != nil {
-		if row, ok := s.apiKeyCache.Get(ctx, keyHash); ok {
-			return row, nil
-		}
+	if s.queries == nil || s.postgres == nil {
+		return dbgen.GetAPIKeyByHashRow{}, errors.New("runtime API key database service is not configured")
 	}
+	// PostgreSQL is the authorization source of truth. A Redis cache entry may
+	// outlive a committed disable/delete/rotate when best-effort invalidation
+	// fails, so cached rows must never authorize a runtime request.
 	row, err := s.queries.GetAPIKeyByHash(ctx, keyHash)
 	if err != nil {
 		return dbgen.GetAPIKeyByHashRow{}, err
 	}
+	if err := verifyRuntimeAPIKeyOwner(ctx, s.postgres, runtimeAPIKeyRecordFromHashRow(row)); err != nil {
+		return dbgen.GetAPIKeyByHashRow{}, err
+	}
 	if s.apiKeyCache != nil {
+		// Keep the cache as a non-authoritative snapshot for existing telemetry
+		// and invalidation plumbing. Runtime authentication never reads it.
 		_ = s.apiKeyCache.Set(ctx, keyHash, row)
 	}
 	return row, nil
