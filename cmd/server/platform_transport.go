@@ -78,10 +78,6 @@ func buildPlatformTransportModules(version string, cfg *config.Config, platform 
 				Recharge:           platform.Recharge,
 				AuthAuditLogs:      platform.AuthAccounts,
 			},
-			UsageBilling: transport.AdminUsageBillingModuleDeps{
-				AdminRouteAuthDeps: adminAuth,
-				Deduction:          platform.Deduction,
-			},
 			Dashboard: transport.AdminDashboardModuleDeps{
 				AdminRouteAuthDeps: adminAuth,
 				Dashboard:          platform.Dashboard,
