@@ -1,0 +1,19 @@
+name: Gofmt Diagnostic
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  gofmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: List gofmt drift
+        run: |
+          gofmt -w .
+          git diff --name-only
+          test -n "$(git diff --name-only)"
