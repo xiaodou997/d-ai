@@ -7,8 +7,6 @@ import (
 	dbgen "xiaodou/dai/internal/ai/db/gen"
 )
 
-const ()
-
 // CommercialRepo adapts the current group/limit/group-route-policy storage to the
 // rebuilt commercial repository port. This bridge is intentionally honest:
 // only capabilities that already have a real legacy backing store are wired.
