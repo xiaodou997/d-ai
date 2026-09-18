@@ -38,30 +38,6 @@ func emptyIdentityIncluded() IdentityIncludedDTO {
 	}
 }
 
-func buildIdentityIncludedForLogs(ctx context.Context, provider IdentityProvider, observer IdentityEnrichmentFailureObserver, records []domain.UsageLog) IdentityIncludedDTO {
-	userIDs := make([]string, 0, len(records))
-	tenantIDs := make([]string, 0, len(records))
-	seenUsers := make(map[string]struct{}, len(records))
-	seenTenants := make(map[string]struct{}, len(records))
-
-	for _, record := range records {
-		if record.UserID != "" {
-			if _, exists := seenUsers[record.UserID]; !exists {
-				seenUsers[record.UserID] = struct{}{}
-				userIDs = append(userIDs, record.UserID)
-			}
-		}
-		if record.TenantID != "" {
-			if _, exists := seenTenants[record.TenantID]; !exists {
-				seenTenants[record.TenantID] = struct{}{}
-				tenantIDs = append(tenantIDs, record.TenantID)
-			}
-		}
-	}
-
-	return buildIdentityIncluded(ctx, provider, observer, userIDs, tenantIDs)
-}
-
 func buildIdentityIncludedForRanking(ctx context.Context, provider IdentityProvider, observer IdentityEnrichmentFailureObserver, rows []domain.UsageUserRankingRow) IdentityIncludedDTO {
 	userIDs := make([]string, 0, len(rows))
 	tenantIDs := make([]string, 0, len(rows))
