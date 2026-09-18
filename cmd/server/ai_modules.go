@@ -308,7 +308,7 @@ func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisCl
 	}, asynctask.Deps{
 		Pool:         pool,
 		Logger:       appLogger,
-		Subjects:     gateway.NewTaskSubjectResolver(q),
+		Subjects:     gateway.NewTaskSubjectResolver(pool, q),
 		RedactDetail: serving.RedactInternalErrorDetail,
 	})
 	if err != nil {
