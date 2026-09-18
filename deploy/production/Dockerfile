@@ -3,7 +3,7 @@ FROM debian:bookworm-slim
 WORKDIR /app
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates tzdata wget \
+    && apt-get install -y --no-install-recommends ca-certificates tzdata wget libpcre2-8-0 \
     && rm -rf /var/lib/apt/lists/* \
     && addgroup --system --gid 10001 dai \
     && adduser --system --uid 10001 --ingroup dai --no-create-home --disabled-login dai \
