@@ -58,17 +58,7 @@ func (r *taskSubjectResolver) Resolve(ctx context.Context, ref asynctask.Subject
 		}
 		return subject, nil
 	case coreidentity.AuthMethodJWT:
-		scope := coreidentity.ScopeTenant
-		if ref.UserID != "" {
-			scope = coreidentity.ScopeUser
-		}
-		return coreidentity.Subject{
-			AuthMethod:    coreidentity.AuthMethodJWT,
-			RequestSource: coreidentity.RequestSourceWebImage,
-			Scope:         scope,
-			TenantID:      ref.TenantID,
-			UserID:        ref.UserID,
-		}, nil
+		return verifyRuntimeJWTTaskSubject(ctx, r.pool, ref)
 	default:
 		return coreidentity.Subject{}, fmt.Errorf("unsupported async task auth method %q", ref.AuthMethod)
 	}
