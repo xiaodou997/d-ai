@@ -91,14 +91,6 @@ func actorFromClaims(c *auth.Claims) auth.Actor {
 	return auth.ActorFromClaims(c)
 }
 
-// userIDOf 安全取出 Claims 的 UserID（nil 返回空串）。
-func userIDOf(c *auth.Claims) string {
-	if c == nil {
-		return ""
-	}
-	return c.UserID
-}
-
 func adminAccountLifecycleError(err error) error {
 	var securityErr *userports.AdminAccountSecurityError
 	if errors.As(err, &securityErr) {
