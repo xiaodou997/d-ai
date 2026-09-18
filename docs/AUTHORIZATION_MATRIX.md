@@ -3,9 +3,9 @@
 
 Source: `contracts/openapi.yaml`
 
-Contract SHA-256: `03876292b7257bcd87641f108794df4cf0a6280d1d8f80312e74ac60bcc251e5`
+Contract SHA-256: `e8325dfa7eaea3065cf68ca743e972e5160ebbee87082bbc183f705ce19f6ca6`
 
-Coverage: **341/341 operations (100%)**
+Coverage: **340/340 operations (100%)**
 
 The matrix is a review artifact and a generation gate. Middleware and application services remain the enforcement points; `ownership` describes the second authorization check required after capability admission.
 
@@ -16,7 +16,7 @@ The matrix is a review artifact and a generation gate. Middleware and applicatio
 | `api_key_or_session` | 4 | `api_key_or_session` | `resource` |
 | `authenticated` | 19 | `authenticated` | `actor.user` |
 | `customer_self` | 27 | `customer_self` | `actor.user` |
-| `platform_admin` | 168 | `platform_admin` | `actor.user` |
+| `platform_admin` | 167 | `platform_admin` | `actor.user` |
 | `platform_or_tenant` | 8 | `platform_or_tenant` | `actor.tenant/resource` |
 | `public` | 9 | `public` | `none` |
 | `super_admin` | 2 | `super_admin` | `global` |
