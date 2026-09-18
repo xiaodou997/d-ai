@@ -79,3 +79,83 @@ func TestMFAChallengeIsConsumedByOnlyOneConcurrentVerifier(t *testing.T) {
 		t.Fatalf("concurrent MFA successes = %d, want 1", successes)
 	}
 }
+
+
+func TestMFAConcurrentEnrollKeepsOnePendingSecret(t *testing.T) {
+	ctx := context.Background()
+	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 4})
+	if err != nil {
+		t.Skipf("database unavailable: %v", err)
+	}
+	t.Cleanup(func() { _ = cleanup(context.Background()) })
+	if err := clientsecret.Configure("0123456789abcdef"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO iam_accounts (user_id, username, password_hash, user_type, status)
+		VALUES ('mfa-enroll-race', 'mfa-enroll-admin', 'unused', 2, 'active');
+
+		CREATE FUNCTION test_mfa_enroll_delay() RETURNS trigger
+		LANGUAGE plpgsql AS $$
+		BEGIN
+			IF NEW.mfa_secret_encrypted IS DISTINCT FROM OLD.mfa_secret_encrypted THEN
+				PERFORM pg_sleep(0.5);
+			END IF;
+			RETURN NEW;
+		END
+		$$;
+
+		CREATE TRIGGER test_mfa_enroll_delay
+		BEFORE UPDATE ON iam_accounts
+		FOR EACH ROW
+		EXECUTE FUNCTION test_mfa_enroll_delay()
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	service := NewMFAService(pool, nil)
+	start := make(chan struct{})
+	results := make(chan MFAEnrollment, 2)
+	errs := make(chan error, 2)
+	var wg sync.WaitGroup
+	for range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			enrollment, enrollErr := service.Enroll(ctx, "mfa-enroll-race", "mfa-enroll-admin")
+			results <- enrollment
+			errs <- enrollErr
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(results)
+	close(errs)
+
+	for enrollErr := range errs {
+		if enrollErr != nil {
+			t.Fatalf("concurrent enroll failed: %v", enrollErr)
+		}
+	}
+	var enrollments []MFAEnrollment
+	for enrollment := range results {
+		enrollments = append(enrollments, enrollment)
+	}
+	if len(enrollments) != 2 || enrollments[0].Secret == "" || enrollments[0].Secret != enrollments[1].Secret {
+		t.Fatalf("concurrent enrollments = %#v, want the same non-empty pending secret", enrollments)
+	}
+
+	code := totpCode(enrollments[0].Secret, uint64(time.Now().Unix()/30))
+	if err := service.ConfirmEnrollment(ctx, "mfa-enroll-race", code); err != nil {
+		t.Fatalf("confirm concurrent enrollment: %v", err)
+	}
+	enabled, err := service.Enabled(ctx, "mfa-enroll-race")
+	if err != nil || !enabled {
+		t.Fatalf("MFA enabled after confirmation = %v, err=%v", enabled, err)
+	}
+	if _, err := service.Enroll(ctx, "mfa-enroll-race", "mfa-enroll-admin"); err != ErrMFAAlreadyEnabled {
+		t.Fatalf("enroll after confirmation error = %v, want ErrMFAAlreadyEnabled", err)
+	}
+}

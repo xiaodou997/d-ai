@@ -67,38 +67,100 @@ func (s *MFAService) Enabled(ctx context.Context, userID string) (bool, error) {
 }
 
 func (s *MFAService) Enroll(ctx context.Context, userID, username string) (MFAEnrollment, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return MFAEnrollment{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
 	var enabled bool
-	if err := s.pool.QueryRow(ctx, `SELECT mfa_enabled FROM iam_accounts WHERE user_id = $1 AND user_type IN (1, 2)`, userID).Scan(&enabled); err != nil {
+	var encrypted string
+	if err := tx.QueryRow(ctx, `
+		SELECT mfa_enabled, COALESCE(mfa_secret_encrypted, '')
+		FROM iam_accounts
+		WHERE user_id = $1 AND user_type IN (1, 2)
+		FOR UPDATE
+	`, userID).Scan(&enabled, &encrypted); err != nil {
 		return MFAEnrollment{}, err
 	}
 	if enabled {
 		return MFAEnrollment{}, ErrMFAAlreadyEnabled
 	}
+
+	if encrypted != "" {
+		if secret, decryptErr := clientsecret.Decrypt(encrypted); decryptErr == nil {
+			return mfaEnrollment(username, secret), nil
+		}
+	}
+
 	raw := make([]byte, 20)
 	if _, err := rand.Read(raw); err != nil {
 		return MFAEnrollment{}, err
 	}
 	secret := strings.TrimRight(base32.StdEncoding.EncodeToString(raw), "=")
-	encrypted, err := clientsecret.Encrypt(secret)
+	encrypted, err = clientsecret.Encrypt(secret)
 	if err != nil {
 		return MFAEnrollment{}, fmt.Errorf("encrypt MFA secret: %w", err)
 	}
-	if _, err := s.pool.Exec(ctx, `
-		UPDATE iam_accounts SET mfa_secret_encrypted = $1, mfa_enabled = FALSE, mfa_enrolled_at = now(), updated_at = now()
+	if _, err := tx.Exec(ctx, `
+		UPDATE iam_accounts
+		SET mfa_secret_encrypted = $1, mfa_enabled = FALSE,
+		    mfa_enrolled_at = now(), updated_at = now()
 		WHERE user_id = $2 AND user_type IN (1, 2)
 	`, encrypted, userID); err != nil {
 		return MFAEnrollment{}, err
 	}
-	label := url.QueryEscape("D-AI:" + username)
-	return MFAEnrollment{Secret: secret, OTPAuthURL: "otpauth://totp/" + label + "?secret=" + secret + "&issuer=D-AI"}, nil
+	if err := tx.Commit(ctx); err != nil {
+		return MFAEnrollment{}, err
+	}
+	return mfaEnrollment(username, secret), nil
 }
 
 func (s *MFAService) ConfirmEnrollment(ctx context.Context, userID, code string) error {
-	if !s.VerifyCode(ctx, userID, code) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var encrypted string
+	if err := tx.QueryRow(ctx, `
+		SELECT COALESCE(mfa_secret_encrypted, '')
+		FROM iam_accounts
+		WHERE user_id = $1 AND user_type IN (1, 2)
+		FOR UPDATE
+	`, userID).Scan(&encrypted); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrMFAUnavailable
+		}
+		return err
+	}
+	if encrypted == "" {
 		return ErrInvalidMFACode
 	}
-	_, err := s.pool.Exec(ctx, `UPDATE iam_accounts SET mfa_enabled = TRUE, updated_at = now() WHERE user_id = $1 AND user_type IN (1, 2)`, userID)
-	return err
+	secret, err := clientsecret.Decrypt(encrypted)
+	if err != nil {
+		return err
+	}
+	if !VerifyTOTP(secret, code, time.Now().UTC()) {
+		return ErrInvalidMFACode
+	}
+	if _, err := tx.Exec(ctx, `
+		UPDATE iam_accounts
+		SET mfa_enabled = TRUE, updated_at = now()
+		WHERE user_id = $1 AND user_type IN (1, 2)
+	`, userID); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+func mfaEnrollment(username, secret string) MFAEnrollment {
+	label := url.QueryEscape("D-AI:" + username)
+	return MFAEnrollment{
+		Secret:     secret,
+		OTPAuthURL: "otpauth://totp/" + label + "?secret=" + secret + "&issuer=D-AI",
+	}
 }
 
 func (s *MFAService) VerifyCode(ctx context.Context, userID, code string) bool {
