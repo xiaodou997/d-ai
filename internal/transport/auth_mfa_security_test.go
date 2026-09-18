@@ -61,9 +61,9 @@ func TestMFASettingsRequireRecentAuthentication(t *testing.T) {
 	mfa := auth.NewMFAService(pool, redisClient)
 	d := authModule{
 		platformAuthDeps: platformAuthDeps{JWT: jwt, RecentAuth: recent},
-		Sessions: sessions, MFA: mfa, RecentAuth: recent,
+		Sessions:         sessions, MFA: mfa, RecentAuth: recent,
 		AuthRateLimiters: auth.NewRateLimiters(redisClient),
-		Logger: zap.NewNop(),
+		Logger:           zap.NewNop(),
 	}
 
 	_, api := humatest.New(t)
