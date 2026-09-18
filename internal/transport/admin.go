@@ -74,10 +74,6 @@ func newAdminFinanceHandlers(d adminFinanceModule) *adminHandlers {
 	}
 }
 
-func newAdminUsageBillingHandlers(d adminUsageBillingModule) *adminHandlers {
-	return &adminHandlers{deduction: d.Deduction}
-}
-
 func newAdminDashboardHandlers(d adminDashboardModule) *adminHandlers {
 	return &adminHandlers{systemRepo: d.Dashboard}
 }
