@@ -147,7 +147,9 @@ func (s *MFAService) ConfirmEnrollment(ctx context.Context, userID, code string)
 	}
 	if _, err := tx.Exec(ctx, `
 		UPDATE iam_accounts
-		SET mfa_enabled = TRUE, updated_at = now()
+		SET mfa_enabled = TRUE,
+		    credential_version = credential_version + 1,
+		    updated_at = now()
 		WHERE user_id = $1 AND user_type IN (1, 2)
 	`, userID); err != nil {
 		return err

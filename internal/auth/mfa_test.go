@@ -80,6 +80,51 @@ func TestMFAChallengeIsConsumedByOnlyOneConcurrentVerifier(t *testing.T) {
 	}
 }
 
+func TestMFAEnrollmentRevokesPreMFAFamily(t *testing.T) {
+	ctx := context.Background()
+	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 4})
+	if err != nil {
+		t.Skipf("database unavailable: %v", err)
+	}
+	t.Cleanup(func() { _ = cleanup(context.Background()) })
+
+	principal := seedSessionAccount(t, ctx, pool, "mfa-enrollment-session")
+	sessions := newTestSessionService(pool)
+	pair, err := sessions.Create(ctx, principal)
+	if err != nil {
+		t.Fatalf("create pre-MFA session: %v", err)
+	}
+
+	mfa := NewMFAService(pool, nil)
+	enrollment, err := mfa.Enroll(ctx, principal.UserID, principal.Username)
+	if err != nil {
+		t.Fatalf("enroll MFA: %v", err)
+	}
+	code := totpCode(enrollment.Secret, uint64(time.Now().Unix()/30))
+	if err := mfa.ConfirmEnrollment(ctx, principal.UserID, code); err != nil {
+		t.Fatalf("confirm MFA: %v", err)
+	}
+
+	var credentialVersion int64
+	var enabled bool
+	if err := pool.QueryRow(ctx, `
+		SELECT credential_version, mfa_enabled
+		FROM iam_accounts
+		WHERE user_id = $1
+	`, principal.UserID).Scan(&credentialVersion, &enabled); err != nil {
+		t.Fatal(err)
+	}
+	if !enabled || credentialVersion != principal.CredentialVersion+1 {
+		t.Fatalf("MFA state/version = enabled:%v version:%d, want true/%d", enabled, credentialVersion, principal.CredentialVersion+1)
+	}
+	if _, err := sessions.jwt.ParseToken(ctx, pair.AccessToken); err != ErrSessionInactive {
+		t.Fatalf("pre-MFA access token after enrollment = %v, want ErrSessionInactive", err)
+	}
+	if _, _, err := sessions.Rotate(ctx, pair.RefreshToken); err != ErrSessionInactive {
+		t.Fatalf("pre-MFA refresh token after enrollment = %v, want ErrSessionInactive", err)
+	}
+}
+
 func TestMFAConcurrentEnrollKeepsOnePendingSecret(t *testing.T) {
 	ctx := context.Background()
 	const schemaSQL = `
