@@ -82,7 +82,20 @@ func TestMFAChallengeIsConsumedByOnlyOneConcurrentVerifier(t *testing.T) {
 
 func TestMFAConcurrentEnrollKeepsOnePendingSecret(t *testing.T) {
 	ctx := context.Background()
-	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 4})
+	const schemaSQL = `
+		CREATE TABLE iam_accounts (
+			user_id TEXT PRIMARY KEY,
+			username TEXT NOT NULL,
+			password_hash TEXT NOT NULL,
+			user_type INTEGER NOT NULL,
+			status TEXT NOT NULL,
+			mfa_secret_encrypted TEXT,
+			mfa_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+			mfa_enrolled_at TIMESTAMPTZ,
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		);
+	`
+	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 2, SchemaSQL: schemaSQL})
 	if err != nil {
 		t.Skipf("database unavailable: %v", err)
 	}
