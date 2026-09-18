@@ -164,30 +164,100 @@ func goModuleDownloadLocation(module goModule, path, version string) string {
 }
 
 func npmPackages() ([]spdxPackage, error) {
-	output, err := exec.Command("bun", "pm", "licenses", "--json").Output()
-	if err != nil {
-		return nil, err
-	}
-	var licenses map[string][]struct {
-		Name     string   `json:"name"`
-		Versions []string `json:"versions"`
-	}
-	if err := json.Unmarshal(output, &licenses); err != nil {
-		return nil, err
-	}
+	return npmPackagesFromNodeModules("node_modules")
+}
+
+func npmPackagesFromNodeModules(root string) ([]spdxPackage, error) {
 	type packageRef struct {
 		name    string
 		version string
 		license string
 	}
 	refs := make([]packageRef, 0)
-	for license, entries := range licenses {
+	seenDirs := make(map[string]struct{})
+	var scanNodeModules func(string) error
+
+	scanPackage := func(dir string) error {
+		realDir, err := filepath.EvalSymlinks(dir)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return err
+		}
+		if _, ok := seenDirs[realDir]; ok {
+			return nil
+		}
+		seenDirs[realDir] = struct{}{}
+
+		data, err := os.ReadFile(filepath.Join(dir, "package.json"))
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return err
+		}
+		var manifest struct {
+			Name    string          `json:"name"`
+			Version string          `json:"version"`
+			License json.RawMessage `json:"license"`
+		}
+		if err := json.Unmarshal(data, &manifest); err != nil {
+			return fmt.Errorf("parse %s: %w", filepath.Join(dir, "package.json"), err)
+		}
+		if manifest.Name != "" && manifest.Version != "" {
+			refs = append(refs, packageRef{
+				name:    manifest.Name,
+				version: manifest.Version,
+				license: npmLicense(manifest.License),
+			})
+		}
+		nested := filepath.Join(dir, "node_modules")
+		if info, err := os.Stat(nested); err == nil && info.IsDir() {
+			return scanNodeModules(nested)
+		} else if err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		return nil
+	}
+
+	scanNodeModules = func(dir string) error {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return err
+		}
 		for _, entry := range entries {
-			for _, version := range entry.Versions {
-				refs = append(refs, packageRef{name: entry.Name, version: version, license: license})
+			name := entry.Name()
+			if strings.HasPrefix(name, ".") {
+				continue
+			}
+			path := filepath.Join(dir, name)
+			if strings.HasPrefix(name, "@") {
+				scoped, err := os.ReadDir(path)
+				if err != nil {
+					return err
+				}
+				for _, pkg := range scoped {
+					if strings.HasPrefix(pkg.Name(), ".") {
+						continue
+					}
+					if err := scanPackage(filepath.Join(path, pkg.Name())); err != nil {
+						return err
+					}
+				}
+				continue
+			}
+			if err := scanPackage(path); err != nil {
+				return err
 			}
 		}
+		return nil
 	}
+
+	if err := scanNodeModules(root); err != nil {
+		return nil, fmt.Errorf("scan installed Bun packages: %w", err)
+	}
+
 	sort.Slice(refs, func(i, j int) bool {
 		if refs[i].name == refs[j].name {
 			if refs[i].version == refs[j].version {
@@ -217,6 +287,36 @@ func npmPackages() ([]spdxPackage, error) {
 		})
 	}
 	return packages, nil
+}
+
+func npmLicense(raw json.RawMessage) string {
+	if len(raw) == 0 || string(raw) == "null" {
+		return "NOASSERTION"
+	}
+	var value string
+	if err := json.Unmarshal(raw, &value); err == nil {
+		return spdxLicense(value)
+	}
+	var legacy struct {
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal(raw, &legacy); err == nil && legacy.Type != "" {
+		return spdxLicense(legacy.Type)
+	}
+	var values []json.RawMessage
+	if err := json.Unmarshal(raw, &values); err == nil {
+		licenses := make([]string, 0, len(values))
+		for _, item := range values {
+			license := npmLicense(item)
+			if license != "NOASSERTION" {
+				licenses = append(licenses, license)
+			}
+		}
+		if len(licenses) > 0 {
+			return strings.Join(licenses, " OR ")
+		}
+	}
+	return "NOASSERTION"
 }
 
 func spdxLicense(value string) string {
