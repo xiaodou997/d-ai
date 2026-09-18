@@ -73,7 +73,6 @@ func TestBanReconcilerStopCanRetryAfterDeadline(t *testing.T) {
 	}
 }
 
-
 func TestBanReconcilerTreatsEveryNonActiveDatabaseStateAsBanned(t *testing.T) {
 	ctx := context.Background()
 	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 2})
