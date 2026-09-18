@@ -86,7 +86,6 @@ func TestCapabilityMiddlewareEnforcesServerSideAuthorization(t *testing.T) {
 	}
 }
 
-
 func TestRequireRecentAuthIsSessionBound(t *testing.T) {
 	mini, err := miniredis.Run()
 	if err != nil {
