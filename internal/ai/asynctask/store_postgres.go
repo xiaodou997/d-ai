@@ -52,16 +52,18 @@ func (s *postgresStore) insert(ctx context.Context, rec insertRecord) (string, b
 	err = tx.QueryRow(ctx, `
 			INSERT INTO ai_async_tasks (
 			  task_type, auth_method, tenant_id, user_id, api_key_id,
+			  auth_user_id, auth_user_type, auth_session_id, auth_credential_version,
 			  model_code, input_payload, metadata, webhook_url,
 			  idempotency_key, idempotency_scope, idempotency_fingerprint,
 			  max_attempts, status, available_at, expires_at
 				) SELECT
 			  $1, $2, $3, NULLIF($4,''), NULLIF($5,'')::uuid,
-			  $6, $7, $8, NULLIF($9,''),
-			  NULLIF($10,''), NULLIF($11,''), $12,
-			  $13, 'pending', now(), $14
-			WHERE $15::int <= 0 OR (SELECT count(*) FROM ai_async_tasks
-			  WHERE tenant_id = $3 AND status IN ('pending', 'running')) < $15
+			  NULLIF($6,''), NULLIF($7::int, 0), NULLIF($8,'')::uuid, NULLIF($9::bigint, 0),
+			  $10, $11, $12, NULLIF($13,''),
+			  NULLIF($14,''), NULLIF($15,''), $16,
+			  $17, 'pending', now(), $18
+			WHERE $19::int <= 0 OR (SELECT count(*) FROM ai_async_tasks
+			  WHERE tenant_id = $3 AND status IN ('pending', 'running')) < $19
 		ON CONFLICT (idempotency_scope, idempotency_key)
 		  WHERE idempotency_key IS NOT NULL
 		DO NOTHING
@@ -69,6 +71,8 @@ func (s *postgresStore) insert(ctx context.Context, rec insertRecord) (string, b
 	`,
 		rec.Type, string(rec.SubjectRef.AuthMethod), rec.SubjectRef.TenantID,
 		rec.SubjectRef.UserID, rec.SubjectRef.APIKeyID,
+		rec.SubjectRef.JWTAuthUserID, rec.SubjectRef.JWTAuthUserType,
+		rec.SubjectRef.JWTSessionID, rec.SubjectRef.JWTCredentialVersion,
 		rec.ModelCode, []byte(rec.Input), nullableJSON(rec.Metadata), rec.WebhookURL,
 		rec.IdempotencyKey, rec.IdempotencyScope, rec.IdempotencyFingerprint,
 		rec.MaxAttempts, expiresAt, rec.MaxInFlightPerTenant,
@@ -177,6 +181,8 @@ FROM candidate c
 WHERE t.id = c.id AND t.status = 'pending'
 RETURNING t.id::text, t.task_type, t.auth_method, t.tenant_id,
           COALESCE(t.user_id, ''), COALESCE(t.api_key_id::text, ''),
+          COALESCE(t.auth_user_id, ''), COALESCE(t.auth_user_type, 0),
+          COALESCE(t.auth_session_id::text, ''), COALESCE(t.auth_credential_version, 0),
           t.model_code, t.input_payload, t.attempt_count, COALESCE(t.request_id, ''), t.created_at
 `
 
@@ -191,6 +197,8 @@ func (s *postgresStore) claim(ctx context.Context, types []string, cap int, work
 	err := s.pool.QueryRow(ctx, claimSQL, types, cap, workerID, lease.Seconds()).Scan(
 		&t.ID, &t.Type, &authMethod, &t.SubjectRef.TenantID,
 		&t.SubjectRef.UserID, &t.SubjectRef.APIKeyID,
+		&t.SubjectRef.JWTAuthUserID, &t.SubjectRef.JWTAuthUserType,
+		&t.SubjectRef.JWTSessionID, &t.SubjectRef.JWTCredentialVersion,
 		&t.ModelCode, &t.Input, &t.Attempt, &t.RequestID, &t.CreatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
