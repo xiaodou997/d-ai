@@ -29,6 +29,27 @@ func TestCanonicalSchemaVersionMatchesExpected(t *testing.T) {
 	}
 }
 
+func TestCanonicalSchemaDoesNotDowngradeMetadataVersion(t *testing.T) {
+	raw, err := os.ReadFile("init.sql")
+	if err != nil {
+		t.Fatalf("read canonical schema: %v", err)
+	}
+
+	pattern := regexp.MustCompile(`(?i)UPDATE\s+dai_schema_metadata\s+SET\s+version\s*=\s*([0-9]+)`)
+	for _, match := range pattern.FindAllStringSubmatch(string(raw), -1) {
+		if len(match) != 2 {
+			continue
+		}
+		version, err := strconv.Atoi(match[1])
+		if err != nil {
+			t.Fatalf("parse canonical metadata update version %q: %v", match[1], err)
+		}
+		if version != ExpectedSchemaVersion {
+			t.Fatalf("canonical schema later updates metadata to version %d; expected %d", version, ExpectedSchemaVersion)
+		}
+	}
+}
+
 func TestCanonicalSchemaRejectsNonEmptySchema(t *testing.T) {
 	raw, err := os.ReadFile("init.sql")
 	if err != nil {

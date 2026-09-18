@@ -7,7 +7,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const ExpectedSchemaVersion = 43
+const ExpectedSchemaVersion = 44
 
 // VerifySchema checks the database contract without modifying it.
 func VerifySchema(ctx context.Context, pool *pgxpool.Pool) error {

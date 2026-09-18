@@ -104,6 +104,7 @@ type JWTService struct {
 const accessSessionValidationTimeout = 2 * time.Second
 const TenantOperationsAccessTokenExpiration = time.Hour
 const unknownKidRefreshInterval = time.Second
+const jwtSigningKeyAdvisoryLockID int64 = 82624002
 
 // NewJWTService 创建 JWT 服务
 // 从数据库加载密钥，若无则自动生成并写入数据库
@@ -118,56 +119,93 @@ func NewJWTService(cfg config.JWTConfig, database *pgxpool.Pool) *JWTService {
 		s.accessTokenExpiration = 15 * time.Minute
 	}
 
-	if err := s.reloadKeys(context.Background()); err != nil {
+	ctx := context.Background()
+	if err := s.ensureInitialKey(ctx); err != nil {
+		panic("JWTService: failed to ensure initial key: " + err.Error())
+	}
+	if err := s.reloadKeys(ctx); err != nil {
 		panic("JWTService: failed to load keys from DB: " + err.Error())
-	}
-
-	// 若无 active key，自动生成并写入 DB
-	if s.activeKey == nil {
-		if err := s.generateAndSaveKey(); err != nil {
-			panic("JWTService: failed to generate initial key: " + err.Error())
-		}
-		if err := s.reloadKeys(context.Background()); err != nil {
-			panic("JWTService: failed to reload keys after generation: " + err.Error())
-		}
-	}
-
-	if s.activeKey == nil {
-		panic("JWTService: no active key available")
 	}
 
 	return s
 }
 
-// generateAndSaveKey 生成新 RSA-2048 密钥对并写入数据库（不更新内存，由 reloadKeys 完成）
-func (s *JWTService) generateAndSaveKey() error {
+func newSigningKeyMaterial() (kid, privateKeyCiphertext, publicKeyPEM string, err error) {
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
-		return fmt.Errorf("generate RSA key: %w", err)
+		return "", "", "", fmt.Errorf("generate RSA key: %w", err)
 	}
 
-	kid := fmt.Sprintf("key-%s-%s", time.Now().Format("20060102"), uuid.New().String()[:8])
+	kid = fmt.Sprintf("key-%s-%s", time.Now().Format("20060102"), uuid.New().String()[:8])
 
 	privateKeyPEM, err := marshalPrivateKey(privateKey)
 	if err != nil {
-		return err
+		return "", "", "", err
 	}
-	privateKeyCiphertext, err := clientsecret.Encrypt(privateKeyPEM)
+	privateKeyCiphertext, err = clientsecret.Encrypt(privateKeyPEM)
 	if err != nil {
-		return fmt.Errorf("encrypt JWT private key: %w", err)
+		return "", "", "", fmt.Errorf("encrypt JWT private key: %w", err)
 	}
-	publicKeyPEM, err := marshalPublicKey(&privateKey.PublicKey)
+	publicKeyPEM, err = marshalPublicKey(&privateKey.PublicKey)
 	if err != nil {
-		return err
+		return "", "", "", err
+	}
+	return kid, privateKeyCiphertext, publicKeyPEM, nil
+}
+
+// ensureInitialKey serializes first-key creation across processes. It deliberately
+// shares the same PostgreSQL advisory lock as RotateKey so bootstrap and rotation
+// cannot race each other.
+func (s *JWTService) ensureInitialKey(ctx context.Context) error {
+	tx, err := s.database.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin initial key transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1)`, jwtSigningKeyAdvisoryLockID); err != nil {
+		return fmt.Errorf("lock JWT signing key invariant: %w", err)
 	}
 
-	now := time.Now().UTC()
-	ctx := context.Background()
-	_, err = s.database.Exec(ctx, `
+	var activeCount int
+	if err := tx.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM auth_signing_keys
+		WHERE status = 'active'
+	`).Scan(&activeCount); err != nil {
+		return fmt.Errorf("count active JWT signing keys: %w", err)
+	}
+	if activeCount > 1 {
+		return signingKeyInvariantError(activeCount)
+	}
+	if activeCount == 1 {
+		return nil
+	}
+
+	kid, privateKeyCiphertext, publicKeyPEM, err := newSigningKeyMaterial()
+	if err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `
 		INSERT INTO auth_signing_keys (kid, private_key, public_key, status, created_at)
 		VALUES ($1, $2, $3, 'active', $4)
-	`, kid, privateKeyCiphertext, publicKeyPEM, now)
-	return err
+	`, kid, privateKeyCiphertext, publicKeyPEM, time.Now().UTC()); err != nil {
+		return fmt.Errorf("insert initial JWT signing key: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit initial key transaction: %w", err)
+	}
+	return nil
+}
+
+func signingKeyInvariantError(activeCount int) error {
+	return fmt.Errorf("JWT signing key invariant violation: expected exactly 1 active key, found %d", activeCount)
+}
+
+func (s *JWTService) invalidateActiveKey() {
+	s.mu.Lock()
+	s.activeKey = nil
+	s.mu.Unlock()
 }
 
 // reloadKeys 从数据库重新加载 active 和 grace 密钥到内存。
@@ -195,11 +233,19 @@ func (s *JWTService) reloadKeysLocked(ctx context.Context) error {
 
 	var newActive *keyEntry
 	var newGrace []*keyEntry
+	activeCount := 0
 
 	for rows.Next() {
 		var kid, privPEM, pubPEM, status string
 		if err := rows.Scan(&kid, &privPEM, &pubPEM, &status); err != nil {
 			return fmt.Errorf("scan auth signing key %q: %w", kid, err)
+		}
+		if status == "active" {
+			activeCount++
+			if activeCount > 1 {
+				s.invalidateActiveKey()
+				return signingKeyInvariantError(activeCount)
+			}
 		}
 		privateKeyPEM, decryptErr := clientsecret.Decrypt(privPEM)
 		legacyPlaintext := false
@@ -240,6 +286,10 @@ func (s *JWTService) reloadKeysLocked(ctx context.Context) error {
 	}
 	if err := rows.Err(); err != nil {
 		return err
+	}
+	if activeCount != 1 {
+		s.invalidateActiveKey()
+		return signingKeyInvariantError(activeCount)
 	}
 
 	s.mu.Lock()
@@ -499,21 +549,7 @@ func (s *JWTService) RotateKey(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		return fmt.Errorf("generate RSA key: %w", err)
-	}
-
-	newKid := fmt.Sprintf("key-%s-%s", time.Now().Format("20060102"), uuid.New().String()[:8])
-	privateKeyPEM, err := marshalPrivateKey(privateKey)
-	if err != nil {
-		return err
-	}
-	privateKeyCiphertext, err := clientsecret.Encrypt(privateKeyPEM)
-	if err != nil {
-		return fmt.Errorf("encrypt JWT private key: %w", err)
-	}
-	publicKeyPEM, err := marshalPublicKey(&privateKey.PublicKey)
+	newKid, privateKeyCiphertext, publicKeyPEM, err := newSigningKeyMaterial()
 	if err != nil {
 		return err
 	}
@@ -527,23 +563,44 @@ func (s *JWTService) RotateKey(ctx context.Context) error {
 	}
 	defer tx.Rollback(ctx)
 
-	// 插入新 active 密钥
-	_, err = tx.Exec(ctx, `
-		INSERT INTO auth_signing_keys (kid, private_key, public_key, status, created_at)
-		VALUES ($1, $2, $3, 'active', $4)
-	`, newKid, privateKeyCiphertext, publicKeyPEM, now)
-	if err != nil {
-		return fmt.Errorf("insert new key: %w", err)
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1)`, jwtSigningKeyAdvisoryLockID); err != nil {
+		return fmt.Errorf("lock JWT signing key rotation: %w", err)
 	}
 
-	// 将旧 active 密钥降级为 grace
-	_, err = tx.Exec(ctx, `
+	var activeCount int
+	if err := tx.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM auth_signing_keys
+		WHERE status = 'active'
+	`).Scan(&activeCount); err != nil {
+		return fmt.Errorf("count active JWT signing keys: %w", err)
+	}
+	if activeCount != 1 {
+		s.invalidateActiveKey()
+		return signingKeyInvariantError(activeCount)
+	}
+
+	// The unique partial index forbids inserting a second active row, so demote
+	// the current key first. If the following INSERT fails the transaction rolls
+	// this UPDATE back, preserving exactly one committed active key.
+	tag, err := tx.Exec(ctx, `
 		UPDATE auth_signing_keys
 		SET status = 'grace', grace_until = $1
-		WHERE status = 'active' AND kid != $2
-	`, graceUntil, newKid)
+		WHERE status = 'active'
+	`, graceUntil)
 	if err != nil {
 		return fmt.Errorf("demote old key to grace: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		s.invalidateActiveKey()
+		return fmt.Errorf("JWT signing key invariant violation: demoted %d active keys, expected 1", tag.RowsAffected())
+	}
+
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO auth_signing_keys (kid, private_key, public_key, status, created_at)
+		VALUES ($1, $2, $3, 'active', $4)
+	`, newKid, privateKeyCiphertext, publicKeyPEM, now); err != nil {
+		return fmt.Errorf("insert new key: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {

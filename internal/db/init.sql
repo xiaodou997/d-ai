@@ -121,6 +121,7 @@ CREATE TABLE auth_signing_keys (
 );
 
 CREATE INDEX idx_auth_signing_keys_status ON auth_signing_keys (status);
+CREATE UNIQUE INDEX ux_auth_signing_keys_single_active ON auth_signing_keys (status) WHERE status = 'active';
 
 CREATE TABLE auth_sessions (
     session_id UUID PRIMARY KEY,
@@ -3210,7 +3211,7 @@ CREATE TABLE dai_schema_metadata (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 43);
+INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 44);
 
 COMMIT;
 
@@ -3235,4 +3236,4 @@ CREATE INDEX ai_request_attempts_endpoint_model_window ON ai_request_attempts(en
 CREATE TABLE ai_upstream_runtime_metadata(singleton boolean PRIMARY KEY DEFAULT true CHECK(singleton), started_at timestamptz NOT NULL DEFAULT now());
 INSERT INTO ai_upstream_runtime_metadata(singleton) VALUES(true);
 
-UPDATE dai_schema_metadata SET version=43,updated_at=now() WHERE singleton;
+UPDATE dai_schema_metadata SET version=44,updated_at=now() WHERE singleton;
