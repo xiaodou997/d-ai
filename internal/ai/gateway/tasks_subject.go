@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"xiaodou/dai/internal/ai/asynctask"
 	coreidentity "xiaodou/dai/internal/ai/core/identity"
@@ -13,13 +14,15 @@ import (
 )
 
 type taskSubjectResolver struct {
+	pool    *pgxpool.Pool
 	queries *dbgen.Queries
 }
 
 // NewTaskSubjectResolver builds the credential resolver used by async workers.
-// It stores no credential snapshot: every attempt reloads the current key.
-func NewTaskSubjectResolver(queries *dbgen.Queries) asynctask.SubjectResolver {
-	return &taskSubjectResolver{queries: queries}
+// It stores no API-key authorization snapshot: every attempt reloads the
+// current key and its owner eligibility from PostgreSQL.
+func NewTaskSubjectResolver(pool *pgxpool.Pool, queries *dbgen.Queries) asynctask.SubjectResolver {
+	return &taskSubjectResolver{pool: pool, queries: queries}
 }
 
 func (r *taskSubjectResolver) Resolve(ctx context.Context, ref asynctask.SubjectRef) (coreidentity.Subject, error) {
@@ -42,7 +45,11 @@ func (r *taskSubjectResolver) Resolve(ctx context.Context, ref asynctask.Subject
 		if row.ExpiresAt.Valid && !time.Now().Before(row.ExpiresAt.Time) {
 			return coreidentity.Subject{}, fmt.Errorf("API key is expired")
 		}
-		subject, err := buildRuntimeAuthSubjectRecord(runtimeAPIKeyRecordFromModel(row))
+		record := runtimeAPIKeyRecordFromModel(row)
+		if err := verifyRuntimeAPIKeyOwner(ctx, r.pool, record); err != nil {
+			return coreidentity.Subject{}, err
+		}
+		subject, err := buildRuntimeAuthSubjectRecord(record)
 		if err != nil {
 			return coreidentity.Subject{}, err
 		}
