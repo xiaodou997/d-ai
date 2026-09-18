@@ -434,11 +434,6 @@ type adminFinanceModule struct {
 	AuthAuditLogs  authports.AuthAuditLogReader
 }
 
-type adminUsageBillingModule struct {
-	adminRouteAuth
-	Deduction *billingsvc.DeductionService
-}
-
 type adminDashboardModule struct {
 	adminRouteAuth
 	Dashboard systemports.AdminDashboardReader
@@ -453,12 +448,11 @@ type adminEndUsersModule struct {
 }
 
 type platformAdminModule struct {
-	tenants      adminTenantModule
-	users        adminUsersModule
-	finance      adminFinanceModule
-	usageBilling adminUsageBillingModule
-	dashboard    adminDashboardModule
-	endUsers     adminEndUsersModule
+	tenants   adminTenantModule
+	users     adminUsersModule
+	finance   adminFinanceModule
+	dashboard adminDashboardModule
+	endUsers  adminEndUsersModule
 }
 
 type aiModule struct {
@@ -506,7 +500,6 @@ func (m platformAdminModule) Register(api huma.API) {
 	registerAdminTenants(api, m.tenants)
 	registerAdminUsers(api, m.users)
 	registerAdminFinance(api, m.finance)
-	registerAdminUsageBilling(api, m.usageBilling)
 	registerAdminDashboard(api, m.dashboard)
 	registerAdminEndUsers(api, m.endUsers)
 }

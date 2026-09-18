@@ -7,7 +7,6 @@ import {
 } from ".";
 import type {
   AccountBalanceOutput,
-  BatchOpResult,
   ConsumptionTrendOutput,
   DashboardAlertsOutput,
   GlobalStatsRow,
@@ -62,7 +61,6 @@ type AccountBalanceTransport = OperationResponse<"account-balance">;
 type RechargeRecordsTransport = OperationResponse<"account-recharge-records">;
 type RechargeTransport = OperationResponse<"admin-recharge">;
 type ReverseRechargeTransport = OperationResponse<"admin-reverse-recharge">;
-type BatchRefundTransport = OperationResponse<"admin-batch-refund-usage">;
 type DebtTransport = OperationResponse<"admin-get-debt">;
 type AccountBalanceLotTransport = components["schemas"]["AccountBalanceLot"];
 type AccountBalanceServiceState = "active" | "blocked_debt";
@@ -256,17 +254,6 @@ function toReverseRecharge(value: ReverseRechargeTransport): {
     originalAmountUsd: value.originalAmountUsd,
     lostAmountUsd: value.lostAmountUsd,
     balanceLotStatus: value.balanceLotStatus
-  };
-}
-
-function toBatchRefund(value: BatchRefundTransport): BatchOpResult {
-  return {
-    succeeded: value.succeeded ?? [],
-    failed: value.failed?.map((item) => ({ requestId: item.requestId, reason: item.reason })) ?? [],
-    totalTenantUsd: value.totalTenantUsd,
-    totalUserUsd: value.totalUserUsd,
-    successCount: value.successCount,
-    failCount: value.failCount
   };
 }
 
@@ -934,15 +921,6 @@ export const platformAdminApi = {
       body,
       baseUrl: apiBaseUrl
     }).then(toMessage);
-  },
-  batchRefundUsage(body: OperationBody<"admin-batch-refund-usage">) {
-    return typedRequest<"admin-batch-refund-usage">({
-      method: "POST",
-      path: "/api/v1/ai/usage/batch-refund",
-      headers: apiHeaders,
-      body,
-      baseUrl: apiBaseUrl
-    }).then(toBatchRefund);
   },
   getDebtStatus(ownerType: "tenant" | "user", accountId: string) {
 	return typedRequest<"admin-get-debt">({

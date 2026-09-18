@@ -1652,83 +1652,6 @@ components:
       required:
         - binding_ids
       type: object
-    BatchOpError:
-      additionalProperties: false
-      properties:
-        reason:
-          type: string
-        requestId:
-          type: string
-      required:
-        - requestId
-        - reason
-      type: object
-    BatchRefundUsageInputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/BatchRefundUsageInputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        reason:
-          type: string
-        requestIds:
-          items:
-            type: string
-          maxItems: 100
-          minItems: 1
-          type:
-            - array
-            - "null"
-      required:
-        - requestIds
-        - reason
-      type: object
-    BatchUsageOpOutputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/BatchUsageOpOutputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        failCount:
-          format: int64
-          type: integer
-        failed:
-          items:
-            $ref: "#/components/schemas/BatchOpError"
-          type:
-            - array
-            - "null"
-        succeeded:
-          items:
-            type: string
-          type:
-            - array
-            - "null"
-        successCount:
-          format: int64
-          type: integer
-        totalTenantUsd:
-          format: double
-          type: number
-        totalUserUsd:
-          format: double
-          type: number
-      required:
-        - succeeded
-        - failed
-        - totalTenantUsd
-        - totalUserUsd
-        - successCount
-        - failCount
-      type: object
     CashAccountOutputBody:
       additionalProperties: false
       properties:
@@ -14978,31 +14901,6 @@ paths:
       summary: 创建提现记录并直接扣减租户额度
       tags:
         - admin-payment
-  /api/v1/ai/usage/batch-refund:
-    post:
-      operationId: admin-batch-refund-usage
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/BatchRefundUsageInputBody"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/BatchUsageOpOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 批量退款 AI 使用记录
-      tags:
-        - admin-usage
   /api/v1/ai/usage/refund:
     post:
       operationId: admin-refund-usage

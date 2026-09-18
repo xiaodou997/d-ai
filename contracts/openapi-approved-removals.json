@@ -1,0 +1,7 @@
+{
+  "baselineSha": "65c76079f6a8f5b90dbdb17779e89184bb6dd832",
+  "removedOperationIds": [
+    "admin-batch-refund-usage"
+  ],
+  "reason": "Remove the unused batch AI usage refund endpoint while retaining single-request settlement reversal."
+}

@@ -130,13 +130,6 @@ type AdminFinanceModuleDeps struct {
 	AuthAuditLogs  authports.AuthAuditLogReader
 }
 
-// AdminUsageBillingModuleDeps contains administrator batch usage refund
-// routes.
-type AdminUsageBillingModuleDeps struct {
-	AdminRouteAuthDeps
-	Deduction *billingsvc.DeductionService
-}
-
 // AdminDashboardModuleDeps contains administrator dashboard routes.
 type AdminDashboardModuleDeps struct {
 	AdminRouteAuthDeps
@@ -154,12 +147,11 @@ type AdminEndUsersModuleDeps struct {
 
 // PlatformAdminModuleDeps groups administrator routes by use case.
 type PlatformAdminModuleDeps struct {
-	Tenants      AdminTenantModuleDeps
-	Users        AdminUsersModuleDeps
-	Finance      AdminFinanceModuleDeps
-	UsageBilling AdminUsageBillingModuleDeps
-	Dashboard    AdminDashboardModuleDeps
-	EndUsers     AdminEndUsersModuleDeps
+	Tenants   AdminTenantModuleDeps
+	Users     AdminUsersModuleDeps
+	Finance   AdminFinanceModuleDeps
+	Dashboard AdminDashboardModuleDeps
+	EndUsers  AdminEndUsersModuleDeps
 }
 
 // PaymentModuleDeps contains platform payment routes and their callback
@@ -350,7 +342,7 @@ func toAdminRouteAuth(d AdminRouteAuthDeps) adminRouteAuth {
 	}
 }
 
-// NewPlatformAdminModule creates the six administrator route submodules.
+// NewPlatformAdminModule creates the five administrator route submodules.
 func NewPlatformAdminModule(d PlatformAdminModuleDeps) Module {
 	return platformAdminModule{
 		tenants: adminTenantModule{
@@ -373,10 +365,6 @@ func NewPlatformAdminModule(d PlatformAdminModuleDeps) Module {
 			AccountQueries: d.Finance.AccountQueries,
 			Recharge:       d.Finance.Recharge,
 			AuthAuditLogs:  d.Finance.AuthAuditLogs,
-		},
-		usageBilling: adminUsageBillingModule{
-			adminRouteAuth: toAdminRouteAuth(d.UsageBilling.AdminRouteAuthDeps),
-			Deduction:      d.UsageBilling.Deduction,
 		},
 		dashboard: adminDashboardModule{
 			adminRouteAuth: toAdminRouteAuth(d.Dashboard.AdminRouteAuthDeps),
