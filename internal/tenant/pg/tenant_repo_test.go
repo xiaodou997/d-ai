@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"xiaodou/dai/internal/auth"
+	"xiaodou/dai/internal/clientsecret"
+	"xiaodou/dai/internal/config"
 	"xiaodou/dai/internal/dbtest"
 	tenantports "xiaodou/dai/internal/tenant/ports"
 )
@@ -153,6 +155,70 @@ func TestTenantRepositoryCascadesStatusAndReturnsRestoredUsers(t *testing.T) {
 	missing, err := repo.UpdateStatus(ctx, "missing-cascade-tenant", "disabled")
 	if err != nil || missing.Updated {
 		t.Fatalf("missing cascade = %#v err:%v", missing, err)
+	}
+}
+
+func TestTenantStatusLifecycleDoesNotResurrectSessions(t *testing.T) {
+	ctx := context.Background()
+	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 4})
+	if err != nil {
+		t.Skipf("database unavailable: %v", err)
+	}
+	t.Cleanup(func() { _ = cleanup(context.Background()) })
+	if err := clientsecret.Configure("0123456789abcdef0123456789abcdef"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO iam_tenants (tenant_id, tenant_name, status)
+		VALUES ('tenant-session-lifecycle', 'Session Lifecycle Tenant', 'active');
+		INSERT INTO iam_accounts (user_id, tenant_id, username, password_hash, user_type, status)
+		VALUES ('tenant-session-user', 'tenant-session-lifecycle', 'tenant-session-user', 'unused', 3, 'active')
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	jwt := auth.NewJWTService(config.JWTConfig{
+		Expiration:        15 * time.Minute,
+		RefreshExpiration: time.Hour,
+		Issuer:            "dai-tenant-session-lifecycle",
+	}, pool)
+	sessions := auth.NewSessionService(pool, jwt, time.Hour)
+	principal := auth.Principal{
+		UserID: "tenant-session-user", Username: "tenant-session-user",
+		TenantID: "tenant-session-lifecycle", UserType: 3,
+		UserTypeDisplay: "租户", CredentialVersion: 1,
+	}
+	pair, err := sessions.Create(ctx, principal)
+	if err != nil {
+		t.Fatalf("create tenant session: %v", err)
+	}
+
+	repo := NewTenantRepository(pool)
+	if result, err := repo.UpdateStatus(ctx, principal.TenantID, "disabled"); err != nil || !result.Updated {
+		t.Fatalf("disable tenant = %#v err:%v", result, err)
+	}
+	if updated, err := repo.UpdateTenant(ctx, tenantports.TenantUpdateCommand{
+		TenantID: principal.TenantID, TenantName: "Session Lifecycle Renamed",
+	}); err != nil || !updated {
+		t.Fatalf("profile update while disabled = %v err:%v", updated, err)
+	}
+	var tenantStatus string
+	if err := pool.QueryRow(ctx, `SELECT status FROM iam_tenants WHERE tenant_id = $1`, principal.TenantID).Scan(&tenantStatus); err != nil {
+		t.Fatal(err)
+	}
+	if tenantStatus != "disabled" {
+		t.Fatalf("profile update changed disabled tenant status to %q", tenantStatus)
+	}
+	if result, err := repo.UpdateStatus(ctx, principal.TenantID, "active"); err != nil || !result.Updated {
+		t.Fatalf("re-enable tenant = %#v err:%v", result, err)
+	}
+
+	if _, err := jwt.ParseToken(ctx, pair.AccessToken); !errors.Is(err, auth.ErrSessionInactive) {
+		t.Fatalf("pre-disable access token after re-enable = %v, want ErrSessionInactive", err)
+	}
+	if _, _, err := sessions.Rotate(ctx, pair.RefreshToken); !errors.Is(err, auth.ErrSessionInactive) {
+		t.Fatalf("pre-disable refresh token after re-enable = %v, want ErrSessionInactive", err)
 	}
 }
 
