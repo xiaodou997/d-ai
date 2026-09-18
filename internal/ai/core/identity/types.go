@@ -64,6 +64,14 @@ type Subject struct {
 	QuotaLimit    *int64
 	QuotaUsed     int64
 
+	// JWTAuth* preserves the durable authentication reference for queued work.
+	// Runtime billing identity remains TenantID/UserID; these fields identify
+	// the login session that authorized the submission.
+	JWTAuthUserID            string
+	JWTAuthUserType          int
+	JWTSessionID             string
+	JWTCredentialVersion     int64
+
 	// ForcedGroupID constrains an explicitly selected runtime request to one group.
 	ForcedGroupID string
 }
