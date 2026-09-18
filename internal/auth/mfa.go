@@ -200,15 +200,37 @@ func (s *MFAService) CreateChallenge(ctx context.Context, principal Principal) (
 	return token, nil
 }
 
-func (s *MFAService) VerifyChallenge(ctx context.Context, token, code string) (Principal, error) {
-	var zero Principal
+func (s *MFAService) ChallengeUserID(ctx context.Context, token string) (string, error) {
+	challenge, _, err := s.loadChallenge(ctx, token)
+	if err != nil {
+		return "", err
+	}
+	return challenge.UserID, nil
+}
+
+func (s *MFAService) loadChallenge(ctx context.Context, token string) (mfaChallenge, []byte, error) {
+	var zero mfaChallenge
 	if s.redis == nil {
-		return zero, ErrMFAUnavailable
+		return zero, nil, ErrMFAUnavailable
 	}
 	raw, err := s.redis.Get(ctx, mfaChallengeKey(token)).Bytes()
 	if errors.Is(err, redis.Nil) {
-		return zero, ErrInvalidMFACode
+		return zero, nil, ErrInvalidMFACode
 	}
+	if err != nil {
+		return zero, nil, err
+	}
+	var challenge mfaChallenge
+	if err := json.Unmarshal(raw, &challenge); err != nil ||
+		challenge.UserID == "" || challenge.Principal.UserID != challenge.UserID {
+		return zero, nil, ErrInvalidMFACode
+	}
+	return challenge, raw, nil
+}
+
+func (s *MFAService) VerifyChallenge(ctx context.Context, token, code string) (Principal, error) {
+	var zero Principal
+	challenge, raw, err := s.loadChallenge(ctx, token)
 	if err != nil {
 		return zero, err
 	}
@@ -222,10 +244,6 @@ func (s *MFAService) VerifyChallenge(ctx context.Context, token, code string) (P
 	}
 	if attempts > 5 {
 		_ = s.redis.Del(ctx, mfaChallengeKey(token), attemptKey)
-		return zero, ErrInvalidMFACode
-	}
-	var challenge mfaChallenge
-	if err := json.Unmarshal(raw, &challenge); err != nil {
 		return zero, ErrInvalidMFACode
 	}
 	secret, err := s.secret(ctx, challenge.UserID)

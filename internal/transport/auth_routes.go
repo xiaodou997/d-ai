@@ -49,6 +49,7 @@ type messageOutput struct {
 // registerAuthProtected 注册统一 Portal 的登录后账号端点。
 func registerAuthProtected(api huma.API, d authModule, mw huma.Middlewares) {
 	recent := append(append(huma.Middlewares{}, mw...), requestClientMetadata(api))
+	mfaSettings := append(append(huma.Middlewares{}, recent...), requireRecentAuth(api, d.RecentAuth))
 	logoutMiddleware := append(append(huma.Middlewares{}, mw...), requireSameOrigin(api))
 	rateLimiters := d.AuthRateLimiters
 	if rateLimiters == nil {
@@ -238,7 +239,7 @@ func registerAuthProtected(api huma.API, d authModule, mw huma.Middlewares) {
 		return out, nil
 	})
 
-	huma.Register(api, huma.Operation{OperationID: "auth-mfa-enroll", Method: http.MethodPost, Path: "/api/auth/mfa/enroll", Summary: "注册管理员 MFA", Tags: []string{"auth"}, Middlewares: recent}, func(ctx context.Context, _ *struct{}) (*mfaEnrollmentOutput, error) {
+	huma.Register(api, huma.Operation{OperationID: "auth-mfa-enroll", Method: http.MethodPost, Path: "/api/auth/mfa/enroll", Summary: "注册管理员 MFA", Tags: []string{"auth"}, Middlewares: mfaSettings}, func(ctx context.Context, _ *struct{}) (*mfaEnrollmentOutput, error) {
 		claims := userClaimsFromCtx(ctx)
 		if claims == nil || !actorFromClaims(claims).Has(auth.CapabilityPlatformAdmin) {
 			return nil, httpx.ErrForbidden.WithDetail("仅平台管理员可注册 MFA")
@@ -256,7 +257,7 @@ func registerAuthProtected(api huma.API, d authModule, mw huma.Middlewares) {
 		return &mfaEnrollmentOutput{Body: result}, nil
 	})
 
-	huma.Register(api, huma.Operation{OperationID: "auth-mfa-confirm", Method: http.MethodPost, Path: "/api/auth/mfa/confirm", Summary: "确认管理员 MFA", Tags: []string{"auth"}, Middlewares: recent}, func(ctx context.Context, in *mfaCodeInput) (*messageOutput, error) {
+	huma.Register(api, huma.Operation{OperationID: "auth-mfa-confirm", Method: http.MethodPost, Path: "/api/auth/mfa/confirm", Summary: "确认管理员 MFA", Tags: []string{"auth"}, Middlewares: mfaSettings}, func(ctx context.Context, in *mfaCodeInput) (*messageOutput, error) {
 		claims := userClaimsFromCtx(ctx)
 		if claims == nil || !actorFromClaims(claims).Has(auth.CapabilityPlatformAdmin) {
 			return nil, httpx.ErrForbidden.WithDetail("仅平台管理员可确认 MFA")

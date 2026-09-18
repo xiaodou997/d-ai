@@ -358,7 +358,15 @@ func (h *authHandlers) verifyMFA(ctx context.Context, input *mfaVerifyInput) (*a
 	if h.mfa == nil {
 		return nil, httpx.ErrUnavailable.WithDetail("MFA 服务不可用")
 	}
-	dimensions := auth.LoginRateDimensions{Account: strings.ToLower(strings.TrimSpace(input.Body.ChallengeToken)), IP: requestClientIP(ctx)}
+	challengeToken := strings.TrimSpace(input.Body.ChallengeToken)
+	accountDimension := strings.ToLower(challengeToken)
+	challengeUserID, challengeErr := h.mfa.ChallengeUserID(ctx, challengeToken)
+	if challengeErr == nil {
+		accountDimension = challengeUserID
+	} else if !errors.Is(challengeErr, auth.ErrInvalidMFACode) {
+		return nil, httpx.ErrUnavailable.WithDetail("MFA 服务暂不可用，请稍后重试")
+	}
+	dimensions := auth.LoginRateDimensions{Account: accountDimension, IP: requestClientIP(ctx)}
 	decision, err := h.mfaLimiter.Check(ctx, dimensions)
 	if err != nil {
 		return nil, httpx.ErrUnavailable.WithDetail("MFA 服务暂不可用，请稍后重试")
@@ -366,7 +374,7 @@ func (h *authHandlers) verifyMFA(ctx context.Context, input *mfaVerifyInput) (*a
 	if !decision.Allowed {
 		return nil, httpx.ErrTooManyReqs.WithDetail("MFA 尝试过于频繁，请稍后再试").WithMeta(map[string]any{"retryAfter": auth.RetryAfterSeconds(decision.RetryAfter)})
 	}
-	principal, err := h.mfa.VerifyChallenge(ctx, strings.TrimSpace(input.Body.ChallengeToken), strings.TrimSpace(input.Body.Code))
+	principal, err := h.mfa.VerifyChallenge(ctx, challengeToken, strings.TrimSpace(input.Body.Code))
 	if err != nil {
 		retryAfter, rateErr := h.mfaLimiter.RecordFailure(ctx, dimensions)
 		if rateErr != nil {
