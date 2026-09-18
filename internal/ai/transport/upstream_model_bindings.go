@@ -710,21 +710,6 @@ func validateBindingCapabilityType(capabilityType string) error {
 	}
 }
 
-func validateBindingProtocol(field, protocol string) error {
-	switch domain.UpstreamProtocol(protocol) {
-	case domain.ProtocolOpenAIChat,
-		domain.ProtocolOpenAIResponses,
-		domain.ProtocolOpenAIEmbeddings,
-		domain.ProtocolOpenAIImages,
-		domain.ProtocolAnthropicMessages,
-		domain.ProtocolGeminiGenerate,
-		domain.ProtocolGeminiEmbeddings:
-		return nil
-	default:
-		return domain.NewValidationError(field, "unsupported API format")
-	}
-}
-
 type modelBindingProtocolPolicy struct {
 	Enforce   bool
 	Protocols []domain.UpstreamProtocol

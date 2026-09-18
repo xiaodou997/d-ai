@@ -112,33 +112,6 @@ type usageMetadata struct {
 	BillingSource                      string         `json:"billing_source"`
 	SubscriptionID                     pgtype.UUID    `json:"subscription_id"`
 }
-type usageRollupMetadata struct {
-	TenantID            string      `json:"tenant_id"`
-	UserID              pgtype.Text `json:"user_id"`
-	ApiKeyID            pgtype.UUID `json:"api_key_id"`
-	RequestSource       string      `json:"request_source"`
-	CapabilityType      string      `json:"capability_type"`
-	ModelCode           string      `json:"model_code"`
-	ProviderCode        pgtype.Text `json:"provider_code"`
-	RequestStatus       string      `json:"request_status"`
-	BillableUnitType    string      `json:"billable_unit_type"`
-	PromptTokens        int64       `json:"prompt_tokens"`
-	CompletionTokens    int64       `json:"completion_tokens"`
-	CacheWriteTokens    int64       `json:"cache_write_tokens"`
-	CacheReadTokens     int64       `json:"cache_read_tokens"`
-	ReasoningTokens     int64       `json:"reasoning_tokens"`
-	TotalTokens         int64       `json:"total_tokens"`
-	BillableUnits       int64       `json:"billable_units"`
-	CatalogBase         int64       `json:"catalog_base"`
-	TenantPayable       int64       `json:"tenant_payable"`
-	RetailBase          int64       `json:"retail_base"`
-	UserPayable         int64       `json:"user_payable"`
-	UserCharged         int64       `json:"user_charged"`
-	ApiKeyQuotaCost     int64       `json:"api_key_quota_cost"`
-	LatencyMs           pgtype.Int4 `json:"latency_ms"`
-	RequestTotalMs      pgtype.Int4 `json:"request_total_ms"`
-	FirstResponseByteMs pgtype.Int4 `json:"first_response_byte_ms"`
-}
 
 func usageUserMultiplierOverrideSnapshot(billing domain.BillingResult) pgtype.Numeric {
 	if billing.UserMultiplierOverride != nil {
@@ -298,49 +271,6 @@ func usageClientUserAgent(req *serving.Request) string {
 	return ua
 }
 
-func buildUsageRollupParams(req *serving.Request, billing domain.BillingResult) usageRollupMetadata {
-	subject := req.RuntimeSubject()
-	usage := req.TokenUsage
-	apiKeyID := mustParseUUID("00000000-0000-0000-0000-000000000000")
-	if subject != nil && subject.APIKeyID != "" {
-		apiKeyID = mustParseUUID(subject.APIKeyID)
-	}
-	requestTotalMs, hasRequestTotalMs := req.RequestTotalMs()
-	firstResponseByteMs, hasFirstResponseByteMs := req.FirstResponseByteDurationMs()
-	providerCode := ""
-	if len(req.Attempts) > 0 && req.Candidate != nil {
-		providerCode = req.Candidate.ProviderCode
-	}
-
-	return usageRollupMetadata{
-		TenantID:            runtimeSubjectTenantID(subject),
-		UserID:              nullableText(runtimeSubjectUserID(subject)),
-		ApiKeyID:            apiKeyID,
-		RequestSource:       string(runtimeSubjectRequestSource(subject)),
-		CapabilityType:      string(req.CapabilityType),
-		ModelCode:           req.ModelCode,
-		ProviderCode:        nullableText(providerCode),
-		RequestStatus:       string(req.RequestStatus),
-		BillableUnitType:    billing.BillableUnitType,
-		PromptTokens:        int64(usage.PromptTokens),
-		CompletionTokens:    int64(usage.CompletionTokens),
-		CacheWriteTokens:    int64(usage.CacheWriteTokens),
-		CacheReadTokens:     int64(usage.CacheReadTokens),
-		ReasoningTokens:     int64(usage.ReasoningTokens),
-		TotalTokens:         int64(usage.TotalTokens()),
-		BillableUnits:       billing.BillableUnits,
-		CatalogBase:         billing.CatalogBaseMicro,
-		TenantPayable:       billing.TenantPayableMicro,
-		RetailBase:          billing.RetailBaseMicro,
-		UserPayable:         billing.UserPayableMicro,
-		UserCharged:         billing.UserChargedMicro,
-		ApiKeyQuotaCost:     billing.APIKeyQuotaCostMicro,
-		LatencyMs:           nullableInt4(req.LatencyMs),
-		RequestTotalMs:      nullableInt4WithValid(requestTotalMs, hasRequestTotalMs),
-		FirstResponseByteMs: nullableInt4WithValid(firstResponseByteMs, hasFirstResponseByteMs),
-	}
-}
-
 // unattemptedBilling zeroes a request that never reached an upstream. Requests
 // that did reach an upstream are normally billed for authoritative usage, while
 // client/gateway cancellations before a provider terminal event use
@@ -385,37 +315,6 @@ func annotateBillingBreakdown(raw []byte, reason string) []byte {
 	out, err := json.Marshal(value)
 	if err != nil {
 		return []byte(`{"billing_status":"void"}`)
-	}
-	return out
-}
-
-func annotateSettlementMetadata(raw []byte, req *serving.Request) []byte {
-	var value map[string]any
-	if len(raw) == 0 || json.Unmarshal(raw, &value) != nil {
-		value = map[string]any{}
-	}
-	if req != nil {
-		if domain.UsesReportedTokenBilling(req.CapabilityType) {
-			value["usage_evidence"] = req.UsageEvidence
-		}
-		if req.AuditPayload != nil && req.AuditPayload.Compaction.Truncated {
-			value["audit_compaction"] = req.AuditPayload.Compaction
-		}
-		value["request_status"] = string(req.RequestStatus)
-		value["provider_terminal_state"] = string(req.ProviderTerminalState)
-		value["client_delivery_state"] = string(req.ClientDeliveryState)
-		value["cancellation_origin"] = string(req.CancellationOrigin)
-		value["response_summary_state"] = string(req.ResponseSummaryState)
-		if req.BillingReason != "" {
-			value["billing_reason"] = req.BillingReason
-		}
-		if req.BillingStatus != "" {
-			value["billing_status"] = string(req.BillingStatus)
-		}
-	}
-	out, err := json.Marshal(value)
-	if err != nil {
-		return raw
 	}
 	return out
 }

@@ -56,16 +56,6 @@ type tenantSelfDashboardListInput struct {
 	Limit    int32  `query:"limit" default:"10" doc:"返回条数；默认 10，最大 50"`
 }
 
-type tenantSelfUsageLogsInput struct {
-	UserID        string `query:"user_id" doc:"用户 ID 过滤；为空表示本租户全部用户"`
-	ModelCode     string `query:"model_code" doc:"模型编码过滤"`
-	RequestSource string `query:"request_source" doc:"请求来源过滤"`
-	DateFrom      string `query:"date_from" doc:"开始时间，RFC3339"`
-	DateTo        string `query:"date_to" doc:"结束时间，RFC3339"`
-	Limit         int32  `query:"limit" default:"20" doc:"返回条数；默认 20，最大 100"`
-	Offset        int32  `query:"offset" default:"0" doc:"偏移量；默认 0"`
-}
-
 type tenantSelfUsageSummaryInput struct {
 	UserID        string `query:"user_id" doc:"用户 ID 过滤；为空表示本租户全部用户"`
 	ModelCode     string `query:"model_code" doc:"模型编码过滤"`

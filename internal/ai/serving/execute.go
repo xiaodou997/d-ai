@@ -520,23 +520,6 @@ func (s *ExecuteStep) writeSticky(ctx context.Context, req *Request, cand *domai
 
 // lastAttemptWas reports whether the most recent recorded attempt has the
 // given status.
-func lastAttemptWas(req *Request, status ResultStatus) bool {
-	if len(req.Attempts) == 0 {
-		return false
-	}
-	return req.Attempts[len(req.Attempts)-1].Outcome == status
-}
-
-func unauthorizedAttemptsForRoute(req *Request, routeID string) int {
-	count := 0
-	for _, attempt := range req.Attempts {
-		if attempt.RouteID == routeID && attempt.Outcome == ResultUnauthorized {
-			count++
-		}
-	}
-	return count
-}
-
 // logUpstreamFailure emits a single structured Error log line for any
 // non-success upstream attempt — transport errors AND HTTP 4xx/5xx. It is the
 // authoritative observability hook for "why did the upstream call fail": it

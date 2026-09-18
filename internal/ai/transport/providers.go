@@ -457,10 +457,3 @@ func jsonObjectOrNull(b []byte) json.RawMessage {
 	}
 	return json.RawMessage(b)
 }
-
-func jsonObjectOrEmpty(b []byte) json.RawMessage {
-	if len(b) == 0 || !json.Valid(b) {
-		return json.RawMessage("{}")
-	}
-	return json.RawMessage(b)
-}

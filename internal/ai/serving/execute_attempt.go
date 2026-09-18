@@ -517,14 +517,6 @@ func (s *ExecuteStep) runAttempt(parentCtx context.Context, req *Request, cand *
 	}
 }
 
-func isAmbiguousImageTimeout(err error) bool {
-	return errors.Is(err, ErrResponseHeaderTimeout) ||
-		errors.Is(err, ErrFirstByteTimeout) ||
-		errors.Is(err, ErrIdleTimeout) ||
-		errors.Is(err, ErrMaxDuration) ||
-		errors.Is(err, context.DeadlineExceeded)
-}
-
 func finishAmbiguousImageTimeout(req *Request, message string) attemptResult {
 	req.RequestStatus = domain.RequestFailed
 	req.HTTPStatus = http.StatusGatewayTimeout

@@ -727,10 +727,6 @@ func (s *Service) finishRunWithProgress(ctx context.Context, runID, trigger, act
 	}
 }
 
-func (s *Service) cleanTarget(ctx context.Context, target string, policy Policy) (int64, error) {
-	return s.cleanTargetWithProgress(ctx, target, policy, nil)
-}
-
 func (s *Service) cleanupTargetTotal(ctx context.Context, target string, policy Policy) (int64, int64, error) {
 	if target == TargetRequestBodyPurge {
 		preview, err := s.previewRequestBodyPurge(ctx)
