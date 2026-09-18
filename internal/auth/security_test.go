@@ -36,6 +36,12 @@ func TestAccountSecurityServiceSyncsUserAndTenantBanState(t *testing.T) {
 	if mini.Exists(banUserPrefix + "user-1") {
 		t.Fatal("enabled user retained ban marker")
 	}
+	if err := security.SyncUserStatus(ctx, "user-locked", "locked"); err != nil {
+		t.Fatalf("lock user: %v", err)
+	}
+	if !mini.Exists(banUserPrefix + "user-locked") {
+		t.Fatal("non-active locked user did not receive ban marker")
+	}
 
 	if err := security.RevokeAccessToken(ctx, "token-1", time.Hour); err != nil {
 		t.Fatalf("revoke token: %v", err)
@@ -55,6 +61,12 @@ func TestAccountSecurityServiceSyncsUserAndTenantBanState(t *testing.T) {
 	}
 	if !mini.Exists(banTenantPrefix + "tenant-1") {
 		t.Fatal("disabled tenant did not receive ban marker")
+	}
+	if err := security.SyncTenantStatus(ctx, "tenant-suspended", "suspended", nil); err != nil {
+		t.Fatalf("suspend tenant: %v", err)
+	}
+	if !mini.Exists(banTenantPrefix + "tenant-suspended") {
+		t.Fatal("non-active suspended tenant did not receive ban marker")
 	}
 	if err := security.SyncTenantStatus(ctx, "tenant-1", "active", []string{"restored-1"}); err != nil {
 		t.Fatalf("enable tenant: %v", err)
