@@ -154,14 +154,6 @@ func workspaceBillingGroupLabel(groupName string, multiplier float64) string {
 	return fmt.Sprintf("%s · %.4gx", groupName, multiplier)
 }
 
-func (r *WorkspaceRepo) availableWorkspaceChatProtocols(ctx context.Context, modelCode string, groupIDs []string) ([]domain.UpstreamProtocol, error) {
-	rows, err := r.routeInspector.listRoutesForGroups(ctx, modelCode, domain.CapabilityChat, groupIDs)
-	if err != nil {
-		return nil, err
-	}
-	return workspaceChatProtocols(rows), nil
-}
-
 func workspaceChatProtocols(rows []routeRow) []domain.UpstreamProtocol {
 	out := make([]domain.UpstreamProtocol, 0, len(workspaceChatProtocolOrder))
 	for _, protocol := range workspaceChatProtocolOrder {
