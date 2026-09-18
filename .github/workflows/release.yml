@@ -108,12 +108,12 @@ jobs:
           node -e '
           const fs = require("fs");
           const version = process.env.VERSION;
-          const lines = fs.readFileSync("CHANGELOG.md", "utf8").split(/\\r?\\n/);
+          const lines = fs.readFileSync("CHANGELOG.md", "utf8").split(/\r?\n/);
           const start = lines.findIndex((line) => line.startsWith(`## [${version}] - `));
           if (start < 0) process.exit(2);
           let end = lines.findIndex((line, index) => index > start && line.startsWith("## ["));
           if (end < 0) end = lines.length;
-          process.stdout.write(lines.slice(start, end).join("\\n").trimEnd() + "\\n");
+          process.stdout.write(lines.slice(start, end).join("\n").trimEnd() + "\n");
           ' > /tmp/release-notes.md
           test -s /tmp/release-notes.md
 
