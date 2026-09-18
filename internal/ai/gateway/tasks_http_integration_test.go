@@ -51,6 +51,12 @@ func TestAPITaskCreateAndGetAreIdempotent(t *testing.T) {
 	// One statement per Exec: a parameterised query goes over the extended
 	// protocol, which does not accept multiple commands in one string.
 	if _, err := pool.Exec(ctx, `
+		INSERT INTO iam_tenants (tenant_id, tenant_name, status)
+		VALUES ($1, 'P3 Tenant', 'active')
+	`, tenantID); err != nil {
+		t.Fatalf("seed tenant: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
 		INSERT INTO ai_groups (id, tenant_id, name, retail_price_book_id)
 		VALUES ($1::uuid, $2, 'p3 group', '33333333-3333-3333-3333-333333333333'::uuid)
 	`, groupID, tenantID); err != nil {

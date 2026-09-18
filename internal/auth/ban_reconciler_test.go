@@ -91,11 +91,11 @@ func TestBanReconcilerTreatsEveryNonActiveDatabaseStateAsBanned(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := pool.Exec(ctx, `
-		INSERT INTO iam_accounts (user_id, username, password_hash, user_type, status)
+		INSERT INTO iam_accounts (user_id, tenant_id, username, password_hash, user_type, status)
 		VALUES
-		  ('ban-active-user', 'ban-active-user', 'unused', 2, 'active'),
-		  ('ban-locked-user', 'ban-locked-user', 'unused', 4, 'locked'),
-		  ('ban-deleted-user', 'ban-deleted-user', 'unused', 4, 'deleted')
+		  ('ban-active-user', NULL, 'ban-active-user', 'unused', 2, 'active'),
+		  ('ban-locked-user', 'ban-active-tenant', 'ban-locked-user', 'unused', 4, 'locked'),
+		  ('ban-deleted-user', 'ban-active-tenant', 'ban-deleted-user', 'unused', 4, 'deleted')
 	`); err != nil {
 		t.Fatal(err)
 	}
