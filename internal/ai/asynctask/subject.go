@@ -20,6 +20,11 @@ type SubjectRef struct {
 	TenantID   string
 	UserID     string
 	APIKeyID   string
+
+	JWTAuthUserID        string
+	JWTAuthUserType      int
+	JWTSessionID         string
+	JWTCredentialVersion int64
 }
 
 // SubjectRefFrom derives the persistable reference from an authenticated caller.
@@ -29,6 +34,11 @@ func SubjectRefFrom(sub identity.Subject) SubjectRef {
 		TenantID:   sub.TenantID,
 		UserID:     sub.UserID,
 		APIKeyID:   sub.APIKeyID,
+
+		JWTAuthUserID:        sub.JWTAuthUserID,
+		JWTAuthUserType:      sub.JWTAuthUserType,
+		JWTSessionID:         sub.JWTSessionID,
+		JWTCredentialVersion: sub.JWTCredentialVersion,
 	}
 }
 
