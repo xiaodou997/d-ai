@@ -1775,12 +1775,6 @@ ON ai_group_targets (group_id, priority);
     tenant_id          TEXT        NOT NULL,
     user_id            TEXT,
     api_key_id         UUID,
-    -- Durable reference to the JWT session that authorized queued web work.
-    -- API-key tasks leave these columns NULL.
-    auth_user_id       TEXT,
-    auth_user_type     INTEGER CHECK (auth_user_type IS NULL OR auth_user_type IN (1, 2, 3, 4)),
-    auth_session_id    UUID,
-    auth_credential_version BIGINT CHECK (auth_credential_version IS NULL OR auth_credential_version > 0),
     model_code         TEXT        NOT NULL,
     -- 脱敏、自包含：worker 唯一能拿到的执行输入。任何能力想接异步，
     -- 都必须能只靠这一列重建整个执行。
@@ -1817,6 +1811,13 @@ ON ai_group_targets (group_id, priority);
     -- 客户端自己的业务标注，原样回显。不是执行输入，不进 handler 视野。
     metadata           JSONB,
     webhook_url        TEXT,
+    -- Durable reference to the JWT session that authorized queued web work.
+    -- API-key tasks leave these columns NULL. Keep these appended after the
+    -- v44 columns so canonical init matches ALTER TABLE migration ordering.
+    auth_user_id       TEXT,
+    auth_user_type     INTEGER CHECK (auth_user_type IS NULL OR auth_user_type IN (1, 2, 3, 4)),
+    auth_session_id    UUID,
+    auth_credential_version BIGINT CHECK (auth_credential_version IS NULL OR auth_credential_version > 0),
     CHECK (status IN ('pending', 'running', 'completed', 'failed', 'cancelled')),
     CONSTRAINT ai_async_tasks_attempts_sane CHECK (attempt_count >= 0 AND max_attempts >= 1),
     CONSTRAINT ai_async_tasks_cost_nonnegative CHECK (caller_charge >= 0)
