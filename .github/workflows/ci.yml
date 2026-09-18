@@ -87,7 +87,10 @@ jobs:
 
       - name: Assert database tests were not skipped
         run: |
-          go test ./internal/billing/... ./internal/ai/adapters/postgres/... -v 2>&1 | tee /tmp/db-tests.log
+          # The tenant-contention load case is explicitly opt-in via
+          # DAI_RUN_LEDGER_LOAD=1; it is not an availability/correctness gate.
+          go test ./internal/billing/... ./internal/ai/adapters/postgres/... \
+            -skip '^TestRequestSettlementTenantContentionLoad$' -v 2>&1 | tee /tmp/db-tests.log
           if grep -q '^--- SKIP' /tmp/db-tests.log; then
             echo "::error::database-backed tests were skipped; billing was not verified"
             grep -B2 '^--- SKIP' /tmp/db-tests.log
