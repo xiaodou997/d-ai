@@ -1,0 +1,125 @@
+name: Release
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  cleanup-branches:
+    name: Clean merged historical branches
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - name: Delete merged historical branches
+        run: |
+          branches=(
+            fix/ci-authz-matrix-contract-hash
+            fix/ci-container-vulnerability-baseline
+            fix/ci-database-ownership-probe-settlements
+            fix/ci-db-skip-gate
+            fix/ci-go-lint-baseline
+            fix/ci-grpc-vulnerability-baseline
+            fix/ci-js-yaml-audit
+            fix/ci-portal-checksum-shell
+            fix/ci-portal-openapi-baseline-checkout
+            fix/ci-release-metadata-bun-1-3
+            fix/jwt-unknown-kid-refresh
+            fix/remove-batch-usage-refund
+          )
+          for branch in "${branches[@]}"; do
+            if git ls-remote --exit-code --heads origin "refs/heads/$branch" >/dev/null 2>&1; then
+              git push origin --delete "$branch"
+            fi
+          done
+
+  publish:
+    name: Publish versioned release
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.11.1
+
+      - name: Resolve release version
+        id: release
+        run: |
+          version=$(node -p "require('./package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
+      - name: Check existing release
+        id: existing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download validated release assets
+        if: steps.existing.outputs.publish == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: release-v${{ steps.release.outputs.version }}
+          path: release-assets
+          github-token: ${{ github.token }}
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Verify release bundle checksum
+        if: steps.existing.outputs.publish == 'true'
+        env:
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          cd release-assets
+          sha256sum -c "d-ai-${TAG}-linux-amd64.tar.gz.sha256"
+
+      - name: Extract release notes
+        if: steps.existing.outputs.publish == 'true'
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          awk -v version="$VERSION" '
+            $0 ~ ("^## \\[" version "\\] - ") { capture=1 }
+            capture && $0 ~ /^## \\[/ && $0 !~ ("^## \\[" version "\\] - ") { exit }
+            capture { print }
+          ' CHANGELOG.md > /tmp/release-notes.md
+          test -s /tmp/release-notes.md
+
+      - name: Publish GitHub Release
+        if: steps.existing.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          gh release create "$TAG" release-assets/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "${{ github.event.workflow_run.head_sha }}" \
+            --title "D-AI $TAG" \
+            --notes-file /tmp/release-notes.md

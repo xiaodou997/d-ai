@@ -247,14 +247,20 @@ jobs:
         with:
           node-version: 24.11.1
 
+      - name: Resolve release version
+        id: release_version
+        run: |
+          version=$(node -p "require('./package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
 
       - name: Build release artifacts
-        run: make build-linux-amd64
+        run: make build-linux-amd64 VERSION=${{ steps.release_version.outputs.version }}
 
       - name: Generate release SBOM, provenance and checksums
-        run: bash scripts/generate_release_metadata.sh release
+        run: bash scripts/generate_release_metadata.sh release "${{ steps.release_version.outputs.version }}"
 
       - name: Verify release artifact contracts
         run: |
@@ -283,3 +289,23 @@ jobs:
           ignore-unfixed: true
           vuln-type: os,library
           severity: CRITICAL,HIGH
+
+      - name: Package release assets
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          RELEASE_VERSION: ${{ steps.release_version.outputs.version }}
+        run: |
+          mkdir -p release-assets
+          tar -C release -czf "release-assets/d-ai-v${RELEASE_VERSION}-linux-amd64.tar.gz" .
+          sha256sum "release-assets/d-ai-v${RELEASE_VERSION}-linux-amd64.tar.gz" > \
+            "release-assets/d-ai-v${RELEASE_VERSION}-linux-amd64.tar.gz.sha256"
+          cp release/SBOM.spdx.json release/PROVENANCE.json release/SHA256SUMS release-assets/
+
+      - name: Upload release assets
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-v${{ steps.release_version.outputs.version }}
+          path: release-assets/*
+          if-no-files-found: error
+          retention-days: 30
