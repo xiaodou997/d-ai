@@ -12,8 +12,8 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: List gofmt drift
+      - name: Show gofmt drift
         run: |
           gofmt -w .
-          git diff --name-only
+          git diff -- internal/ai/console/console_runtime_auth.go internal/ai/core/identity/types.go internal/ai/gateway/runtime_owner.go internal/ai/gateway/tasks_subject_test.go
           test -n "$(git diff --name-only)"
