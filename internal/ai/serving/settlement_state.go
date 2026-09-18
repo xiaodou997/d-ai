@@ -119,18 +119,6 @@ func markClientCancellation(req *Request) {
 	}
 }
 
-func markGatewayCancellation(req *Request, reason string) {
-	if req == nil {
-		return
-	}
-	initializeSettlementState(req)
-	req.RequestStatus = domain.RequestCancelled
-	req.CancellationOrigin = domain.CancellationGateway
-	if reason != "" {
-		req.BillingReason = reason
-	}
-}
-
 func markUpstreamCancellation(req *Request) {
 	if req == nil {
 		return
