@@ -133,36 +133,6 @@ func requireUsageStatus(t *testing.T, recorder *httptest.ResponseRecorder, want 
 	}
 }
 
-func decodeUsageResponse(t *testing.T, recorder *httptest.ResponseRecorder, target any) {
-	t.Helper()
-	if err := json.NewDecoder(recorder.Body).Decode(target); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-}
-
-func assertUsageWindow(t *testing.T, dateFrom, dateTo *time.Time) {
-	t.Helper()
-	if dateFrom == nil || dateTo == nil || dateFrom.Format(time.RFC3339) != "2026-08-20T00:00:00Z" || dateTo.Format(time.RFC3339) != "2026-08-21T00:00:00Z" {
-		t.Fatalf("window = %v to %v", dateFrom, dateTo)
-	}
-}
-
-func assertUsageFilter(t *testing.T, filter domain.UsageFilter) {
-	t.Helper()
-	if filter.TenantID != "tenant-1" || filter.UserID != "user-1" || filter.ModelCode != "gpt-test" || filter.RequestStatus != "success" || filter.RequestSource != "workspace" {
-		t.Fatalf("filter = %#v", filter)
-	}
-	assertUsageWindow(t, filter.DateFrom, filter.DateTo)
-}
-
-func assertUsageSummaryFilter(t *testing.T, filter domain.UsageSummaryFilter) {
-	t.Helper()
-	if filter.TenantID != "tenant-1" || filter.UserID != "user-1" || filter.ModelCode != "gpt-test" || filter.RequestStatus != "success" || filter.RequestSource != "workspace" {
-		t.Fatalf("summary filter = %#v", filter)
-	}
-	assertUsageWindow(t, filter.DateFrom, filter.DateTo)
-}
-
 func TestUsageLogsExplicitErrorFilter(t *testing.T) {
 	filter, err := usageLogFilterFromInput(&usageLogsInput{ErrorsOnly: true})
 	if err != nil || !filter.ErrorsOnly || filter.RequestStatus != "" {
