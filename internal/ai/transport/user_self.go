@@ -41,11 +41,6 @@ type userSelfAPIKeyIDInput struct {
 	APIKeyID string `path:"apiKeyID" doc:"API key ID"`
 }
 
-type userSelfUsageLogsInput struct {
-	RequestSource string `query:"request_source" doc:"请求来源过滤"`
-	Limit         int32  `query:"limit" default:"100" doc:"返回条数；默认 100，最大 100"`
-}
-
 type userSelfUsageSummaryInput struct {
 	RequestSource string `query:"request_source" doc:"请求来源过滤"`
 }
