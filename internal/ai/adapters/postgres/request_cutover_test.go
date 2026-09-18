@@ -106,6 +106,13 @@ func TestRequestCutoverPreservesAssetsAndReleasesHistory(t *testing.T) {
 	if _, err = pool.Exec(ctx, string(migration44)); err != nil {
 		t.Fatal(err)
 	}
+	migration45, err := os.ReadFile(filepath.Join(string(bytesTrimSpace(root)), "internal/db/changes/0045_20260919_async_task_auth_reference.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = pool.Exec(ctx, string(migration45)); err != nil {
+		t.Fatal(err)
+	}
 	if err = db.VerifySchema(ctx, pool); err != nil {
 		t.Fatal(err)
 	}
