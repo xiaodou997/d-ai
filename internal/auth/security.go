@@ -61,7 +61,7 @@ func (s *AccountSecurityService) SyncUserStatus(ctx context.Context, userID, sta
 	if s == nil || s.blacklist == nil {
 		return nil
 	}
-	if status == "disabled" || status == "inherited_disabled" || status == "deleted" {
+	if status != "active" {
 		return s.blacklist.BanUser(ctx, userID)
 	}
 	return s.blacklist.UnbanUser(ctx, userID)
@@ -73,7 +73,7 @@ func (s *AccountSecurityService) SyncTenantStatus(ctx context.Context, tenantID,
 	if s == nil || s.blacklist == nil {
 		return nil
 	}
-	if status == "disabled" {
+	if status != "active" {
 		return s.blacklist.BanTenant(ctx, tenantID)
 	}
 	if err := s.blacklist.UnbanTenant(ctx, tenantID); err != nil {
