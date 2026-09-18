@@ -3,9 +3,9 @@
 
 Source: `contracts/openapi.yaml`
 
-Contract SHA-256: `4a0c07b0e6c595c2794b4237fd5c432fd1f87c348aaf98c5a7e314835e9cccb7`
+Contract SHA-256: `e8325dfa7eaea3065cf68ca743e972e5160ebbee87082bbc183f705ce19f6ca6`
 
-Coverage: **341/341 operations (100%)**
+Coverage: **340/340 operations (100%)**
 
 The matrix is a review artifact and a generation gate. Middleware and application services remain the enforcement points; `ownership` describes the second authorization check required after capability admission.
 
@@ -16,7 +16,7 @@ The matrix is a review artifact and a generation gate. Middleware and applicatio
 | `api_key_or_session` | 4 | `api_key_or_session` | `resource` |
 | `authenticated` | 19 | `authenticated` | `actor.user` |
 | `customer_self` | 27 | `customer_self` | `actor.user` |
-| `platform_admin` | 168 | `platform_admin` | `actor.user` |
+| `platform_admin` | 167 | `platform_admin` | `actor.user` |
 | `platform_or_tenant` | 8 | `platform_or_tenant` | `actor.tenant/resource` |
 | `public` | 9 | `public` | `none` |
 | `super_admin` | 2 | `super_admin` | `global` |
@@ -86,7 +86,6 @@ The matrix is a review artifact and a generation gate. Middleware and applicatio
 | `PUT` | `/api/v1/admin/wechat-config` | `admin-update-wechat-config` | `platform_admin` | `global/resource` |
 | `GET` | `/api/v1/admin/withdrawals` | `admin-list-withdrawals` | `platform_admin` | `global/resource` |
 | `POST` | `/api/v1/admin/withdrawals` | `admin-create-withdrawal` | `platform_admin` | `global/resource` |
-| `POST` | `/api/v1/ai/usage/batch-refund` | `admin-batch-refund-usage` | `platform_admin` | `global/resource` |
 | `POST` | `/api/v1/ai/usage/refund` | `admin-refund-usage` | `platform_admin` | `global/resource` |
 | `GET` | `/api/v1/analytics/consumption-trend` | `admin-consumption-trend` | `platform_admin` | `global/resource` |
 | `GET` | `/api/v1/analytics/daily-trend` | `ai-list-daily-trend` | `platform_admin` | `global/resource` |

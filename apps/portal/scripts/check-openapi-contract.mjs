@@ -8,6 +8,7 @@ const repoRoot = resolve(import.meta.dirname, "../../..");
 const specPath = resolve(repoRoot, "contracts/openapi.yaml");
 const generatedPath = resolve(repoRoot, "apps/portal/src/api/generated/dai.ts");
 const markerPath = resolve(repoRoot, "apps/portal/src/api/generated/.openapi.sha256");
+const approvedRemovalsPath = resolve(repoRoot, "contracts/openapi-approved-removals.json");
 
 export function operationIdsFromSpec(spec) {
   const ids = [];
@@ -53,7 +54,18 @@ function baselineSource() {
   }
 }
 
-export function checkContract({ specSource, generatedSource, marker = "", baselineSource: baseline = "" }) {
+function approvedRemovalIds() {
+  const ref = process.env.OPENAPI_BASELINE_REF?.trim();
+  if (!ref || !existsSync(approvedRemovalsPath)) return [];
+  const approval = JSON.parse(readFileSync(approvedRemovalsPath, "utf8"));
+  if (approval?.baselineSha !== ref) return [];
+  if (!Array.isArray(approval?.removedOperationIds) || approval.removedOperationIds.some((id) => typeof id !== "string" || !id.trim())) {
+    throw new Error("approved OpenAPI removals must define non-empty removedOperationIds");
+  }
+  return approval.removedOperationIds;
+}
+
+export function checkContract({ specSource, generatedSource, marker = "", baselineSource: baseline = "", approvedRemovedOperationIds = [] }) {
   const spec = parse(specSource);
   const currentIds = operationIdsFromSpec(spec);
   assertUnique(currentIds, "OpenAPI");
@@ -63,8 +75,10 @@ export function checkContract({ specSource, generatedSource, marker = "", baseli
   if (baseline) {
     const baselineIds = operationIdsFromSpec(parse(baseline));
     const removed = baselineIds.filter((id) => !currentIds.includes(id));
-    if (removed.length && process.env.ALLOW_BREAKING_OPENAPI !== "1") {
-      throw new Error(`breaking OpenAPI change removed operationId(s): ${removed.join(", ")}; set ALLOW_BREAKING_OPENAPI=1 only with an approved migration`);
+    const approved = new Set(approvedRemovedOperationIds);
+    const unapproved = removed.filter((id) => !approved.has(id));
+    if (unapproved.length && process.env.ALLOW_BREAKING_OPENAPI !== "1") {
+      throw new Error(`breaking OpenAPI change removed unapproved operationId(s): ${unapproved.join(", ")}; add an exact baseline-scoped approval or set ALLOW_BREAKING_OPENAPI=1 only with an approved migration`);
     }
   }
   if (!marker.trim()) throw new Error("generated OpenAPI marker is missing; run bun run generate:api");
@@ -79,7 +93,8 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
     specSource: readFileSync(specPath, "utf8"),
     generatedSource: readFileSync(generatedPath, "utf8"),
     marker: existsSync(markerPath) ? readFileSync(markerPath, "utf8") : "",
-    baselineSource: baselineSource()
+    baselineSource: baselineSource(),
+    approvedRemovedOperationIds: approvedRemovalIds()
   });
   console.log(`OpenAPI contract gate passed (${result.operationCount} operations)`);
 }

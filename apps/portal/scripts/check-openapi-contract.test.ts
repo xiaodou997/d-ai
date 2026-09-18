@@ -24,8 +24,26 @@ describe("OpenAPI operation contract gate", () => {
     expect(checkContract({ specSource: spec, generatedSource: generated, marker: "hash" }).operationCount).toBe(2);
   });
 
-  it("rejects generated drift and removed baseline operations", () => {
+  it("rejects generated drift and unapproved removed baseline operations", () => {
     expect(() => checkContract({ specSource: spec, generatedSource: generated.replace('"health"', '"stale"'), marker: "hash" })).toThrow(/differ/);
-    expect(() => checkContract({ specSource: spec, generatedSource: generated, marker: "hash", baselineSource: spec.replace("operationId: health", "operationId: old-health") })).toThrow(/removed/);
+    expect(() => checkContract({ specSource: spec, generatedSource: generated, marker: "hash", baselineSource: spec.replace("operationId: health", "operationId: old-health") })).toThrow(/old-health/);
+  });
+
+  it("allows only explicitly approved baseline removals", () => {
+    const baseline = spec.replace("operationId: health", "operationId: old-health");
+    expect(checkContract({
+      specSource: spec,
+      generatedSource: generated,
+      marker: "hash",
+      baselineSource: baseline,
+      approvedRemovedOperationIds: ["old-health"]
+    }).operationCount).toBe(2);
+    expect(() => checkContract({
+      specSource: spec,
+      generatedSource: generated,
+      marker: "hash",
+      baselineSource: baseline,
+      approvedRemovedOperationIds: ["other-operation"]
+    })).toThrow(/old-health/);
   });
 });

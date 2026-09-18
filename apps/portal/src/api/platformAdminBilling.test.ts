@@ -116,15 +116,6 @@ describe("platform admin billing generated operation facade", () => {
       })
       .mockResolvedValueOnce({ message: "退款成功", $schema: "ignored" })
       .mockResolvedValueOnce({
-        succeeded: null,
-        failed: null,
-        totalTenantUsd: 0,
-        totalUserUsd: 1.2,
-        successCount: 0,
-        failCount: 1,
-        $schema: "ignored"
-      })
-      .mockResolvedValueOnce({
         owner_type: "tenant",
         account_id: "tenant-1",
         outstanding_debt_micro_usd: 12,
@@ -144,14 +135,6 @@ describe("platform admin billing generated operation facade", () => {
       lostAmountUsd: 0.2
     });
     await expect(platformAdminApi.refundUsage({ requestId: "request-1", reason: "duplicate" })).resolves.toEqual({ message: "退款成功" });
-    await expect(platformAdminApi.batchRefundUsage({ requestIds: ["request-1"], reason: "duplicate" })).resolves.toEqual({
-      succeeded: [],
-      failed: [],
-      totalTenantUsd: 0,
-      totalUserUsd: 1.2,
-      successCount: 0,
-      failCount: 1
-    });
     await expect(platformAdminApi.getDebtStatus("tenant", "tenant/1")).resolves.toEqual({
       owner_type: "tenant",
       account_id: "tenant-1",
@@ -169,8 +152,7 @@ describe("platform admin billing generated operation facade", () => {
       body: { reason: "duplicate" }
     });
     expect(mocks.request.mock.calls[2]?.[0]).toMatchObject({ body: { requestId: "request-1", reason: "duplicate" } });
-    expect(mocks.request.mock.calls[3]?.[0]).toMatchObject({ body: { requestIds: ["request-1"], reason: "duplicate" } });
-    expect(mocks.request.mock.calls[4]?.[0]).toMatchObject({
+    expect(mocks.request.mock.calls[3]?.[0]).toMatchObject({
       path: "/api/v1/admin/debts/tenant/tenant%2F1",
       pathParams: { owner_type: "tenant", id: "tenant/1" }
     });
