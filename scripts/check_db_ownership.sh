@@ -89,7 +89,28 @@ if psql -X -v ON_ERROR_STOP=1 --dbname="$database_url" -c \
   exit 1
 fi
 
-psql -X -v ON_ERROR_STOP=1 --dbname="$database_url" \,  -v schema_name="$schema_name" -v runtime_role="$runtime_role" \,  -c "SET ROLE \"$runtime_role\";,      INSERT INTO \"$schema_name\".bill_settlements,        (created_at, request_id, tenant_id, state, reason, tenant_due),      VALUES (clock_timestamp(), 'ownership-probe', 'ownership-runtime-tenant',,              'pending', 'ownership probe', 1);,      UPDATE \"$schema_name\".bill_settlements,         SET delivery_interrupted = TRUE,       WHERE request_id = 'ownership-probe';",,if psql -X -v ON_ERROR_STOP=1 --dbname="$database_url" \,  -v schema_name="$schema_name" -v runtime_role="$runtime_role" \,  -c "SET ROLE \"$runtime_role\";,      UPDATE \"$schema_name\".bill_settlements,         SET state = 'review',       WHERE request_id = 'ownership-probe';" \,  >"$tmp_dir/runtime-settlement-mutation-denied.log" 2>&1; then,  echo "db-ownership: runtime role unexpectedly mutated settlement state" >&2,  cat "$tmp_dir/runtime-settlement-mutation-denied.log" >&2,  exit 1,fi
+psql -X -v ON_ERROR_STOP=1 --dbname="$database_url" \
+  -v schema_name="$schema_name" -v runtime_role="$runtime_role" \
+  -c "SET ROLE \"$runtime_role\";
+      INSERT INTO \"$schema_name\".bill_settlements
+        (created_at, request_id, tenant_id, state, reason, tenant_due)
+      VALUES (clock_timestamp(), 'ownership-probe', 'ownership-runtime-tenant',
+              'pending', 'ownership probe', 1);
+      UPDATE \"$schema_name\".bill_settlements
+         SET delivery_interrupted = TRUE
+       WHERE request_id = 'ownership-probe';"
+
+if psql -X -v ON_ERROR_STOP=1 --dbname="$database_url" \
+  -v schema_name="$schema_name" -v runtime_role="$runtime_role" \
+  -c "SET ROLE \"$runtime_role\";
+      UPDATE \"$schema_name\".bill_settlements
+         SET state = 'review'
+       WHERE request_id = 'ownership-probe';" \
+  >"$tmp_dir/runtime-settlement-mutation-denied.log" 2>&1; then
+  echo "db-ownership: runtime role unexpectedly mutated settlement state" >&2
+  cat "$tmp_dir/runtime-settlement-mutation-denied.log" >&2
+  exit 1
+fi
 
 psql -X -v ON_ERROR_STOP=1 --dbname="$database_url" \
   -v schema_name="$schema_name" -v billing_role="$billing_role" \
@@ -134,7 +155,15 @@ if psql -X -v ON_ERROR_STOP=1 --dbname="$database_url" \
   exit 1
 fi
 
-psql -X -v ON_ERROR_STOP=1 --dbname="$database_url" \,  -v schema_name="$schema_name" -v billing_role="$billing_role" \,  -c "SET ROLE \"$billing_role\";,      UPDATE \"$schema_name\".bill_settlements,         SET state = 'review', last_error = 'ownership probe',       WHERE request_id = 'ownership-probe';,      SELECT state, last_error,        FROM \"$schema_name\".bill_settlements,       WHERE request_id = 'ownership-probe';"
+psql -X -v ON_ERROR_STOP=1 --dbname="$database_url" \
+  -v schema_name="$schema_name" -v billing_role="$billing_role" \
+  -c "SET ROLE \"$billing_role\";
+      UPDATE \"$schema_name\".bill_settlements
+         SET state = 'review', last_error = 'ownership probe'
+       WHERE request_id = 'ownership-probe';
+      SELECT state, last_error
+        FROM \"$schema_name\".bill_settlements
+       WHERE request_id = 'ownership-probe';"
 
 psql -X -v ON_ERROR_STOP=1 --dbname="$database_url" \
   -v schema_name="$schema_name" -v billing_role="$billing_role" \
