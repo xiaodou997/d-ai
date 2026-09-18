@@ -132,6 +132,7 @@ func TestMFAConcurrentEnrollKeepsOnePendingSecret(t *testing.T) {
 			user_id TEXT PRIMARY KEY,
 			username TEXT NOT NULL,
 			password_hash TEXT NOT NULL,
+			credential_version BIGINT NOT NULL DEFAULT 1,
 			user_type INTEGER NOT NULL,
 			status TEXT NOT NULL,
 			mfa_secret_encrypted TEXT,
