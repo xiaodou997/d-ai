@@ -39,11 +39,16 @@ type MFAService struct {
 }
 
 var consumeMFAChallengeScript = redis.NewScript(`
-if redis.call('GET', KEYS[1]) == ARGV[1] then
-  redis.call('DEL', KEYS[1], KEYS[2])
-  return 1
+if redis.call('GET', KEYS[1]) ~= ARGV[1] then
+  return 0
 end
-return 0
+local previous_counter = redis.call('GET', KEYS[3])
+if previous_counter and tonumber(previous_counter) >= tonumber(ARGV[2]) then
+  return -1
+end
+redis.call('SET', KEYS[3], ARGV[2], 'PX', ARGV[3])
+redis.call('DEL', KEYS[1], KEYS[2])
+return 1
 `)
 
 type MFAEnrollment struct {
@@ -250,10 +255,18 @@ func (s *MFAService) VerifyChallenge(ctx context.Context, token, code string) (P
 	if err != nil {
 		return zero, err
 	}
-	if !VerifyTOTP(secret, code, time.Now().UTC()) {
+	counter, valid := verifyTOTPCounter(secret, code, time.Now().UTC())
+	if !valid {
 		return zero, ErrInvalidMFACode
 	}
-	consumed, err := consumeMFAChallengeScript.Run(ctx, s.redis, []string{mfaChallengeKey(token), attemptKey}, string(raw)).Int64()
+	consumed, err := consumeMFAChallengeScript.Run(
+		ctx,
+		s.redis,
+		[]string{mfaChallengeKey(token), attemptKey, mfaAcceptedCounterKey(challenge.UserID)},
+		string(raw),
+		counter,
+		s.challengeTTL.Milliseconds(),
+	).Int64()
 	if err != nil {
 		return zero, err
 	}
@@ -295,26 +308,40 @@ func mfaChallengeKey(token string) string {
 	return "dai:auth:mfa:challenge:" + hex.EncodeToString(sum)
 }
 
+func mfaAcceptedCounterKey(userID string) string {
+	return "dai:auth:mfa:accepted-counter:" + userID
+}
+
 func sha256Bytes(value string) []byte {
 	out := sha256.Sum256([]byte(value))
 	return out[:]
 }
 
 func VerifyTOTP(secret, code string, now time.Time) bool {
+	_, valid := verifyTOTPCounter(secret, code, now)
+	return valid
+}
+
+func verifyTOTPCounter(secret, code string, now time.Time) (uint64, bool) {
 	code = strings.TrimSpace(code)
 	if len(code) != 6 {
-		return false
+		return 0, false
 	}
 	if _, err := strconv.Atoi(code); err != nil {
-		return false
+		return 0, false
 	}
+	baseCounter := now.Unix() / 30
 	for offset := int64(-1); offset <= 1; offset++ {
-		counter := uint64(now.Unix()/30 + offset)
+		candidate := baseCounter + offset
+		if candidate < 0 {
+			continue
+		}
+		counter := uint64(candidate)
 		if subtle.ConstantTimeCompare([]byte(totpCode(secret, counter)), []byte(code)) == 1 {
-			return true
+			return counter, true
 		}
 	}
-	return false
+	return 0, false
 }
 
 func totpCode(secret string, counter uint64) string {
