@@ -2,6 +2,24 @@
 
 All notable changes to D-AI are documented in this file.
 
+## [0.3.23] - 2026-09-18
+
+### Security and reliability
+
+- Serialize JWT signing-key bootstrap and rotation across processes with a PostgreSQL transaction-level advisory lock so concurrent replicas cannot commit conflicting active signing keys.
+- Enforce the signing-key database invariant with a partial unique index allowing at most one `status='active'` row, and make key reload fail closed when it sees zero or multiple active keys.
+- Add deterministic concurrent two-replica rotation coverage, cross-replica signing/verification checks, and invalid active-key-count regression tests.
+- This patch supersedes v0.3.22 for deployments that rely on JWT key rotation; v0.3.22 contains the unknown-`kid` refresh fix but not the active-key invariant fix.
+
+### Database
+
+- Advance the schema contract to v44 with `0044_20260918_jwt_active_key_invariant.sql`.
+- The v44 migration refuses to proceed if the database already contains more than one active JWT signing key; inspect and repair that state before retrying the migration.
+
+### Validation
+
+- Keep the complete Go, Portal, PostgreSQL integration, migration-chain replay, database ownership, release-evidence, and hardened-container CI gates green after the invariant fix.
+
 ## [0.3.22] - 2026-09-18
 
 ### Security and reliability
