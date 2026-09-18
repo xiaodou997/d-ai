@@ -94,7 +94,6 @@ func TestTaskSubjectResolverReloadsAPIKeyAuthorization(t *testing.T) {
 	}
 }
 
-
 func TestTaskSubjectResolverRevalidatesJWTSessionAndScope(t *testing.T) {
 	ctx := context.Background()
 	pool, cleanup, err := testsupport.OpenAsyncTaskTestPool(ctx, testsupport.AsyncTaskPoolOptions{MaxConns: 4})
