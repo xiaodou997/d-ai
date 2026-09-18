@@ -24,6 +24,12 @@ func TestTaskSubjectResolverReloadsAPIKeyAuthorization(t *testing.T) {
 		groupID2 = "55555555-5555-5555-5555-555555555556"
 	)
 	if _, err := pool.Exec(ctx, `
+		INSERT INTO iam_tenants (tenant_id, tenant_name, status)
+		VALUES ('tenant-subject', 'Subject Tenant', 'active')
+	`); err != nil {
+		t.Fatalf("seed tenant: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
 		INSERT INTO ai_groups (id, tenant_id, name, retail_price_book_id)
 		VALUES
 		  ($1::uuid, 'tenant-subject', 'subject group', '66666666-6666-6666-6666-666666666666'::uuid),
@@ -43,7 +49,7 @@ func TestTaskSubjectResolverReloadsAPIKeyAuthorization(t *testing.T) {
 		t.Fatalf("seed API key: %v", err)
 	}
 
-	resolver := NewTaskSubjectResolver(dbgen.New(pool))
+	resolver := NewTaskSubjectResolver(pool, dbgen.New(pool))
 	ref := asynctask.SubjectRef{
 		AuthMethod: coreidentity.AuthMethodAPIKey,
 		TenantID:   "tenant-subject",
@@ -76,5 +82,14 @@ func TestTaskSubjectResolverReloadsAPIKeyAuthorization(t *testing.T) {
 	}
 	if _, err := resolver.Resolve(ctx, ref); err == nil {
 		t.Fatal("disabled API key still resolved for queued work")
+	}
+	if _, err := pool.Exec(ctx, `UPDATE ai_api_keys SET status = 'active' WHERE id = $1::uuid`, keyID); err != nil {
+		t.Fatalf("re-enable key: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE iam_tenants SET status = 'suspended' WHERE tenant_id = 'tenant-subject'`); err != nil {
+		t.Fatalf("suspend key owner tenant: %v", err)
+	}
+	if _, err := resolver.Resolve(ctx, ref); err == nil {
+		t.Fatal("active API key resolved after its tenant owner became inactive")
 	}
 }
