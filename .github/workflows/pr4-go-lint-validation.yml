@@ -1,0 +1,24 @@
+name: PR4 Go lint validation
+
+on:
+  push:
+    branches:
+      - fix/ci-go-lint-baseline
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Show gofmt delta
+        shell: bash
+        run: |
+          gofmt -w internal/ai/adapters/postgres/commercial_repo.go             internal/ai/commercial/service.go             internal/ai/adapters/postgres/usage.go             internal/ai/adapters/postgres/workspace_catalog.go             internal/ai/console/console_image_resolve.go             internal/ai/serving/execute.go             internal/ai/serving/execute_attempt.go             internal/ai/serving/settlement_state.go             internal/ai/transport/providers.go             internal/ai/transport/tenant_self.go             internal/ai/transport/upstream_model_bindings.go             internal/ai/transport/usage.go             internal/ai/transport/usage_identity_enrichment.go             internal/ai/transport/usage_query_test.go             internal/ai/transport/user_self.go             internal/cleanup/service.go
+          git diff --check
+          git diff --exit-code
