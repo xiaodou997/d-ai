@@ -57,7 +57,6 @@ func verifyRuntimeAPIKeyOwner(ctx context.Context, pool *pgxpool.Pool, row runti
 	return nil
 }
 
-
 func verifyRuntimeJWTTaskSubject(ctx context.Context, pool *pgxpool.Pool, ref asynctask.SubjectRef) (coreidentity.Subject, error) {
 	if pool == nil {
 		return coreidentity.Subject{}, errors.New("runtime JWT task database is not configured")
