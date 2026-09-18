@@ -52,7 +52,9 @@ jobs:
       - name: Assert batch refund surface is gone
         shell: bash
         run: |
-          if git grep -n -E 'BatchRefundUsage|BatchOp(Result|Error)|admin-batch-refund-usage|/api/v1/ai/usage/batch-refund|batchRefundUsage|BatchRefundUsageInputBody|BatchUsageOpOutputBody|AdminUsageBillingModuleDeps|adminUsageBillingModule|registerAdminUsageBilling|newAdminUsageBillingHandlers'; then
+          matches="$(git grep -n -E 'BatchRefundUsage|BatchOp(Result|Error)|admin-batch-refund-usage|/api/v1/ai/usage/batch-refund|batchRefundUsage|BatchRefundUsageInputBody|BatchUsageOpOutputBody|AdminUsageBillingModuleDeps|adminUsageBillingModule|registerAdminUsageBilling|newAdminUsageBillingHandlers' -- . ':(exclude).github/workflows/pr2-batch-refund-removal.yml' || true)"
+          if [[ -n "$matches" ]]; then
+            printf '%s\n' "$matches"
             echo "::error::batch usage refund surface still has tracked references"
             exit 1
           fi
