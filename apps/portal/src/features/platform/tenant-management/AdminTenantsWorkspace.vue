@@ -169,7 +169,7 @@
             <el-input v-model="form.contactEmail" placeholder="email@example.com" />
           </el-form-item>
         </div>
-        <el-form-item label="状态" prop="status">
+        <el-form-item v-if="!isEdit" label="状态" prop="status">
           <el-select v-model="form.status" class="w-full">
             <el-option label="正常启用" :value="1" />
             <el-option label="初始停用" :value="2" />
@@ -442,8 +442,7 @@ const handleSubmit = async () => {
         await platformAdminApi.updateTenant(form.tenantId, {
           tenantName: form.tenantName,
           contactPerson: form.contactPerson || undefined,
-          contactEmail: form.contactEmail || undefined,
-          status: form.status
+          contactEmail: form.contactEmail || undefined
         })
         ElMessage.success('更新成功')
       } else {
