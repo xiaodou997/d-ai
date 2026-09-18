@@ -317,6 +317,9 @@ func (h *adminHandlers) getTenant(ctx context.Context, in *tenantIDInput) (*tena
 }
 
 func (h *adminHandlers) updateTenant(ctx context.Context, in *updateTenantInput) (*successOutput, error) {
+	if in.Body.Status != 0 {
+		return nil, httpx.ErrBadRequest.WithDetail("租户状态只能通过专用状态接口修改")
+	}
 	tenantName := strings.TrimSpace(in.Body.TenantName)
 	if tenantName == "" {
 		return nil, httpx.ErrBadRequest.WithDetail("租户名称不能为空")
@@ -326,7 +329,6 @@ func (h *adminHandlers) updateTenant(ctx context.Context, in *updateTenantInput)
 		TenantName:    tenantName,
 		ContactPerson: in.Body.ContactPerson,
 		ContactEmail:  in.Body.ContactEmail,
-		Status:        adminStatusFromInt(in.Body.Status),
 	})
 	if err != nil {
 		if errors.Is(err, tenantports.ErrTenantNameTaken) {

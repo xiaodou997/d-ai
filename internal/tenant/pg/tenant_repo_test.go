@@ -239,16 +239,21 @@ func TestTenantRepositoryManagesLifecycleAtomically(t *testing.T) {
 		TenantName:    "Lifecycle Tenant Updated",
 		ContactPerson: "New Owner",
 		ContactEmail:  "new-owner@example.com",
-		Status:        "disabled",
 	})
 	if err != nil || !updated {
 		t.Fatalf("UpdateTenant = updated:%v err:%v", updated, err)
 	}
-	conflictUpdated, err := repo.UpdateTenant(ctx, tenantports.TenantUpdateCommand{TenantID: "tenant-lifecycle", TenantName: "Conflict Tenant", Status: "active"})
+	if err := pool.QueryRow(ctx, `SELECT status FROM iam_tenants WHERE tenant_id = 'tenant-lifecycle'`).Scan(&tenantStatus); err != nil {
+		t.Fatalf("read tenant status after profile update: %v", err)
+	}
+	if tenantStatus != "active" {
+		t.Fatalf("profile update changed tenant status to %q, want active", tenantStatus)
+	}
+	conflictUpdated, err := repo.UpdateTenant(ctx, tenantports.TenantUpdateCommand{TenantID: "tenant-lifecycle", TenantName: "Conflict Tenant"})
 	if err == nil || conflictUpdated || !IsTenantNameTaken(err) {
 		t.Fatalf("duplicate-name UpdateTenant = updated:%v err:%v", conflictUpdated, err)
 	}
-	updated, err = repo.UpdateTenant(ctx, tenantports.TenantUpdateCommand{TenantID: "tenant-lifecycle", TenantName: "Lifecycle Tenant Updated", Status: "active"})
+	updated, err = repo.UpdateTenant(ctx, tenantports.TenantUpdateCommand{TenantID: "tenant-lifecycle", TenantName: "Lifecycle Tenant Updated"})
 	if err != nil || !updated {
 		t.Fatalf("same-name UpdateTenant = updated:%v err:%v", updated, err)
 	}

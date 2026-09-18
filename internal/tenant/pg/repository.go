@@ -214,9 +214,9 @@ func (r *TenantRepository) UpdateTenant(ctx context.Context, input tenantports.T
 	}
 	tag, err := tx.Exec(ctx, `
 		UPDATE iam_tenants
-		SET tenant_name = $1, contact_person = $2, contact_email = $3, status = $4, updated_at = $5
-		WHERE tenant_id = $6
-	`, input.TenantName, input.ContactPerson, input.ContactEmail, input.Status, time.Now().UTC(), input.TenantID)
+		SET tenant_name = $1, contact_person = $2, contact_email = $3, updated_at = $4
+		WHERE tenant_id = $5
+	`, input.TenantName, input.ContactPerson, input.ContactEmail, time.Now().UTC(), input.TenantID)
 	if err != nil {
 		return false, err
 	}

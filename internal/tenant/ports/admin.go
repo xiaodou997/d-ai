@@ -56,13 +56,14 @@ type TenantCreateCommand struct {
 	InitialUser   *TenantInitialUserCreate
 }
 
-// TenantUpdateCommand contains mutable tenant profile and access state.
+// TenantUpdateCommand contains mutable tenant profile fields. Access-state
+// transitions must go through AdminTenantLifecycle so account cascades and
+// session revocation cannot be bypassed.
 type TenantUpdateCommand struct {
 	TenantID      string
 	TenantName    string
 	ContactPerson string
 	ContactEmail  string
-	Status        string
 }
 
 // AdminTenantWriter owns tenant lifecycle persistence. Account activation is
