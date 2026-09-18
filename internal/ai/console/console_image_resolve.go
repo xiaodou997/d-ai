@@ -555,7 +555,6 @@ func decodePersistedConsoleImageEditRequest(inputPayload []byte) (imageedit.Requ
 	return req, nil
 }
 
-
 func effectiveConsoleImageResponseFormat(value string) string {
 	value = strings.TrimSpace(value)
 	if value == "" {
