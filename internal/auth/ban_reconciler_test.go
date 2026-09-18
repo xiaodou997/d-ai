@@ -105,14 +105,20 @@ func TestBanReconcilerTreatsEveryNonActiveDatabaseStateAsBanned(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if users["ban-active-user"] || !users["ban-locked-user"] || !users["ban-deleted-user"] {
+	_, activeUserBanned := users["ban-active-user"]
+	_, lockedUserBanned := users["ban-locked-user"]
+	_, deletedUserBanned := users["ban-deleted-user"]
+	if activeUserBanned || !lockedUserBanned || !deletedUserBanned {
 		t.Fatalf("true banned users = %#v", users)
 	}
 	tenants, err := r.trueBannedTenants(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if tenants["ban-active-tenant"] || !tenants["ban-suspended-tenant"] || !tenants["ban-deleting-tenant"] {
+	_, activeTenantBanned := tenants["ban-active-tenant"]
+	_, suspendedTenantBanned := tenants["ban-suspended-tenant"]
+	_, deletingTenantBanned := tenants["ban-deleting-tenant"]
+	if activeTenantBanned || !suspendedTenantBanned || !deletingTenantBanned {
 		t.Fatalf("true banned tenants = %#v", tenants)
 	}
 }
