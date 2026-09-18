@@ -75,6 +75,11 @@ jobs:
           go run ./cmd/openapi
           git diff --exit-code contracts/openapi.yaml
 
+      - name: Regenerate authorization matrix
+        run: |
+          go run ./cmd/checkauthz
+          git diff --exit-code docs/AUTHORIZATION_MATRIX.md
+
       - name: Install Portal dependencies
         run: bun install --frozen-lockfile
 
@@ -86,5 +91,8 @@ jobs:
       - name: Portal typecheck
         run: bun run typecheck
 
-      - name: Targeted Portal billing facade test
-        run: bunx vitest run apps/portal/src/api/platformAdminBilling.test.ts
+      - name: Targeted Portal contract and billing tests
+        run: |
+          bunx vitest run \
+            apps/portal/scripts/check-openapi-contract.test.ts \
+            apps/portal/src/api/platformAdminBilling.test.ts
