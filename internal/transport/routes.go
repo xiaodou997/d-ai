@@ -448,11 +448,11 @@ type adminEndUsersModule struct {
 }
 
 type platformAdminModule struct {
-	tenants      adminTenantModule
-	users        adminUsersModule
-	finance      adminFinanceModule
-	dashboard    adminDashboardModule
-	endUsers     adminEndUsersModule
+	tenants   adminTenantModule
+	users     adminUsersModule
+	finance   adminFinanceModule
+	dashboard adminDashboardModule
+	endUsers  adminEndUsersModule
 }
 
 type aiModule struct {

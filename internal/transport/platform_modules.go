@@ -147,11 +147,11 @@ type AdminEndUsersModuleDeps struct {
 
 // PlatformAdminModuleDeps groups administrator routes by use case.
 type PlatformAdminModuleDeps struct {
-	Tenants      AdminTenantModuleDeps
-	Users        AdminUsersModuleDeps
-	Finance      AdminFinanceModuleDeps
-	Dashboard    AdminDashboardModuleDeps
-	EndUsers     AdminEndUsersModuleDeps
+	Tenants   AdminTenantModuleDeps
+	Users     AdminUsersModuleDeps
+	Finance   AdminFinanceModuleDeps
+	Dashboard AdminDashboardModuleDeps
+	EndUsers  AdminEndUsersModuleDeps
 }
 
 // PaymentModuleDeps contains platform payment routes and their callback
