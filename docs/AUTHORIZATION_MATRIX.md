@@ -86,7 +86,6 @@ The matrix is a review artifact and a generation gate. Middleware and applicatio
 | `PUT` | `/api/v1/admin/wechat-config` | `admin-update-wechat-config` | `platform_admin` | `global/resource` |
 | `GET` | `/api/v1/admin/withdrawals` | `admin-list-withdrawals` | `platform_admin` | `global/resource` |
 | `POST` | `/api/v1/admin/withdrawals` | `admin-create-withdrawal` | `platform_admin` | `global/resource` |
-| `POST` | `/api/v1/ai/usage/batch-refund` | `admin-batch-refund-usage` | `platform_admin` | `global/resource` |
 | `POST` | `/api/v1/ai/usage/refund` | `admin-refund-usage` | `platform_admin` | `global/resource` |
 | `GET` | `/api/v1/analytics/consumption-trend` | `admin-consumption-trend` | `platform_admin` | `global/resource` |
 | `GET` | `/api/v1/analytics/daily-trend` | `ai-list-daily-trend` | `platform_admin` | `global/resource` |
