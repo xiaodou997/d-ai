@@ -5,6 +5,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"xiaodou/dai/internal/dbtest"
 )
 
 func TestBanReconcilerLifecycleIsIdempotent(t *testing.T) {
@@ -68,5 +70,50 @@ func TestBanReconcilerStopCanRetryAfterDeadline(t *testing.T) {
 	case <-retryDone:
 	case <-time.After(time.Second):
 		t.Fatal("retry Stop did not finish after reconcile loop exited")
+	}
+}
+
+
+func TestBanReconcilerTreatsEveryNonActiveDatabaseStateAsBanned(t *testing.T) {
+	ctx := context.Background()
+	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 2})
+	if err != nil {
+		t.Skipf("database unavailable: %v", err)
+	}
+	t.Cleanup(func() { _ = cleanup(context.Background()) })
+
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO iam_tenants (tenant_id, tenant_name, status)
+		VALUES
+		  ('ban-active-tenant', 'Active Tenant', 'active'),
+		  ('ban-suspended-tenant', 'Suspended Tenant', 'suspended'),
+		  ('ban-deleting-tenant', 'Deleting Tenant', 'deleting')
+	`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO iam_accounts (user_id, username, password_hash, user_type, status)
+		VALUES
+		  ('ban-active-user', 'ban-active-user', 'unused', 2, 'active'),
+		  ('ban-locked-user', 'ban-locked-user', 'unused', 4, 'locked'),
+		  ('ban-deleted-user', 'ban-deleted-user', 'unused', 4, 'deleted')
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	r := NewBanReconciler(pool, nil, nil, time.Minute)
+	users, err := r.trueBannedUsers(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if users["ban-active-user"] || !users["ban-locked-user"] || !users["ban-deleted-user"] {
+		t.Fatalf("true banned users = %#v", users)
+	}
+	tenants, err := r.trueBannedTenants(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tenants["ban-active-tenant"] || !tenants["ban-suspended-tenant"] || !tenants["ban-deleting-tenant"] {
+		t.Fatalf("true banned tenants = %#v", tenants)
 	}
 }
