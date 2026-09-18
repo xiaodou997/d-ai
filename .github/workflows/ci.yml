@@ -297,8 +297,11 @@ jobs:
         run: |
           mkdir -p release-assets
           tar -C release -czf "release-assets/d-ai-v${RELEASE_VERSION}-linux-amd64.tar.gz" .
-          sha256sum "release-assets/d-ai-v${RELEASE_VERSION}-linux-amd64.tar.gz" > \
-            "release-assets/d-ai-v${RELEASE_VERSION}-linux-amd64.tar.gz.sha256"
+          (
+            cd release-assets
+            sha256sum "d-ai-v${RELEASE_VERSION}-linux-amd64.tar.gz" > \
+              "d-ai-v${RELEASE_VERSION}-linux-amd64.tar.gz.sha256"
+          )
           cp release/SBOM.spdx.json release/PROVENANCE.json release/SHA256SUMS release-assets/
 
       - name: Upload release assets
