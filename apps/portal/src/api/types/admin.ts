@@ -471,20 +471,6 @@ export interface DashboardAlertsOutput {
   failedTransactions: FailedTxAlert[];
 }
 
-// ---- 批量使用记录退款结果（batch-refund）----
-export interface BatchOpError {
-  requestId: string;
-  reason: string;
-}
-export interface BatchOpResult {
-  succeeded: string[];
-  failed: BatchOpError[];
-  totalTenantUsd: number;
-  totalUserUsd: number;
-  successCount: number;
-  failCount: number;
-}
-
 // ---- JWT 密钥（GET /api/v1/jwt-keys，对应后端 auth.KeyInfo）----
 export interface JwtKeyItem {
   id: number;
