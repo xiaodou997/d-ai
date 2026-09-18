@@ -19,17 +19,27 @@ func NewRecentAuthService(redisClient *redis.Client) *RecentAuthService {
 	return &RecentAuthService{redis: redisClient, ttl: recentAuthTTL}
 }
 
-func (s *RecentAuthService) Mark(ctx context.Context, userID, method string) error {
+func (s *RecentAuthService) Mark(ctx context.Context, userID, sessionID, method string) error {
 	if s == nil || s.redis == nil {
 		return fmt.Errorf("recent authentication redis is unavailable")
 	}
-	return s.redis.Set(ctx, "dai:auth:recent:"+userID, method, s.ttl).Err()
+	if userID == "" || sessionID == "" {
+		return fmt.Errorf("recent authentication session is missing")
+	}
+	return s.redis.Set(ctx, recentAuthKey(userID, sessionID), method, s.ttl).Err()
 }
 
-func (s *RecentAuthService) Check(ctx context.Context, userID string) (bool, error) {
+func (s *RecentAuthService) Check(ctx context.Context, userID, sessionID string) (bool, error) {
 	if s == nil || s.redis == nil {
 		return false, fmt.Errorf("recent authentication redis is unavailable")
 	}
-	value, err := s.redis.Exists(ctx, "dai:auth:recent:"+userID).Result()
+	if userID == "" || sessionID == "" {
+		return false, fmt.Errorf("recent authentication session is missing")
+	}
+	value, err := s.redis.Exists(ctx, recentAuthKey(userID, sessionID)).Result()
 	return value > 0, err
+}
+
+func recentAuthKey(userID, sessionID string) string {
+	return "dai:auth:recent:" + userID + ":" + sessionID
 }

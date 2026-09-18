@@ -106,7 +106,7 @@ func requireRecentAuth(api huma.API, recent *auth.RecentAuthService) func(huma.C
 			_ = huma.WriteErr(api, ctx, http.StatusServiceUnavailable, "近期认证服务不可用")
 			return
 		}
-		valid, err := recent.Check(ctx.Context(), claims.UserID)
+		valid, err := recent.Check(ctx.Context(), claims.UserID, claims.SessionID)
 		if err != nil {
 			_ = huma.WriteErr(api, ctx, http.StatusServiceUnavailable, "近期认证服务不可用")
 			return

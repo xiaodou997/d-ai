@@ -89,7 +89,9 @@ func (s *SessionService) Create(ctx context.Context, principal Principal) (*Toke
 	if err := tx.Commit(ctx); err != nil {
 		return nil, err
 	}
-	return s.tokenPair(access, raw, s.refreshTTL), nil
+	pair := s.tokenPair(access, raw, s.refreshTTL)
+	pair.SessionID = sessionID.String()
+	return pair, nil
 }
 
 func (s *SessionService) Rotate(ctx context.Context, raw string) (*TokenPair, Principal, error) {
@@ -202,7 +204,9 @@ func (s *SessionService) Rotate(ctx context.Context, raw string) (*TokenPair, Pr
 	if err := tx.Commit(ctx); err != nil {
 		return nil, zero, err
 	}
-	return s.tokenPair(access, newRaw, time.Until(sessionExpiresAt)), principal, nil
+	pair := s.tokenPair(access, newRaw, time.Until(sessionExpiresAt))
+	pair.SessionID = sessionID.String()
+	return pair, principal, nil
 }
 
 func (s *SessionService) Revoke(ctx context.Context, sessionID, reason string) error {

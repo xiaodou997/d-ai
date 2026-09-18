@@ -322,9 +322,6 @@ func (h *authHandlers) login(ctx context.Context, input *loginInput) (*authToken
 		}
 		return &authTokenOutput{Body: authTokenResponse{MFARequired: true, MFAChallengeToken: challenge}}, nil
 	}
-	if h.recentAuth == nil || h.recentAuth.Mark(ctx, p.UserID, "password") != nil {
-		return nil, httpx.ErrUnavailable.WithDetail("近期认证服务暂不可用，请稍后重试")
-	}
 	pair, err := h.sessions.Create(ctx, auth.Principal{
 		UserID: p.UserID, Username: p.Username, TenantID: p.TenantID,
 		UserType: p.UserType, UserTypeDisplay: p.UserTypeDisplay,
@@ -337,6 +334,12 @@ func (h *authHandlers) login(ctx context.Context, input *loginInput) (*authToken
 			Decision: "error", ReasonCode: "token_generation_failed", ReasonMessage: "生成登录凭证失败",
 		})
 		return nil, httpx.ErrInternal.WithCause(err)
+	}
+	if h.recentAuth == nil || h.recentAuth.Mark(ctx, p.UserID, pair.SessionID, "password") != nil {
+		if pair.SessionID != "" {
+			_ = h.sessions.Revoke(ctx, pair.SessionID, "recent_auth_unavailable")
+		}
+		return nil, httpx.ErrUnavailable.WithDetail("近期认证服务暂不可用，请稍后重试")
 	}
 	h.audit(ctx, authports.AuditEvent{
 		EventType: "user_login", PrincipalType: principalType(p.UserType), UserID: p.UserID,
@@ -381,12 +384,15 @@ func (h *authHandlers) verifyMFA(ctx context.Context, input *mfaVerifyInput) (*a
 	if err := h.mfaLimiter.Reset(ctx, dimensions); err != nil {
 		return nil, httpx.ErrUnavailable.WithDetail("MFA 服务暂不可用，请稍后重试")
 	}
-	if h.recentAuth == nil || h.recentAuth.Mark(ctx, principal.UserID, "totp") != nil {
-		return nil, httpx.ErrUnavailable.WithDetail("近期认证服务暂不可用，请稍后重试")
-	}
 	pair, err := h.sessions.Create(ctx, principal)
 	if err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
+	}
+	if h.recentAuth == nil || h.recentAuth.Mark(ctx, principal.UserID, pair.SessionID, "totp") != nil {
+		if pair.SessionID != "" {
+			_ = h.sessions.Revoke(ctx, pair.SessionID, "recent_auth_unavailable")
+		}
+		return nil, httpx.ErrUnavailable.WithDetail("近期认证服务暂不可用，请稍后重试")
 	}
 	h.audit(ctx, authports.AuditEvent{EventType: "mfa_verify", PrincipalType: "admin", UserID: principal.UserID, Decision: "success"})
 	return &authTokenOutput{

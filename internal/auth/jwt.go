@@ -50,6 +50,7 @@ type Principal struct {
 
 // TokenPair Token 对（Access Token + Refresh Token）
 type TokenPair struct {
+	SessionID        string `json:"-"`
 	AccessToken      string `json:"accessToken"`
 	RefreshToken     string `json:"refreshToken"`
 	ExpiresIn        int64  `json:"expiresIn"`

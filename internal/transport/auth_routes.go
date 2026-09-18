@@ -288,7 +288,7 @@ func registerAuthProtected(api huma.API, d authModule, mw huma.Middlewares) {
 		if err := mfaConfirmLimiter.Reset(ctx, dimensions); err != nil {
 			return nil, httpx.ErrUnavailable.WithDetail("MFA 服务暂不可用，请稍后重试")
 		}
-		if d.RecentAuth == nil || d.RecentAuth.Mark(ctx, claims.UserID, "totp_enrollment") != nil {
+		if d.RecentAuth == nil || d.RecentAuth.Mark(ctx, claims.UserID, claims.SessionID, "totp_enrollment") != nil {
 			return nil, httpx.ErrUnavailable.WithDetail("近期认证服务暂不可用")
 		}
 		return &messageOutput{Body: struct {
@@ -338,7 +338,7 @@ func registerAuthProtected(api huma.API, d authModule, mw huma.Middlewares) {
 		if err := recentAuthLimiter.Reset(ctx, dimensions); err != nil {
 			return nil, httpx.ErrUnavailable.WithDetail("重新认证服务暂不可用，请稍后重试")
 		}
-		if d.RecentAuth == nil || d.RecentAuth.Mark(ctx, claims.UserID, "recent_auth") != nil {
+		if d.RecentAuth == nil || d.RecentAuth.Mark(ctx, claims.UserID, claims.SessionID, "recent_auth") != nil {
 			return nil, httpx.ErrUnavailable.WithDetail("近期认证服务暂不可用")
 		}
 		return &messageOutput{Body: struct {
