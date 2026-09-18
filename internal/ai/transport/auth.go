@@ -133,7 +133,7 @@ func requireRecentAuth(api huma.API, recent *auth.RecentAuthService) func(huma.C
 			huma.WriteErr(api, ctx, http.StatusServiceUnavailable, "recent authentication is unavailable")
 			return
 		}
-		valid, err := recent.Check(ctx.Context(), claims.UserID)
+		valid, err := recent.Check(ctx.Context(), claims.UserID, claims.SessionID)
 		if err != nil {
 			huma.WriteErr(api, ctx, http.StatusServiceUnavailable, "recent authentication is unavailable")
 			return

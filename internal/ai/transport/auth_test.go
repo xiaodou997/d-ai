@@ -109,7 +109,7 @@ func TestPlatformUserAuthRecentAuthenticationOnlyBlocksMutations(t *testing.T) {
 	if response := api.Get("/read", "Authorization: Bearer token"); response.Code != http.StatusOK {
 		t.Fatalf("read without recent auth status = %d, want %d", response.Code, http.StatusOK)
 	}
-	if err := recent.Mark(context.Background(), "admin-1", "test"); err != nil {
+	if err := recent.Mark(context.Background(), "admin-1", "session-1", "test"); err != nil {
 		t.Fatal(err)
 	}
 	if response := api.Post("/write", "Authorization: Bearer token"); response.Code != http.StatusOK {

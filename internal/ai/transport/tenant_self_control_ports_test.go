@@ -63,7 +63,7 @@ func TestTenantSelfAPIKeyStaticRouteWinsOverPlatformDynamicRoute(t *testing.T) {
 	client := redis.NewClient(&redis.Options{Addr: mini.Addr()})
 	t.Cleanup(func() { _ = client.Close() })
 	recent := auth.NewRecentAuthService(client)
-	if err := recent.Mark(context.Background(), "user-1", "test"); err != nil {
+	if err := recent.Mark(context.Background(), "user-1", "session-1", "test"); err != nil {
 		t.Fatal(err)
 	}
 	RegisterTenantSelfControl(api, TenantSelfControlHTTPDeps{
