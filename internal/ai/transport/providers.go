@@ -457,4 +457,3 @@ func jsonObjectOrNull(b []byte) json.RawMessage {
 	}
 	return json.RawMessage(b)
 }
-
