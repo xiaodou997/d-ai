@@ -176,9 +176,8 @@ func npmPackagesFromNodeModules(root string) ([]spdxPackage, error) {
 	refs := make([]packageRef, 0)
 	seenDirs := make(map[string]struct{})
 	var scanNodeModules func(string) error
-	var scanPackage func(string) error
 
-	scanPackage = func(dir string) error {
+	scanPackage := func(dir string) error {
 		realDir, err := filepath.EvalSymlinks(dir)
 		if err != nil {
 			if os.IsNotExist(err) {
