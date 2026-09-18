@@ -85,6 +85,38 @@ func assertWebhookNotification(t *testing.T, pool *pgxpool.Pool, taskID, event s
 	}
 }
 
+func TestClaimPreservesJWTAuthenticationReference(t *testing.T) {
+	s, _ := openStore(t, 2)
+	ctx := context.Background()
+	rec := insertRecord{
+		Type: probeType,
+		SubjectRef: SubjectRef{
+			AuthMethod:           identity.AuthMethodJWT,
+			TenantID:             "tenant-jwt-ref",
+			UserID:               "user-jwt-ref",
+			JWTAuthUserID:        "user-jwt-ref",
+			JWTAuthUserType:      4,
+			JWTSessionID:         "82000000-0000-0000-0000-000000000001",
+			JWTCredentialVersion: 7,
+		},
+		ModelCode:   "gpt-image-1",
+		Input:       []byte(`{"prompt":"persist auth ref"}`),
+		MaxAttempts: 1,
+		ExpiresAt:   time.Now().Add(time.Hour),
+	}
+	if _, inserted, err := s.insert(ctx, rec); err != nil || !inserted {
+		t.Fatalf("insert JWT task: inserted=%v err=%v", inserted, err)
+	}
+
+	claimed, ok, err := s.claim(ctx, []string{probeType}, 10, "jwt-ref-worker", claimLease)
+	if err != nil || !ok {
+		t.Fatalf("claim JWT task: ok=%v err=%v", ok, err)
+	}
+	if claimed.SubjectRef != rec.SubjectRef {
+		t.Fatalf("claimed JWT subject ref = %#v, want %#v", claimed.SubjectRef, rec.SubjectRef)
+	}
+}
+
 // TestClaimIsExclusiveUnderContention is the core guarantee: FOR UPDATE SKIP
 // LOCKED must hand every task to exactly one worker. Without it, two replicas
 // would run the same task twice and bill the customer twice.
