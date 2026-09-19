@@ -281,11 +281,11 @@ func (s *Service) UpdateEndpoint(ctx context.Context, accountID, endpointID stri
 	if err != nil {
 		return domain.UpstreamAccountEndpoint{}, err
 	}
-	normalized.ExtraHeaders, err = preserveRedactedExtraHeaders(current.ExtraHeaders, normalized.ExtraHeaders)
+	normalized.ExtraHeaders, err = encryptSensitiveExtraHeaders(normalized.ExtraHeaders, s.encrypt)
 	if err != nil {
 		return domain.UpstreamAccountEndpoint{}, err
 	}
-	normalized.ExtraHeaders, err = encryptSensitiveExtraHeaders(normalized.ExtraHeaders, s.encrypt)
+	normalized.ExtraHeaders, err = preserveRedactedExtraHeaders(current.ExtraHeaders, normalized.ExtraHeaders)
 	if err != nil {
 		return domain.UpstreamAccountEndpoint{}, err
 	}
@@ -495,12 +495,6 @@ func encryptSensitiveExtraHeaders(raw []byte, encrypt Encryptor) ([]byte, error)
 	changed := false
 	for key, value := range headers {
 		if !IsSensitiveHeaderKey(key) || value == "" || value == RedactedHeaderValue {
-			continue
-		}
-		// Existing protected values only reach this path through the redacted
-		// placeholder preservation flow. New caller-supplied values are always
-		// encrypted below.
-		if strings.HasPrefix(value, "enc:v1:") {
 			continue
 		}
 		if encrypt == nil {

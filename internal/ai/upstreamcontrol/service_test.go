@@ -327,6 +327,26 @@ func TestCreateEndpointEncryptsSensitiveHeaders(t *testing.T) {
 	}
 }
 
+func TestCreateEndpointDoesNotTrustCiphertextLookingInput(t *testing.T) {
+	repo := &repoStub{}
+	svc := New(repo, func(plaintext string) (string, error) { return "protected:" + plaintext, nil })
+	_, err := svc.CreateEndpoint(t.Context(), "account-1", domain.UpstreamAccountEndpointWrite{
+		APIFormat:    domain.ProtocolOpenAIResponses,
+		BaseURL:      "https://api.example",
+		ExtraHeaders: []byte(`{"Authorization":"enc:v1:not-actually-ciphertext"}`),
+	})
+	if err != nil {
+		t.Fatalf("CreateEndpoint() error = %v", err)
+	}
+	var stored map[string]string
+	if err := json.Unmarshal(repo.lastEndpointWrite.ExtraHeaders, &stored); err != nil {
+		t.Fatal(err)
+	}
+	if stored["Authorization"] != "protected:enc:v1:not-actually-ciphertext" {
+		t.Fatalf("ciphertext-looking caller value bypassed encryption: %q", stored["Authorization"])
+	}
+}
+
 func TestCreateEndpointRejectsNonStringHeaderValues(t *testing.T) {
 	svc := New(&repoStub{}, nil)
 	_, err := svc.CreateEndpoint(t.Context(), "account-1", domain.UpstreamAccountEndpointWrite{
@@ -342,7 +362,7 @@ func TestCreateEndpointRejectsNonStringHeaderValues(t *testing.T) {
 func TestUpdateEndpointPreservesRedactedSensitiveHeaders(t *testing.T) {
 	repo := &repoStub{endpoints: []domain.UpstreamAccountEndpoint{{
 		ID: "endpoint-1", APIFormat: domain.ProtocolOpenAIResponses, Status: domain.EndpointStatusActive,
-		ExtraHeaders: []byte(`{"Authorization":"real-secret","X-Trace":"old"}`),
+		ExtraHeaders: []byte(`{"Authorization":"encrypted:real-secret","X-Trace":"old"}`),
 	}}}
 	svc := New(repo, func(plaintext string) (string, error) { return "encrypted:" + plaintext, nil })
 	_, err := svc.UpdateEndpoint(t.Context(), "account-1", "endpoint-1", domain.UpstreamAccountEndpointWrite{
