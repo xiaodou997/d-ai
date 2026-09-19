@@ -392,9 +392,9 @@ func (s *JWTService) signClaims(claims Claims) (string, error) {
 }
 
 // SignDetached signs a domain-separated message with the current RS256 key.
- // The returned kid is published through the existing JWKS endpoint. Keeping
- // this primitive detached lets non-JWT protocols reuse the key lifecycle
- // without minting a bearer token or exposing private key material.
+// The returned kid is published through the existing JWKS endpoint. Keeping
+// this primitive detached lets non-JWT protocols reuse the key lifecycle
+// without minting a bearer token or exposing private key material.
 func (s *JWTService) SignDetached(message []byte) (string, []byte, error) {
 	s.mu.RLock()
 	activeKey := s.activeKey

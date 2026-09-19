@@ -72,9 +72,9 @@ func TestWebhookAddressGuardRejectsNonPublicNetworks(t *testing.T) {
 
 func TestHTTPWebhookSenderIdentifiesDAIAndPreservesBody(t *testing.T) {
 	const (
-		taskID = "00000000-0000-0000-0000-000000000001"
+		taskID     = "00000000-0000-0000-0000-000000000001"
 		deliveryID = "00000000-0000-0000-0000-000000000002"
-		timestamp = int64(1_700_000_000)
+		timestamp  = int64(1_700_000_000)
 	)
 	payload := []byte(`{"source":"D-AI","event":"task.completed","task_id":"` + taskID + `"}`)
 	signature := "v1=" + base64.RawURLEncoding.EncodeToString([]byte("test-signature"))
