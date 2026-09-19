@@ -52,11 +52,7 @@ jobs:
 
       - name: Go formatting
         run: |
-          files="$(gofmt -l .)"
-          if [ -n "$files" ]; then
-            printf '%s\n' "$files"
-            exit 1
-          fi
+          test -z "$(gofmt -l .)"
 
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v9.3.0
