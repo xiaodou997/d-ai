@@ -114,6 +114,9 @@ func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisCl
 	databaseHealth := aiadapters.NewHealthProbe(pool)
 	identityEnrichmentFailures := aiobservability.NewIdentityEnrichmentLogger(appLogger)
 	providerSecrets := secret.NewProviderKeyCodec(cfg.Security.SecretMasterKey)
+	if err := aiadapters.ProtectSensitiveEndpointHeaders(context.Background(), pool); err != nil {
+		return nil, fmt.Errorf("protect upstream endpoint secrets: %w", err)
+	}
 
 	priceBookSvc := billingcontrol.New(
 		aiadapters.NewPriceBookRepo(q, pool),

@@ -246,7 +246,7 @@ func exportUpstreamAccounts(ctx context.Context, d UpstreamAccountManagementHTTP
 			Status:            portableUpstreamAccountStatus(account.Status),
 			Endpoints:         make([]upstreamAccountTransferEndpointDTO, 0, len(account.Endpoints)),
 		}
-		for _, endpoint := range account.Endpoints {
+		for _, endpoint := range secretRow.Endpoints {
 			item.Endpoints = append(item.Endpoints, upstreamAccountTransferEndpointDTO{
 				APIFormat:    string(endpoint.APIFormat),
 				BaseURL:      endpoint.BaseURL,

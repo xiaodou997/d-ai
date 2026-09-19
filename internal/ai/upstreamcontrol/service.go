@@ -48,6 +48,10 @@ func (s *Service) CreateAccount(ctx context.Context, in CreateAccountInput) (dom
 	if err != nil {
 		return domain.UpstreamAccount{}, err
 	}
+	endpoints, err = encryptSensitiveEndpointWrites(endpoints, s.encrypt)
+	if err != nil {
+		return domain.UpstreamAccount{}, err
+	}
 	if in.ConcurrencyLimit != nil && *in.ConcurrencyLimit <= 0 {
 		return domain.UpstreamAccount{}, domain.NewValidationError("concurrency_limit", "concurrency_limit must be greater than zero")
 	}
@@ -257,6 +261,10 @@ func (s *Service) CreateEndpoint(ctx context.Context, accountID string, write do
 	if err := rejectUnboundRedactedHeaders(normalized.ExtraHeaders); err != nil {
 		return domain.UpstreamAccountEndpoint{}, err
 	}
+	normalized.ExtraHeaders, err = encryptSensitiveExtraHeaders(normalized.ExtraHeaders, s.encrypt)
+	if err != nil {
+		return domain.UpstreamAccountEndpoint{}, err
+	}
 	if err := s.ensureEndpointFormatAvailable(ctx, accountID, "", normalized.APIFormat); err != nil {
 		return domain.UpstreamAccountEndpoint{}, err
 	}
@@ -274,6 +282,10 @@ func (s *Service) UpdateEndpoint(ctx context.Context, accountID, endpointID stri
 		return domain.UpstreamAccountEndpoint{}, err
 	}
 	normalized.ExtraHeaders, err = preserveRedactedExtraHeaders(current.ExtraHeaders, normalized.ExtraHeaders)
+	if err != nil {
+		return domain.UpstreamAccountEndpoint{}, err
+	}
+	normalized.ExtraHeaders, err = encryptSensitiveExtraHeaders(normalized.ExtraHeaders, s.encrypt)
 	if err != nil {
 		return domain.UpstreamAccountEndpoint{}, err
 	}
@@ -459,6 +471,56 @@ func normalizeEndpointWrite(write domain.UpstreamAccountEndpointWrite) (domain.U
 		write.ExtraHeaders, _ = json.Marshal(normalizedHeaders)
 	}
 	return write, nil
+}
+
+func encryptSensitiveEndpointWrites(items []domain.UpstreamAccountEndpointWrite, encrypt Encryptor) ([]domain.UpstreamAccountEndpointWrite, error) {
+	for i := range items {
+		protected, err := encryptSensitiveExtraHeaders(items[i].ExtraHeaders, encrypt)
+		if err != nil {
+			return nil, err
+		}
+		items[i].ExtraHeaders = protected
+	}
+	return items, nil
+}
+
+func encryptSensitiveExtraHeaders(raw []byte, encrypt Encryptor) ([]byte, error) {
+	if len(raw) == 0 {
+		return raw, nil
+	}
+	var headers map[string]string
+	if err := json.Unmarshal(raw, &headers); err != nil {
+		return nil, domain.NewValidationError("extra_headers", "extra_headers must be a JSON object")
+	}
+	changed := false
+	for key, value := range headers {
+		if !IsSensitiveHeaderKey(key) || value == "" || value == RedactedHeaderValue {
+			continue
+		}
+		// Existing protected values only reach this path through the redacted
+		// placeholder preservation flow. New caller-supplied values are always
+		// encrypted below.
+		if strings.HasPrefix(value, "enc:v1:") {
+			continue
+		}
+		if encrypt == nil {
+			return nil, domain.NewValidationError("extra_headers", "sensitive headers require configured encryption")
+		}
+		protected, err := encrypt(value)
+		if err != nil {
+			return nil, domain.NewValidationError("extra_headers", "failed to encrypt sensitive header")
+		}
+		headers[key] = protected
+		changed = true
+	}
+	if !changed {
+		return raw, nil
+	}
+	protected, err := json.Marshal(headers)
+	if err != nil {
+		return nil, domain.NewValidationError("extra_headers", "failed to encode protected headers")
+	}
+	return protected, nil
 }
 
 func preserveRedactedExtraHeaders(currentRaw, replacementRaw []byte) ([]byte, error) {

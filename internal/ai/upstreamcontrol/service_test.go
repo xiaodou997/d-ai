@@ -2,6 +2,7 @@ package upstreamcontrol
 
 import (
 	"context"
+	"encoding/json"
 	"reflect"
 	"testing"
 
@@ -303,6 +304,29 @@ func TestCreateEndpointNormalizesTransportConfiguration(t *testing.T) {
 	}
 }
 
+func TestCreateEndpointEncryptsSensitiveHeaders(t *testing.T) {
+	repo := &repoStub{}
+	svc := New(repo, func(plaintext string) (string, error) { return "enc:v1:test:" + plaintext, nil })
+	_, err := svc.CreateEndpoint(t.Context(), "account-1", domain.UpstreamAccountEndpointWrite{
+		APIFormat:    domain.ProtocolOpenAIResponses,
+		BaseURL:      "https://api.example",
+		ExtraHeaders: []byte(`{"Authorization":"Bearer top-secret","X-Trace":"trace-1"}`),
+	})
+	if err != nil {
+		t.Fatalf("CreateEndpoint() error = %v", err)
+	}
+	var stored map[string]string
+	if err := json.Unmarshal(repo.lastEndpointWrite.ExtraHeaders, &stored); err != nil {
+		t.Fatal(err)
+	}
+	if stored["Authorization"] == "Bearer top-secret" || stored["Authorization"] == "" {
+		t.Fatalf("sensitive header stored without protection: %q", stored["Authorization"])
+	}
+	if stored["X-Trace"] != "trace-1" {
+		t.Fatalf("non-sensitive header = %q, want trace-1", stored["X-Trace"])
+	}
+}
+
 func TestCreateEndpointRejectsNonStringHeaderValues(t *testing.T) {
 	svc := New(&repoStub{}, nil)
 	_, err := svc.CreateEndpoint(t.Context(), "account-1", domain.UpstreamAccountEndpointWrite{
@@ -320,7 +344,7 @@ func TestUpdateEndpointPreservesRedactedSensitiveHeaders(t *testing.T) {
 		ID: "endpoint-1", APIFormat: domain.ProtocolOpenAIResponses, Status: domain.EndpointStatusActive,
 		ExtraHeaders: []byte(`{"Authorization":"real-secret","X-Trace":"old"}`),
 	}}}
-	svc := New(repo, nil)
+	svc := New(repo, func(plaintext string) (string, error) { return "encrypted:" + plaintext, nil })
 	_, err := svc.UpdateEndpoint(t.Context(), "account-1", "endpoint-1", domain.UpstreamAccountEndpointWrite{
 		APIFormat:    domain.ProtocolOpenAIResponses,
 		BaseURL:      "https://api.example",
@@ -330,8 +354,12 @@ func TestUpdateEndpointPreservesRedactedSensitiveHeaders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpdateEndpoint() error = %v", err)
 	}
-	if string(repo.lastEndpointWrite.ExtraHeaders) != `{"Authorization":"real-secret","X-Trace":"new"}` {
-		t.Fatalf("updated headers = %s", repo.lastEndpointWrite.ExtraHeaders)
+	var stored map[string]string
+	if err := json.Unmarshal(repo.lastEndpointWrite.ExtraHeaders, &stored); err != nil {
+		t.Fatal(err)
+	}
+	if stored["Authorization"] != "encrypted:real-secret" || stored["X-Trace"] != "new" {
+		t.Fatalf("updated headers = %#v", stored)
 	}
 }
 

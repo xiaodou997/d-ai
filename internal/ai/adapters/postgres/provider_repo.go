@@ -143,7 +143,17 @@ func (r *AccountRepo) GetAccountSecret(ctx context.Context, id string) (upstream
 	}
 	secret := accountSecretFromRow(row)
 	secret.Endpoints, err = r.ListEndpoints(ctx, id)
-	return secret, err
+	if err != nil {
+		return upstreamcontrol.AccountSecret{}, err
+	}
+	for i := range secret.Endpoints {
+		decrypted, err := decryptStoredEndpointHeaders(secret.Endpoints[i].ExtraHeaders)
+		if err != nil {
+			return upstreamcontrol.AccountSecret{}, err
+		}
+		secret.Endpoints[i].ExtraHeaders = decrypted
+	}
+	return secret, nil
 }
 
 func accountSecretFromRow(row dbgen.AiUpstreamAccount) upstreamcontrol.AccountSecret {

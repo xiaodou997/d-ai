@@ -151,6 +151,13 @@ func (b *RuntimeTargetBinder) bindDirectUpstream(
 	if !ok {
 		return coreupstream.RuntimeBinding{}, coreupstream.NewRuntimeBindingRejection(coreupstream.BindingRejectionBindingInvalid, "selected endpoint is missing")
 	}
+	extraHeaders, err := decryptStoredEndpointHeaderMap(endpoint.ExtraHeaders)
+	if err != nil {
+		return coreupstream.RuntimeBinding{}, coreupstream.NewRuntimeBindingRejection(
+			coreupstream.BindingRejectionCredentialUnavailable,
+			fmt.Sprintf("decrypt endpoint header credential: %v", err),
+		)
+	}
 	providerFamily := upstreamProviderFamilyFromProtocol(selectedProtocol)
 	providerSurface, err := runtimecompat.ProtocolToSurfaceForCapability(selectedProtocol, req.Capability)
 	if err != nil {
@@ -214,7 +221,7 @@ func (b *RuntimeTargetBinder) bindDirectUpstream(
 		EndpointAuthScheme: endpoint.AuthScheme,
 		EndpointAuthHeader: endpoint.AuthHeader,
 		APIKeyCiphertext:   apiKey,
-		ExtraHeaders:       endpoint.ExtraHeaders,
+		ExtraHeaders:       extraHeaders,
 		CostPriceBookID:    uuidToString(row.PriceBookID),
 		TenantMultiplier:   costMultiplier,
 		CostPer1kTokens:    costPer1k,
