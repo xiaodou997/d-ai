@@ -24,7 +24,7 @@ type proxyNodeBody struct {
 	Username  string `json:"username,omitempty" required:"false"`
 	Password  string `json:"password,omitempty" required:"false"`
 	Weight    int    `json:"weight,omitempty" required:"false"`
-	Status    string `json:"status,omitempty" enum:"active,disabled" required:"false"`
+	Status    string `json:"status,omitempty" enum:"active,disabled" required:"false" doc:"状态；创建时为空默认 active，更新时为空保留当前状态"`
 }
 type proxyNodeInput struct{ Body proxyNodeBody }
 type proxyNodeUpdateInput struct {

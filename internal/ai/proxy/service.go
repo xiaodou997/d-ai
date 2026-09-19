@@ -100,6 +100,7 @@ func (s *Service) Upsert(ctx context.Context, id string, input UpsertInput, acto
 	input.ProxyType = strings.ToLower(strings.TrimSpace(input.ProxyType))
 	input.Endpoint = strings.TrimSpace(input.Endpoint)
 	input.Status = strings.ToLower(strings.TrimSpace(input.Status))
+	statusSet := input.Status != ""
 	if input.Name == "" || input.ProxyType == "" || input.Endpoint == "" {
 		return Node{}, fmt.Errorf("%w: name, proxyType and endpoint are required", ErrInvalidInput)
 	}
@@ -155,8 +156,10 @@ func (s *Service) Upsert(ctx context.Context, id string, input UpsertInput, acto
 		ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, proxy_type = EXCLUDED.proxy_type,
 		 endpoint = EXCLUDED.endpoint, username = EXCLUDED.username,
 		 proxy_password_enc = CASE WHEN $10 THEN EXCLUDED.proxy_password_enc ELSE ai_proxy_nodes.proxy_password_enc END,
-		 weight = EXCLUDED.weight, status = EXCLUDED.status, updated_at = now()`,
-		id, input.Name, input.ProxyType, input.Endpoint, input.Username, encrypted, input.Weight, input.Status, actor, input.Password != "")
+		 weight = EXCLUDED.weight,
+		 status = CASE WHEN $11 THEN EXCLUDED.status ELSE ai_proxy_nodes.status END,
+		 updated_at = now()`,
+		id, input.Name, input.ProxyType, input.Endpoint, input.Username, encrypted, input.Weight, input.Status, actor, input.Password != "", statusSet)
 	if err != nil {
 		return Node{}, err
 	}
