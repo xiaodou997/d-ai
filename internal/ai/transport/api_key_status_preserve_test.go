@@ -8,7 +8,7 @@ import (
 
 func TestAPIKeyUpdateInputPreservesOmittedStatus(t *testing.T) {
 	write, err := apiKeyUpdateInput("tenant-preserve", "key-preserve", apiKeyWriteRequest{
-		Name: "renamed",
+		Name:    "renamed",
 		GroupID: "group-preserve",
 	})
 	if err != nil {
@@ -21,7 +21,7 @@ func TestAPIKeyUpdateInputPreservesOmittedStatus(t *testing.T) {
 
 func TestAPIKeyCreateInputStillDefaultsActive(t *testing.T) {
 	write, err := tenantAPIKeyCreateInput("tenant-create-default", apiKeyWriteRequest{
-		Name: "created",
+		Name:    "created",
 		GroupID: "group-create-default",
 	})
 	if err != nil {
