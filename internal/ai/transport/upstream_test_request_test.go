@@ -69,3 +69,17 @@ func TestCompletedToolCallIsValidDiagnosticOutputWithoutExecution(t *testing.T) 
 		t.Fatalf("result=%+v", result)
 	}
 }
+
+func TestRedactUpstreamDiagnosticSecretsRedactsCredentialHeaders(t *testing.T) {
+	got := redactUpstreamDiagnosticSecrets(
+		"provider echoed sk-main and Bearer header-secret; trace-public is safe",
+		"sk-main",
+		[]byte(`{"Authorization":"Bearer header-secret","X-Trace":"trace-public"}`),
+	)
+	if strings.Contains(got, "sk-main") || strings.Contains(got, "header-secret") {
+		t.Fatalf("diagnostic error leaked credentials: %q", got)
+	}
+	if !strings.Contains(got, "trace-public") {
+		t.Fatalf("non-sensitive diagnostic context was removed: %q", got)
+	}
+}

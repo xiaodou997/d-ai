@@ -23,6 +23,7 @@ import (
 	"xiaodou/dai/internal/ai/imagepayload"
 	"xiaodou/dai/internal/ai/routing"
 	"xiaodou/dai/internal/ai/upstreamcompat"
+	"xiaodou/dai/internal/ai/upstreamcontrol"
 	"xiaodou/dai/libs/go/httpx"
 )
 
@@ -143,6 +144,7 @@ func registerUpstreamAccountTest(api huma.API, d UpstreamDiagnosticsHTTPDeps) {
 			ImageUpstreamResponseFormat: binding.ImagePolicy.UpstreamResponseFormat,
 			Timeouts:                    domain.DefaultRouteTimeouts(domain.CapabilityType(binding.CapabilityType)),
 		})
+		result.Error = redactUpstreamDiagnosticSecrets(result.Error, apiKey, endpoint.ExtraHeaders)
 		if err := reconcileUpstreamAccountTestStatus(ctx, d.AccountHealth, d.EndpointManager, d.RuntimeHealth, in.AccountID, endpoint.ID, account.Status, result); err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -170,6 +172,27 @@ func registerUpstreamAccountTest(api huma.API, d UpstreamDiagnosticsHTTPDeps) {
 		out.Body.Error = result.Error
 		return out, nil
 	})
+}
+
+func redactUpstreamDiagnosticSecrets(message, apiKey string, extraHeaders []byte) string {
+	if message == "" {
+		return ""
+	}
+	secrets := []string{apiKey}
+	var headers map[string]string
+	if json.Unmarshal(extraHeaders, &headers) == nil {
+		for key, value := range headers {
+			if upstreamcontrol.IsSensitiveHeaderKey(key) {
+				secrets = append(secrets, value)
+			}
+		}
+	}
+	for _, secret := range secrets {
+		if secret != "" {
+			message = strings.ReplaceAll(message, secret, "[redacted]")
+		}
+	}
+	return message
 }
 
 func reconcileUpstreamAccountTestStatus(ctx context.Context, health UpstreamAccountHealthWriter, endpoints UpstreamAccountEndpointManager, runtimeHealth routing.Availability, accountID, endpointID, currentStatus string, result upstreamTestResult) error {
