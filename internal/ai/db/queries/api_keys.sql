@@ -56,14 +56,20 @@ WHERE key_hash = $1;
 
 -- name: UpdateAPIKey :one
 UPDATE ai_api_keys
-SET group_id       = $3,
-    name           = $4,
-    quota_limit    = sqlc.narg('quota_limit'),
-    status         = COALESCE(NULLIF($5, ''), status),
-    expires_at     = sqlc.narg('expires_at'),
+SET group_id       = sqlc.arg('group_id'),
+    name           = sqlc.arg('name'),
+    quota_limit    = CASE
+      WHEN sqlc.arg('quota_limit_set')::boolean THEN sqlc.narg('quota_limit')
+      ELSE quota_limit
+    END,
+    status         = COALESCE(NULLIF(sqlc.arg('status')::text, ''), status),
+    expires_at     = CASE
+      WHEN sqlc.arg('expires_at_set')::boolean THEN sqlc.narg('expires_at')
+      ELSE expires_at
+    END,
     updated_at     = now()
-WHERE id = $1
-  AND tenant_id = $2
+WHERE id = sqlc.arg('id')
+  AND tenant_id = sqlc.arg('tenant_id')
 RETURNING
   key_hash, id, owner_type, tenant_id, user_id, group_id, last_four, name,
   quota_limit, quota_used,

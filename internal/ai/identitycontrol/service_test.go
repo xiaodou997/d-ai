@@ -137,6 +137,9 @@ func TestUpdate_ConvertsCredits(t *testing.T) {
 	if repo.updateParams.QuotaLimitMicro == nil || *repo.updateParams.QuotaLimitMicro != 3 {
 		t.Fatalf("micro-USD passthrough conversion wrong: %v", repo.updateParams.QuotaLimitMicro)
 	}
+	if !repo.updateParams.QuotaLimitSet {
+		t.Fatal("non-nil quota update must mark quota_limit as present")
+	}
 }
 
 func TestUpdate_OmittedStatusPreservesLifecycleState(t *testing.T) {
@@ -149,6 +152,26 @@ func TestUpdate_OmittedStatusPreservesLifecycleState(t *testing.T) {
 	}
 	if repo.updateParams.Status != "" {
 		t.Fatalf("omitted update status = %q, want empty preserve sentinel", repo.updateParams.Status)
+	}
+	if repo.updateParams.QuotaLimitSet || repo.updateParams.ExpiresAtSet {
+		t.Fatalf("omitted nullable fields unexpectedly marked present: quota=%v expires=%v", repo.updateParams.QuotaLimitSet, repo.updateParams.ExpiresAtSet)
+	}
+}
+
+func TestUpdate_ExplicitNullNullableFieldsPropagateClearIntent(t *testing.T) {
+	repo := &mockRepo{}
+	svc := New(repo, nil, func(v string) (string, error) { return "enc:" + v, nil }, func(v string) (string, error) { return v, nil })
+	if _, err := svc.Update(context.Background(), UpdateInput{
+		ID: "k1", TenantID: "t1", GroupID: "g1", Name: "renamed",
+		QuotaLimitSet: true, ExpiresAtSet: true,
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !repo.updateParams.QuotaLimitSet || repo.updateParams.QuotaLimitMicro != nil {
+		t.Fatalf("quota clear intent = set:%v value:%v", repo.updateParams.QuotaLimitSet, repo.updateParams.QuotaLimitMicro)
+	}
+	if !repo.updateParams.ExpiresAtSet || repo.updateParams.ExpiresAt != nil {
+		t.Fatalf("expiry clear intent = set:%v value:%v", repo.updateParams.ExpiresAtSet, repo.updateParams.ExpiresAt)
 	}
 }
 

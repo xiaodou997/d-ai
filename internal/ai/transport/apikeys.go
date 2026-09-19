@@ -2,6 +2,7 @@ package transport
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
@@ -105,11 +106,30 @@ type apiKeyDTO struct {
 type apiKeyWriteRequest struct {
 	Name               string                         `json:"name" doc:"名称"`
 	GroupID            string                         `json:"group_id" doc:"密钥唯一绑定的分组 ID"`
-	QuotaLimitMicroUSD *int64                         `json:"quota_limit_micro_usd,omitempty" nullable:"true" minimum:"0" doc:"额度上限，单位 micro-USD；为空表示无限制"`
+	QuotaLimitMicroUSD *int64                         `json:"quota_limit_micro_usd,omitempty" nullable:"true" minimum:"0" doc:"额度上限，单位 micro-USD；创建时为空表示无限制；更新时字段缺省保留，显式 null 清为无限制"`
 	Status             string                         `json:"status,omitempty" enum:"active,disabled" doc:"状态；创建时为空默认 active，更新时为空保留当前状态"`
-	ExpiresAt          *int64                         `json:"expires_at,omitempty" nullable:"true" doc:"过期时间，Unix 毫秒；为空表示不过期"`
+	ExpiresAt          *int64                         `json:"expires_at,omitempty" nullable:"true" doc:"过期时间，Unix 毫秒；创建时为空表示不过期；更新时字段缺省保留，显式 null 或 0 清除过期时间"`
 	LimitPolicy        *scopedLimitPolicyWriteRequest `json:"limit_policy,omitempty" doc:"API key 独立限流策略"`
 	CreatedBy          string                         `json:"created_by,omitempty" doc:"创建人；仅创建时使用"`
+
+	quotaLimitSet bool
+	expiresAtSet  bool
+}
+
+func (r *apiKeyWriteRequest) UnmarshalJSON(data []byte) error {
+	type wire apiKeyWriteRequest
+	var decoded wire
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	*r = apiKeyWriteRequest(decoded)
+	_, r.quotaLimitSet = fields["quota_limit_micro_usd"]
+	_, r.expiresAtSet = fields["expires_at"]
+	return nil
 }
 
 type apiKeyStatusRequest struct {
@@ -631,8 +651,10 @@ func apiKeyUpdateInput(tenantID, apiKeyID string, req apiKeyWriteRequest) (ident
 		GroupID:            strings.TrimSpace(req.GroupID),
 		Name:               strings.TrimSpace(req.Name),
 		QuotaLimitMicroUSD: req.QuotaLimitMicroUSD,
+		QuotaLimitSet:      req.quotaLimitSet || req.QuotaLimitMicroUSD != nil,
 		Status:             status,
 		ExpiresAt:          expiresAt,
+		ExpiresAtSet:       req.expiresAtSet || req.ExpiresAt != nil,
 	}, nil
 }
 

@@ -858,7 +858,7 @@ components:
           description: 创建人；仅创建时使用
           type: string
         expires_at:
-          description: 过期时间，Unix 毫秒；为空表示不过期
+          description: 过期时间，Unix 毫秒；创建时为空表示不过期；更新时字段缺省保留，显式 null 或 0 清除过期时间
           format: int64
           type:
             - integer
@@ -873,7 +873,7 @@ components:
           description: 名称
           type: string
         quota_limit_micro_usd:
-          description: 额度上限，单位 micro-USD；为空表示无限制
+          description: 额度上限，单位 micro-USD；创建时为空表示无限制；更新时字段缺省保留，显式 null 清为无限制
           format: int64
           minimum: 0
           type:

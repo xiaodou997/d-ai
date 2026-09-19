@@ -108,13 +108,15 @@ func (r *APIKeyRepo) Update(ctx context.Context, p coreidentity.APIKeyUpdate) (c
 		return coreidentity.APIKey{}, "", err
 	}
 	row, err := r.q.UpdateAPIKey(ctx, dbgen.UpdateAPIKeyParams{
-		ID:         id,
-		TenantID:   p.TenantID,
-		GroupID:    groupID,
-		Name:       p.Name,
-		QuotaLimit: akInt8(p.QuotaLimitMicro),
-		Status:     p.Status,
-		ExpiresAt:  akTimestamptz(p.ExpiresAt),
+		GroupID:       groupID,
+		Name:          p.Name,
+		QuotaLimitSet: p.QuotaLimitSet,
+		QuotaLimit:    akInt8(p.QuotaLimitMicro),
+		Status:        p.Status,
+		ExpiresAtSet:  p.ExpiresAtSet,
+		ExpiresAt:     akTimestamptz(p.ExpiresAt),
+		ID:            id,
+		TenantID:      p.TenantID,
 	})
 	if err != nil {
 		return coreidentity.APIKey{}, "", err

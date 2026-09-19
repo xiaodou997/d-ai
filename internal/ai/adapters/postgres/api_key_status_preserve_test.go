@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"testing"
+	"time"
 
 	coreidentity "xiaodou/dai/internal/ai/core/identity"
 	dbgen "xiaodou/dai/internal/ai/db/gen"
@@ -21,7 +22,8 @@ func TestAPIKeyMetadataUpdateDoesNotReactivateDisabledKey(t *testing.T) {
 		tenantID    = "api-key-preserve-tenant"
 		priceBookID = "47000000-0000-0000-0000-000000000001"
 		groupID     = "47000000-0000-0000-0000-000000000002"
-		keyID       = "47000000-0000-0000-0000-000000000003"
+		keyID        = "47000000-0000-0000-0000-000000000003"
+		expiredKeyID = "47000000-0000-0000-0000-000000000004"
 	)
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO iam_tenants (tenant_id, tenant_name, status)
@@ -52,6 +54,18 @@ func TestAPIKeyMetadataUpdateDoesNotReactivateDisabledKey(t *testing.T) {
 	`, keyID, tenantID, groupID); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO ai_api_keys (
+			id, owner_type, tenant_id, group_id, key_hash, key_ciphertext,
+			last_four, name, quota_limit, status, expires_at
+		) VALUES (
+			$1::uuid, 'tenant', $2, $3::uuid, 'preserve-expired-hash',
+			'preserve-expired-ciphertext', '0004', 'Expired Key', 123, 'active',
+			now() - interval '1 hour'
+		)
+	`, expiredKeyID, tenantID, groupID); err != nil {
+		t.Fatal(err)
+	}
 
 	repo := NewAPIKeyRepo(dbgen.New(pool))
 	updated, _, err := repo.Update(ctx, coreidentity.APIKeyUpdate{
@@ -70,5 +84,29 @@ func TestAPIKeyMetadataUpdateDoesNotReactivateDisabledKey(t *testing.T) {
 	}
 	if persisted != "disabled" {
 		t.Fatalf("persisted status = %q, want disabled", persisted)
+	}
+
+	expired, _, err := repo.Update(ctx, coreidentity.APIKeyUpdate{
+		ID: expiredKeyID, TenantID: tenantID, GroupID: groupID, Name: "Renamed Expired Key",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if expired.QuotaLimitMicro == nil || *expired.QuotaLimitMicro != 123 {
+		t.Fatalf("omitted quota update = %v, want 123", expired.QuotaLimitMicro)
+	}
+	if expired.ExpiresAt == nil || !expired.ExpiresAt.Before(time.Now()) {
+		t.Fatalf("omitted expiry update = %v, want preserved past timestamp", expired.ExpiresAt)
+	}
+
+	cleared, _, err := repo.Update(ctx, coreidentity.APIKeyUpdate{
+		ID: expiredKeyID, TenantID: tenantID, GroupID: groupID, Name: "Cleared Expiry Key",
+		QuotaLimitSet: true, ExpiresAtSet: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cleared.QuotaLimitMicro != nil || cleared.ExpiresAt != nil {
+		t.Fatalf("explicit null clear = quota:%v expires:%v, want both nil", cleared.QuotaLimitMicro, cleared.ExpiresAt)
 	}
 }

@@ -388,14 +388,20 @@ func (q *Queries) TouchLastUsedAt(ctx context.Context, id pgtype.UUID) error {
 
 const updateAPIKey = `-- name: UpdateAPIKey :one
 UPDATE ai_api_keys
-SET group_id       = $3,
-    name           = $4,
-    quota_limit    = $6,
-    status         = COALESCE(NULLIF($5, ''), status),
-    expires_at     = $7,
+SET group_id       = $1,
+    name           = $2,
+    quota_limit    = CASE
+      WHEN $3::boolean THEN $4
+      ELSE quota_limit
+    END,
+    status         = COALESCE(NULLIF($5::text, ''), status),
+    expires_at     = CASE
+      WHEN $6::boolean THEN $7
+      ELSE expires_at
+    END,
     updated_at     = now()
-WHERE id = $1
-  AND tenant_id = $2
+WHERE id = $8
+  AND tenant_id = $9
 RETURNING
   key_hash, id, owner_type, tenant_id, user_id, group_id, last_four, name,
   quota_limit, quota_used,
@@ -403,13 +409,15 @@ RETURNING
 `
 
 type UpdateAPIKeyParams struct {
-	ID         pgtype.UUID        `json:"id"`
-	TenantID   string             `json:"tenant_id"`
-	GroupID    pgtype.UUID        `json:"group_id"`
-	Name       string             `json:"name"`
-	Status     string             `json:"status"`
-	QuotaLimit pgtype.Int8        `json:"quota_limit"`
-	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
+	GroupID       pgtype.UUID        `json:"group_id"`
+	Name          string             `json:"name"`
+	QuotaLimitSet bool               `json:"quota_limit_set"`
+	QuotaLimit    pgtype.Int8        `json:"quota_limit"`
+	Status        string             `json:"status"`
+	ExpiresAtSet  bool               `json:"expires_at_set"`
+	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+	ID            pgtype.UUID        `json:"id"`
+	TenantID      string             `json:"tenant_id"`
 }
 
 type UpdateAPIKeyRow struct {
@@ -433,13 +441,15 @@ type UpdateAPIKeyRow struct {
 
 func (q *Queries) UpdateAPIKey(ctx context.Context, arg UpdateAPIKeyParams) (UpdateAPIKeyRow, error) {
 	row := q.db.QueryRow(ctx, updateAPIKey,
-		arg.ID,
-		arg.TenantID,
 		arg.GroupID,
 		arg.Name,
-		arg.Status,
+		arg.QuotaLimitSet,
 		arg.QuotaLimit,
+		arg.Status,
+		arg.ExpiresAtSet,
 		arg.ExpiresAt,
+		arg.ID,
+		arg.TenantID,
 	)
 	var i UpdateAPIKeyRow
 	err := row.Scan(

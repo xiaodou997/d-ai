@@ -44,9 +44,11 @@ type APIKeyUpdate struct {
 	GroupID         string
 	Name            string
 	QuotaLimitMicro *int64
+	QuotaLimitSet   bool
 	AllowedModelIDs []string
 	Status          string
 	ExpiresAt       *time.Time
+	ExpiresAtSet    bool
 }
 
 type APIKeyRotate struct {

@@ -55,9 +55,11 @@ type UpdateInput struct {
 	GroupID            string
 	Name               string
 	QuotaLimitMicroUSD *int64
+	QuotaLimitSet      bool
 	AllowedModelIDs    []string
 	Status             string
 	ExpiresAt          *time.Time
+	ExpiresAtSet       bool
 }
 
 // Create validates input, mints a key and persists it.
@@ -142,9 +144,11 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (identity.APIKey, 
 		GroupID:         strings.TrimSpace(in.GroupID),
 		Name:            in.Name,
 		QuotaLimitMicro: cloneInt64Ptr(in.QuotaLimitMicroUSD),
+		QuotaLimitSet:   in.QuotaLimitSet || in.QuotaLimitMicroUSD != nil,
 		AllowedModelIDs: append([]string(nil), in.AllowedModelIDs...),
 		Status:          status,
 		ExpiresAt:       in.ExpiresAt,
+		ExpiresAtSet:    in.ExpiresAtSet || in.ExpiresAt != nil,
 	})
 	if err != nil {
 		return identity.APIKey{}, err
