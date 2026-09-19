@@ -16077,6 +16077,7 @@ paths:
         - meta
   /api/v1/invitations:
     get:
+      description: 返回可直接用于注册的完整邀请码，因此读取也要求近期重新认证。
       operationId: tenant-list-invitations
       parameters:
         - explode: false
