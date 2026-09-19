@@ -156,7 +156,10 @@ func (s *InviteService) CreateCode(ctx context.Context, tenantID, createdBy, des
 	if err := s.repo.Create(ctx, ic); err != nil {
 		return nil, fmt.Errorf("failed to create invitation code: %w", err)
 	}
-	s.logger.Info("Invitation code created", zap.String("code", code), zap.String("tenantId", tenantID))
+	s.logger.Info("Invitation code created",
+		zap.Int64("invitationId", ic.ID),
+		zap.String("tenantId", tenantID),
+	)
 	return ic, nil
 }
 
@@ -235,7 +238,7 @@ func (s *InviteService) RegisterUser(ctx context.Context, code, username, passwo
 	s.logger.Info("User registered via invitation code",
 		zap.String("userId", userID),
 		zap.String("tenantId", ic.TenantID),
-		zap.String("inviteCode", normalizedCode),
+		zap.Int64("invitationId", ic.ID),
 	)
 	return &RegisteredEndUser{
 		UserID:   userID,

@@ -128,11 +128,13 @@ func registerTenantSelf(api huma.API, d tenantSelfModule) {
 	h := newTenantSelfHandlers(d.service)
 	tenantOnly := huma.Middlewares{userAuth(api, d.auth.JWT, d.auth.Blacklist), requireCapability(api, auth.CapabilityTenantSelf)}
 	tenantOnly = append(tenantOnly, requireRecentAuthForMutation(api, d.auth.RecentAuth))
+	invitationSecretRead := append(huma.Middlewares{}, tenantOnly...)
+	invitationSecretRead = append(invitationSecretRead, requireRecentAuth(api, d.auth.RecentAuth))
 
 	huma.Register(api, huma.Operation{OperationID: "tenant-me", Method: http.MethodGet, Path: "/api/v1/tenants/me",
 		Summary: "当前租户用户信息", Tags: []string{"tenant-self"}, Middlewares: tenantOnly}, h.me)
 	huma.Register(api, huma.Operation{OperationID: "tenant-list-invitations", Method: http.MethodGet, Path: "/api/v1/invitations",
-		Summary: "邀请码列表", Tags: []string{"tenant-self"}, Middlewares: tenantOnly}, h.listInvitations)
+		Summary: "邀请码列表", Description: "返回可直接用于注册的完整邀请码，因此读取也要求近期重新认证。", Tags: []string{"tenant-self"}, Middlewares: invitationSecretRead}, h.listInvitations)
 	huma.Register(api, huma.Operation{OperationID: "tenant-create-invitation", Method: http.MethodPost, Path: "/api/v1/invitations",
 		Summary: "创建邀请码", Tags: []string{"tenant-self"}, Middlewares: tenantOnly, DefaultStatus: http.StatusCreated}, h.createInvitation)
 	huma.Register(api, huma.Operation{OperationID: "tenant-update-invitation", Method: http.MethodPut, Path: "/api/v1/invitations/{id}",
