@@ -325,10 +325,11 @@ func (s *OAuthCredentialStore) selectRoundRobin(ctx context.Context, poolID stri
 		UPDATE ai_provider_oauth_credentials
 		SET last_used_at = now(), updated_at = now()
 		WHERE id = (
-			SELECT id
-			FROM ai_provider_oauth_credentials
-			WHERE pool_id = $1 AND status = 'active'
-			  AND (cooldown_until IS NULL OR cooldown_until <= now())
+			SELECT c.id
+			FROM ai_provider_oauth_credentials c
+			JOIN ai_credential_pools p ON p.id = c.pool_id AND p.status = 'active'
+			WHERE c.pool_id = $1 AND c.status = 'active'
+			  AND (c.cooldown_until IS NULL OR c.cooldown_until <= now())
 			ORDER BY last_used_at ASC NULLS FIRST
 			LIMIT 1
 			FOR UPDATE SKIP LOCKED
@@ -368,6 +369,10 @@ func (s *OAuthCredentialStore) SelectPinnedCredential(
 		UPDATE ai_provider_oauth_credentials
 		SET last_used_at = now(), updated_at = now()
 		WHERE id = $1 AND pool_id = $2 AND status = 'active'
+		  AND EXISTS (
+		    SELECT 1 FROM ai_credential_pools p
+		    WHERE p.id = ai_provider_oauth_credentials.pool_id AND p.status = 'active'
+		  )
 		  AND ($3 OR cooldown_until IS NULL OR cooldown_until <= now())
 		RETURNING id, pool_id, name, provider_type, email,
 		          access_token_ciphertext, refresh_token_ciphertext,
@@ -413,10 +418,11 @@ func (s *OAuthCredentialStore) listActiveWeighted(ctx context.Context, poolID st
 		       last_used_at, last_refreshed_at, last_failed_at,
 		       consecutive_fail_count, success_count, fail_count,
 		       created_at, updated_at
-		FROM ai_provider_oauth_credentials
-		WHERE pool_id = $1 AND status = 'active'
-		  AND (cooldown_until IS NULL OR cooldown_until <= now())
-		ORDER BY weight DESC`
+		FROM ai_provider_oauth_credentials c
+		JOIN ai_credential_pools p ON p.id = c.pool_id AND p.status = 'active'
+		WHERE c.pool_id = $1 AND c.status = 'active'
+		  AND (c.cooldown_until IS NULL OR c.cooldown_until <= now())
+		ORDER BY c.weight DESC`
 	return s.scanRows(ctx, q, poolID)
 }
 
@@ -537,6 +543,10 @@ func (s *OAuthCredentialStore) UpdateTokens(
 		    consecutive_fail_count   = 0,
 		    updated_at               = now()
 		WHERE id = $1 AND token_version = $5 AND status<>'disabled'
+		  AND EXISTS (
+		    SELECT 1 FROM ai_credential_pools p
+		    WHERE p.id = ai_provider_oauth_credentials.pool_id AND p.status = 'active'
+		  )
 		RETURNING token_version`,
 		credID, atCipher, rtCipher, pgExpiry, expectedVersion,
 	).Scan(&nextVersion)
@@ -562,12 +572,13 @@ func (s *OAuthCredentialStore) ListExpiring(ctx context.Context, within time.Dur
 		       last_used_at, last_refreshed_at, last_failed_at,
 		       consecutive_fail_count, success_count, fail_count,
 		       created_at, updated_at
-		FROM ai_provider_oauth_credentials
-		WHERE status = 'active'
-          AND (cooldown_until IS NULL OR cooldown_until<=now())
-		  AND refresh_token_ciphertext IS NOT NULL
-		  AND (expires_at IS NULL OR expires_at < now() + $1::interval)
-		ORDER BY expires_at ASC NULLS FIRST`
+		FROM ai_provider_oauth_credentials c
+		JOIN ai_credential_pools p ON p.id = c.pool_id AND p.status = 'active'
+		WHERE c.status = 'active'
+          AND (c.cooldown_until IS NULL OR c.cooldown_until<=now())
+		  AND c.refresh_token_ciphertext IS NOT NULL
+		  AND (c.expires_at IS NULL OR c.expires_at < now() + $1::interval)
+		ORDER BY c.expires_at ASC NULLS FIRST`
 	interval := pgtype.Interval{Microseconds: int64(within / time.Microsecond), Valid: true}
 	return s.scanRows(ctx, q, interval)
 }
@@ -812,11 +823,25 @@ func (s *OAuthCredentialStore) GetSummaryByID(ctx context.Context, credID string
 }
 
 func (s *OAuthCredentialStore) GetDecryptedByID(ctx context.Context, credID string) (*domain.OAuthCredential, error) {
-	row, err := s.GetByID(ctx, credID)
+	const q = `
+		SELECT c.id, c.pool_id, c.name, c.provider_type, c.email,
+		       c.access_token_ciphertext, c.refresh_token_ciphertext,
+		       c.token_type, c.scope, c.expires_at, c.token_version, c.auth_metadata,
+		       c.weight, c.status, c.invalid_reason, c.cooldown_until,
+		       c.last_used_at, c.last_refreshed_at, c.last_failed_at,
+		       c.consecutive_fail_count, c.success_count, c.fail_count,
+		       c.created_at, c.updated_at
+		FROM ai_provider_oauth_credentials c
+		JOIN ai_credential_pools p ON p.id = c.pool_id AND p.status = 'active'
+		WHERE c.id = $1 AND c.status <> 'disabled'`
+	rows, err := s.scanRows(ctx, q, credID)
 	if err != nil {
 		return nil, err
 	}
-	return s.decryptRow(ctx, *row)
+	if len(rows) == 0 {
+		return nil, domain.ErrNotFound
+	}
+	return s.decryptRow(ctx, rows[0])
 }
 
 // ============================================================================
