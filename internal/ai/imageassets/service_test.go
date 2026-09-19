@@ -9,8 +9,10 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"io"
+	"net"
 	"net/http"
-	"net/http/httptest"
+	"net/netip"
 	"net/url"
 	"os"
 	"path"
@@ -21,6 +23,12 @@ import (
 
 	"xiaodou/dai/internal/weborigin"
 )
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
 
 func TestImageBytesDecodesBase64PNG(t *testing.T) {
 	data := testPNG(t)
@@ -45,14 +53,19 @@ func encodeStdBase64(data []byte) string {
 
 func TestImageBytesDownloadsURL(t *testing.T) {
 	data := testPNG(t)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "image/png")
-		_, _ = w.Write(data)
-	}))
-	defer server.Close()
-
-	svc := New(Config{}, server.Client())
-	got, contentType, err := svc.imageBytes(context.Background(), responseImageItem{URL: server.URL})
+	client := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if got := req.URL.String(); got != "https://images.example/image.png" {
+			t.Fatalf("request URL = %q", got)
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"image/png"}},
+			Body:       io.NopCloser(bytes.NewReader(data)),
+			Request:    req,
+		}, nil
+	})}
+	svc := New(Config{}, client)
+	got, contentType, err := svc.imageBytes(context.Background(), responseImageItem{URL: "https://images.example/image.png"})
 	if err != nil {
 		t.Fatalf("imageBytes: %v", err)
 	}
@@ -112,6 +125,77 @@ func TestValidateDownloadURLRejectsDataAndLocalhost(t *testing.T) {
 				t.Fatal("expected url to be rejected")
 			}
 		})
+	}
+}
+
+func TestStoreOpenAIImagesResponseRejectsPrivateProviderURL(t *testing.T) {
+	svc := New(Config{StorageDir: t.TempDir()}, nil)
+	body := []byte(`{"data":[{"url":"http://127.0.0.1/private.png"}]}`)
+	_, err := svc.StoreOpenAIImagesResponse(context.Background(), Owner{TenantID: "tenant-1"}, "task-1", body)
+	if err == nil {
+		t.Fatal("provider-returned private image URL was accepted")
+	}
+}
+
+func TestImageAddressGuardRejectsNonPublicNetworks(t *testing.T) {
+	for _, raw := range []string{
+		"127.0.0.1", "10.0.0.1", "172.16.0.1", "192.168.0.1",
+		"169.254.10.1", "100.64.0.1", "0.0.0.1", "192.0.2.1",
+		"198.18.0.1", "203.0.113.1", "224.0.0.1", "255.255.255.255",
+		"::1", "fc00::1", "fec0::1", "fe80::1", "ff02::1", "2001:db8::1",
+		"64:ff9b::7f00:1", "2002:7f00:1::", "::ffff:127.0.0.1",
+	} {
+		if isPublicImageDownloadAddr(netip.MustParseAddr(raw)) {
+			t.Errorf("non-public address %s was accepted", raw)
+		}
+	}
+	for _, raw := range []string{"93.184.216.34", "2606:2800:220:1:248:1893:25c8:1946"} {
+		if !isPublicImageDownloadAddr(netip.MustParseAddr(raw)) {
+			t.Errorf("public address %s was rejected", raw)
+		}
+	}
+}
+
+func TestGuardedImageDialContextPinsResolvedAddress(t *testing.T) {
+	var dialed string
+	stop := errors.New("stop after address capture")
+	dial := guardedImageDialContext(
+		func(context.Context, string, string) ([]netip.Addr, error) {
+			return []netip.Addr{netip.MustParseAddr("93.184.216.34")}, nil
+		},
+		func(_ context.Context, _ string, address string) (net.Conn, error) {
+			dialed = address
+			return nil, stop
+		},
+	)
+	_, err := dial(context.Background(), "tcp", "images.example:443")
+	if !errors.Is(err, stop) {
+		t.Fatalf("dial error = %v, want sentinel", err)
+	}
+	if dialed != "93.184.216.34:443" {
+		t.Fatalf("dialed address = %q, want vetted IP", dialed)
+	}
+}
+
+func TestGuardedImageDialContextRejectsUnsafeDNSAnswerBeforeDial(t *testing.T) {
+	dialCalled := false
+	dial := guardedImageDialContext(
+		func(context.Context, string, string) ([]netip.Addr, error) {
+			return []netip.Addr{
+				netip.MustParseAddr("93.184.216.34"),
+				netip.MustParseAddr("127.0.0.1"),
+			}, nil
+		},
+		func(context.Context, string, string) (net.Conn, error) {
+			dialCalled = true
+			return nil, errors.New("unexpected dial")
+		},
+	)
+	if _, err := dial(context.Background(), "tcp", "images.example:443"); err == nil {
+		t.Fatal("mixed public/private DNS answer was accepted")
+	}
+	if dialCalled {
+		t.Fatal("dial happened before all resolved addresses were validated")
 	}
 }
 
