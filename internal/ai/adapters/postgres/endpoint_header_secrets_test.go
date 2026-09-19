@@ -48,8 +48,8 @@ func TestProtectSensitiveEndpointHeadersBackfillsAndSecretReaderDecrypts(t *test
 	}
 	seed, err := json.Marshal(map[string]string{
 		"Authorization": "Bearer historical-secret",
-		"X-Api-Key": oldCiphertext,
-		"X-Trace": "trace-1",
+		"X-Api-Key":     oldCiphertext,
+		"X-Trace":       "trace-1",
 	})
 	if err != nil {
 		t.Fatal(err)
