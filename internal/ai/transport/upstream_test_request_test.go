@@ -83,6 +83,7 @@ func TestRedactUpstreamDiagnosticSecretsRedactsCredentialHeaders(t *testing.T) {
 		t.Fatalf("non-sensitive diagnostic context was removed: %q", got)
 	}
 }
+
 func TestRedactUpstreamDiagnosticResultSecretsCoversSuccessfulProviderText(t *testing.T) {
 	result := upstreamTestResult{
 		ResponseContentType: "application/json; credential=sk-main",

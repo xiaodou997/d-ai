@@ -62,6 +62,7 @@ func TestRecordQuerySearchKeepsScopeAndTrimsNames(t *testing.T) {
 		t.Fatalf("invalid time window: %+v", q)
 	}
 }
+
 type debugRecordsStub struct {
 	debugPayloadCalls int
 }
