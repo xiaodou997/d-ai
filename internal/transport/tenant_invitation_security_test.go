@@ -39,10 +39,14 @@ func TestTenantInvitationListRequiresRecentAuthentication(t *testing.T) {
 	)
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO iam_tenants (tenant_id, tenant_name, status)
-		VALUES ($1, 'Invite Secret Tenant', 'active');
+		VALUES ($1, 'Invite Secret Tenant', 'active')
+	`, tenantID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `
 		INSERT INTO iam_accounts (user_id, tenant_id, username, password_hash, user_type, status)
-		VALUES ($2, $1, 'invite-secret-tenant-user', 'unused', 3, 'active')
-	`, tenantID, userID); err != nil {
+		VALUES ($1, $2, 'invite-secret-tenant-user', 'unused', 3, 'active')
+	`, userID, tenantID); err != nil {
 		t.Fatal(err)
 	}
 
