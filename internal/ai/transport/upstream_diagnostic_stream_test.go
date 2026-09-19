@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"net/url"
 	"strings"
 	"testing"
@@ -28,7 +29,7 @@ func TestUpstreamDiagnosticValidatesCompleteResponsesStream(t *testing.T) {
 		<-r.Context().Done() // completion must not wait for EOF
 	}))
 	defer server.Close()
-	result := runUpstreamAccountTest(context.Background(), NewClient(0).DiagnosticClient(), upstreamTestConfig{BaseURL: server.URL, APIFormat: string(domain.ProtocolOpenAIResponses), UpstreamModel: "model", Capability: "chat"})
+	result := runUpstreamAccountTest(context.Background(), newPrivateNetworkTestClient().DiagnosticClient(), upstreamTestConfig{BaseURL: server.URL, APIFormat: string(domain.ProtocolOpenAIResponses), UpstreamModel: "model", Capability: "chat"})
 	if !result.OK || result.ReplyText != "OK" || result.TotalTokens != 4 {
 		t.Fatalf("result=%+v", result)
 	}
@@ -62,8 +63,11 @@ func (s *diagnosticProxySelector) SelectProxy(context.Context) (*url.URL, error)
 }
 func TestDiagnosticClientUsesBusinessProxySelector(t *testing.T) {
 	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Host != "upstream.invalid" {
-			t.Errorf("host=%s", r.URL.Host)
+		if r.URL.Host != "93.184.216.34:80" {
+			t.Errorf("pinned target host=%s", r.URL.Host)
+		}
+		if r.Host != "upstream.invalid" {
+			t.Errorf("original Host header=%s", r.Host)
 		}
 		io.WriteString(w, `{"ok":true}`)
 	}))
@@ -71,6 +75,9 @@ func TestDiagnosticClientUsesBusinessProxySelector(t *testing.T) {
 	endpoint, _ := url.Parse(proxy.URL)
 	selector := &diagnosticProxySelector{url: endpoint}
 	client := NewClient(0)
+	client.lookupNetIP = func(context.Context, string, string) ([]netip.Addr, error) {
+		return []netip.Addr{netip.MustParseAddr("93.184.216.34")}, nil
+	}
 	client.SetProxySelector(selector)
 	req, _ := http.NewRequest(http.MethodPost, "http://upstream.invalid/v1/responses", strings.NewReader(`{}`))
 	res, err := client.DiagnosticClient().Do(req)
@@ -115,7 +122,7 @@ func TestDiagnosticExplainsExplicitProbeBlock(t *testing.T) {
 		io.WriteString(w, "Hi! What can I help you with?")
 	}))
 	defer server.Close()
-	result := runUpstreamAccountTest(context.Background(), NewClient(0).DiagnosticClient(), upstreamTestConfig{BaseURL: server.URL, APIFormat: string(domain.ProtocolOpenAIResponses), UpstreamModel: "model", Capability: "chat"})
+	result := runUpstreamAccountTest(context.Background(), newPrivateNetworkTestClient().DiagnosticClient(), upstreamTestConfig{BaseURL: server.URL, APIFormat: string(domain.ProtocolOpenAIResponses), UpstreamModel: "model", Capability: "chat"})
 	if result.OK || result.HTTPStatus != 200 || !strings.Contains(result.Error, "探测") || !strings.Contains(result.Error, "34 tokens") || strings.Contains(result.Error, "非 JSON") {
 		t.Fatalf("result=%+v", result)
 	}
