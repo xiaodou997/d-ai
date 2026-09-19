@@ -128,9 +128,13 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (identity.APIKey, 
 	if err := validateOptionalAmount("quota_limit_micro_usd", in.QuotaLimitMicroUSD); err != nil {
 		return identity.APIKey{}, err
 	}
-	status, err := normalizeAPIKeyStatus(in.Status, true)
-	if err != nil {
-		return identity.APIKey{}, err
+	status := strings.TrimSpace(in.Status)
+	if status != "" {
+		normalized, err := normalizeAPIKeyStatus(status, false)
+		if err != nil {
+			return identity.APIKey{}, err
+		}
+		status = normalized
 	}
 	key, keyHash, err := s.repo.Update(ctx, identity.APIKeyUpdate{
 		ID:              in.ID,

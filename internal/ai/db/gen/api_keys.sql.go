@@ -391,7 +391,7 @@ UPDATE ai_api_keys
 SET group_id       = $3,
     name           = $4,
     quota_limit    = $6,
-    status         = $5,
+    status         = COALESCE(NULLIF($5, ''), status),
     expires_at     = $7,
     updated_at     = now()
 WHERE id = $1

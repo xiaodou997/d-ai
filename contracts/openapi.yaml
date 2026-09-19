@@ -880,7 +880,7 @@ components:
             - integer
             - "null"
         status:
-          description: 状态；为空默认 active
+          description: 状态；创建时为空默认 active，更新时为空保留当前状态
           enum:
             - active
             - disabled

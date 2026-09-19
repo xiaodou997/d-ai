@@ -59,7 +59,7 @@ UPDATE ai_api_keys
 SET group_id       = $3,
     name           = $4,
     quota_limit    = sqlc.narg('quota_limit'),
-    status         = $5,
+    status         = COALESCE(NULLIF($5, ''), status),
     expires_at     = sqlc.narg('expires_at'),
     updated_at     = now()
 WHERE id = $1

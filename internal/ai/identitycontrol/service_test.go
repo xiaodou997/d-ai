@@ -139,6 +139,29 @@ func TestUpdate_ConvertsCredits(t *testing.T) {
 	}
 }
 
+func TestUpdate_OmittedStatusPreservesLifecycleState(t *testing.T) {
+	repo := &mockRepo{}
+	svc := New(repo, nil, func(v string) (string, error) { return "enc:" + v, nil }, func(v string) (string, error) { return v, nil })
+	if _, err := svc.Update(context.Background(), UpdateInput{
+		ID: "k1", TenantID: "t1", GroupID: "g1", Name: "renamed",
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if repo.updateParams.Status != "" {
+		t.Fatalf("omitted update status = %q, want empty preserve sentinel", repo.updateParams.Status)
+	}
+}
+
+func TestUpdate_InvalidExplicitStatusIsValidationError(t *testing.T) {
+	svc := New(&mockRepo{}, nil, func(v string) (string, error) { return "enc:" + v, nil }, func(v string) (string, error) { return v, nil })
+	_, err := svc.Update(context.Background(), UpdateInput{
+		ID: "k1", TenantID: "t1", GroupID: "g1", Name: "renamed", Status: "inactive",
+	})
+	if !errors.Is(err, domain.ErrValidation) {
+		t.Fatalf("want ErrValidation, got %v", err)
+	}
+}
+
 func TestUpdateStatus_EmptyIsValidationError(t *testing.T) {
 	svc := New(&mockRepo{}, nil, func(v string) (string, error) { return "enc:" + v, nil }, func(v string) (string, error) { return v, nil })
 	_, err := svc.UpdateStatus(context.Background(), "k1", "t1", "")
