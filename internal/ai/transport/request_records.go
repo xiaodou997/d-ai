@@ -177,7 +177,10 @@ func registerRecordDebug(api huma.API, d UsageHTTPDeps) {
 		}
 		return &recordDebugOutput{Body: session}, nil
 	})
-	huma.Register(group, huma.Operation{OperationID: "ai-v2-debug-payload", Method: http.MethodGet, Path: "/api/v2/requests/{requestID}/debug", Summary: "管理员读取限时调试内容", Tags: []string{"request-records"}}, func(ctx context.Context, in *recordDetailInput) (*recordDebugPayloadOutput, error) {
+	debugRead := huma.NewGroup(api)
+	debugRead.UseMiddleware(platformUserAuth(api, d.Auth))
+	debugRead.UseMiddleware(requireRecentAuth(api, d.Auth.RecentAuth))
+	huma.Register(debugRead, huma.Operation{OperationID: "ai-v2-debug-payload", Method: http.MethodGet, Path: "/api/v2/requests/{requestID}/debug", Summary: "管理员读取限时调试内容", Tags: []string{"request-records"}}, func(ctx context.Context, in *recordDetailInput) (*recordDebugPayloadOutput, error) {
 		repo, ok := d.Records.(domain.DebugRecordsRepository)
 		if !ok {
 			return nil, huma.Error503ServiceUnavailable("debug storage unavailable")

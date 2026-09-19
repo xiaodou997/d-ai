@@ -83,3 +83,30 @@ func TestRedactUpstreamDiagnosticSecretsRedactsCredentialHeaders(t *testing.T) {
 		t.Fatalf("non-sensitive diagnostic context was removed: %q", got)
 	}
 }
+func TestRedactUpstreamDiagnosticResultSecretsCoversSuccessfulProviderText(t *testing.T) {
+	result := upstreamTestResult{
+		ResponseContentType: "application/json; credential=sk-main",
+		UpstreamRequestID:   "request-Bearer header-secret",
+		ReplyText:           "provider echoed sk-main and Bearer header-secret",
+		ImageMime:           "image/png; token=sk-main",
+		ImageURL:            "https://images.example/result?token=Bearer header-secret",
+		Error:               "error contains sk-main",
+	}
+	redactUpstreamDiagnosticResultSecrets(
+		&result,
+		"sk-main",
+		[]byte(`{"Authorization":"Bearer header-secret","X-Trace":"trace-public"}`),
+	)
+	for name, value := range map[string]string{
+		"content_type": result.ResponseContentType,
+		"request_id":   result.UpstreamRequestID,
+		"reply_text":   result.ReplyText,
+		"image_mime":   result.ImageMime,
+		"image_url":    result.ImageURL,
+		"error":        result.Error,
+	} {
+		if strings.Contains(value, "sk-main") || strings.Contains(value, "header-secret") {
+			t.Fatalf("%s leaked diagnostic credential: %q", name, value)
+		}
+	}
+}

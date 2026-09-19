@@ -2,8 +2,15 @@ package transport
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"testing"
+
+	"github.com/alicebob/miniredis/v2"
+	"github.com/danielgtaylor/huma/v2/humatest"
+	"github.com/redis/go-redis/v9"
+
+	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/internal/auth"
 	"xiaodou/dai/libs/go/server"
 )
@@ -53,5 +60,70 @@ func TestRecordQuerySearchKeepsScopeAndTrimsNames(t *testing.T) {
 	}
 	if q.From == nil || q.To == nil || !q.From.Before(*q.To) {
 		t.Fatalf("invalid time window: %+v", q)
+	}
+}
+type debugRecordsStub struct {
+	debugPayloadCalls int
+}
+
+func (s *debugRecordsStub) Records(context.Context, domain.RecordQuery) (domain.RecordPage, error) {
+	return domain.RecordPage{}, nil
+}
+
+func (s *debugRecordsStub) Record(context.Context, domain.RecordScope, string) (domain.RequestRecord, error) {
+	return domain.RequestRecord{}, nil
+}
+
+func (s *debugRecordsStub) RecordSummary(context.Context, domain.RecordQuery) (domain.RecordSummary, error) {
+	return domain.RecordSummary{}, nil
+}
+
+func (s *debugRecordsStub) Refund(context.Context, string, string, string) error {
+	return nil
+}
+
+func (s *debugRecordsStub) StartDebug(context.Context, domain.DebugSessionInput, string) (domain.DebugSession, error) {
+	return domain.DebugSession{}, nil
+}
+
+func (s *debugRecordsStub) DebugPayload(context.Context, string) (json.RawMessage, error) {
+	s.debugPayloadCalls++
+	return json.RawMessage(`{"request":"safe"}`), nil
+}
+
+func TestDebugPayloadRequiresRecentAuthentication(t *testing.T) {
+	mini := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: mini.Addr()})
+	t.Cleanup(func() { _ = client.Close() })
+	recent := auth.NewRecentAuthService(client)
+	records := &debugRecordsStub{}
+
+	_, api := humatest.New(t)
+	registerRecordDebug(api, UsageHTTPDeps{
+		Records: records,
+		Auth: HTTPAuthDeps{
+			TokenVerifier: platformAuthTokenVerifierStub{},
+			RecentAuth:    recent,
+		},
+	})
+	authorization := "Authorization: Bearer token"
+
+	response := api.Get("/api/v2/requests/request-1/debug", authorization)
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("debug payload without recent auth status = %d, want %d", response.Code, http.StatusUnauthorized)
+	}
+	if records.debugPayloadCalls != 0 {
+		t.Fatal("debug payload handler ran before recent authentication")
+	}
+
+	if err := recent.Mark(context.Background(), "admin-1", "session-1", "test"); err != nil {
+		t.Fatal(err)
+	}
+	response = api.Get("/api/v2/requests/request-1/debug", authorization)
+	if response.Code != http.StatusOK {
+		t.Fatalf("debug payload with recent auth status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
+	}
+	if records.debugPayloadCalls != 1 {
+		t.Fatalf("debug payload calls = %d, want 1", records.debugPayloadCalls)
 	}
 }

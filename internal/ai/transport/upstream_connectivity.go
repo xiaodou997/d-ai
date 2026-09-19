@@ -144,7 +144,7 @@ func registerUpstreamAccountTest(api huma.API, d UpstreamDiagnosticsHTTPDeps) {
 			ImageUpstreamResponseFormat: binding.ImagePolicy.UpstreamResponseFormat,
 			Timeouts:                    domain.DefaultRouteTimeouts(domain.CapabilityType(binding.CapabilityType)),
 		})
-		result.Error = redactUpstreamDiagnosticSecrets(result.Error, apiKey, endpoint.ExtraHeaders)
+		redactUpstreamDiagnosticResultSecrets(&result, apiKey, endpoint.ExtraHeaders)
 		if err := reconcileUpstreamAccountTestStatus(ctx, d.AccountHealth, d.EndpointManager, d.RuntimeHealth, in.AccountID, endpoint.ID, account.Status, result); err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -193,6 +193,22 @@ func redactUpstreamDiagnosticSecrets(message, apiKey string, extraHeaders []byte
 		}
 	}
 	return message
+}
+
+func redactUpstreamDiagnosticResultSecrets(result *upstreamTestResult, apiKey string, extraHeaders []byte) {
+	if result == nil {
+		return
+	}
+	for _, field := range []*string{
+		&result.ResponseContentType,
+		&result.UpstreamRequestID,
+		&result.ReplyText,
+		&result.ImageMime,
+		&result.ImageURL,
+		&result.Error,
+	} {
+		*field = redactUpstreamDiagnosticSecrets(*field, apiKey, extraHeaders)
+	}
 }
 
 func reconcileUpstreamAccountTestStatus(ctx context.Context, health UpstreamAccountHealthWriter, endpoints UpstreamAccountEndpointManager, runtimeHealth routing.Availability, accountID, endpointID, currentStatus string, result upstreamTestResult) error {
