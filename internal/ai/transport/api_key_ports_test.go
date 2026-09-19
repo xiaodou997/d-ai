@@ -9,6 +9,7 @@ import (
 	"xiaodou/dai/internal/ai/commercial"
 	coreidentity "xiaodou/dai/internal/ai/core/identity"
 	"xiaodou/dai/internal/ai/identitycontrol"
+	"xiaodou/dai/internal/auth"
 	"xiaodou/dai/libs/go/server"
 )
 
