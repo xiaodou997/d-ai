@@ -25,19 +25,31 @@ func TestAPIKeyMetadataUpdateDoesNotReactivateDisabledKey(t *testing.T) {
 	)
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO iam_tenants (tenant_id, tenant_name, status)
-		VALUES ($1, 'API Key Preserve Tenant', 'active');
+		VALUES ($1, 'API Key Preserve Tenant', 'active')
+	`, tenantID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `
 		INSERT INTO ai_price_books (id, owner_type, name, status)
-		VALUES ($2::uuid, 'platform', 'API Key Preserve Book', 'active');
+		VALUES ($1::uuid, 'platform', 'API Key Preserve Book', 'active')
+	`, priceBookID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `
 		INSERT INTO ai_groups (id, tenant_id, name, retail_price_book_id, status)
-		VALUES ($3::uuid, $1, 'API Key Preserve Group', $2::uuid, 'active');
+		VALUES ($1::uuid, $2, 'API Key Preserve Group', $3::uuid, 'active')
+	`, groupID, tenantID, priceBookID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `
 		INSERT INTO ai_api_keys (
 			id, owner_type, tenant_id, group_id, key_hash, key_ciphertext,
 			last_four, name, status
 		) VALUES (
-			$4::uuid, 'tenant', $1, $3::uuid, 'preserve-disabled-hash',
+			$1::uuid, 'tenant', $2, $3::uuid, 'preserve-disabled-hash',
 			'preserve-disabled-ciphertext', '0003', 'Disabled Key', 'disabled'
 		)
-	`, tenantID, priceBookID, groupID, keyID); err != nil {
+	`, keyID, tenantID, groupID); err != nil {
 		t.Fatal(err)
 	}
 
