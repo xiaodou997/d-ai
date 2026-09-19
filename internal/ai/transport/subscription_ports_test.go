@@ -189,6 +189,37 @@ func TestSubscriptionUserRoutesUseSeparatedPorts(t *testing.T) {
 	}
 }
 
+func TestUserSubscriptionOrderDetailEnforcesOwnerScope(t *testing.T) {
+	tests := []struct {
+		name  string
+		order subscription.Order
+	}{
+		{
+			name:  "same tenant other user",
+			order: subscription.Order{ID: "order-foreign", TenantID: "tenant-1", UserID: "user-2", PlanID: "plan-1", Status: subscription.OrderPaid},
+		},
+		{
+			name:  "other tenant same user",
+			order: subscription.Order{ID: "order-foreign", TenantID: "tenant-2", UserID: "user-1", PlanID: "plan-1", Status: subscription.OrderPaid},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			orders := &subscriptionOrderReaderStub{order: tt.order}
+			router, api := server.New(server.Options{Title: "test", Version: "test"})
+			registerUserSelfSubscriptions(api, SubscriptionHTTPDeps{SubscriptionOrders: orders})
+			handler := withCommercialClaims(router, &auth.Claims{TenantID: "tenant-1", UserID: "user-1"})
+
+			response := performSubscriptionRequest(handler, http.MethodGet, "/api/v1/users/me/subscription-orders/order-foreign", "", "")
+			requireCommercialStatus(t, response, http.StatusNotFound)
+			if orders.getID != "order-foreign" {
+				t.Fatalf("order lookup id = %q, want order-foreign", orders.getID)
+			}
+		})
+	}
+}
+
 func TestSubscriptionPlanReadAndWritePortsAreIndependent(t *testing.T) {
 	plan := subscription.Plan{ID: "plan-1", TenantID: "tenant-1", Name: "Starter", Status: subscription.PlanDraft}
 	plans := &subscriptionPlanCatalogStub{plans: []subscription.Plan{plan}, plan: plan}
