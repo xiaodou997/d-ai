@@ -231,7 +231,7 @@ func TestTenantDisableAndAccountDeleteRejectRefresh(t *testing.T) {
 	}
 }
 
-func TestRoleAndTenantScopeChangesInvalidateExistingAccessToken(t *testing.T) {
+func TestRoleAndTenantScopeChangesRevokeSessionFamily(t *testing.T) {
 	ctx := context.Background()
 	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 4})
 	if err != nil {
@@ -245,6 +245,7 @@ func TestRoleAndTenantScopeChangesInvalidateExistingAccessToken(t *testing.T) {
 	`); err != nil {
 		t.Fatal(err)
 	}
+
 	principal := seedSessionAccount(t, ctx, pool, "role-change")
 	service := newTestSessionService(pool)
 	pair, err := service.Create(ctx, principal)
@@ -252,8 +253,6 @@ func TestRoleAndTenantScopeChangesInvalidateExistingAccessToken(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// A role change also changes the required tenant scope. The old token must
-	// fail closed instead of retaining its former platform-admin capability.
 	if _, err := pool.Exec(ctx, `
 		UPDATE iam_accounts
 		SET user_type = 3, tenant_id = 'auth-role-change-tenant'
@@ -264,24 +263,19 @@ func TestRoleAndTenantScopeChangesInvalidateExistingAccessToken(t *testing.T) {
 	if _, err := service.jwt.ParseToken(ctx, pair.AccessToken); !errors.Is(err, ErrSessionInactive) {
 		t.Fatalf("access token after role/scope change = %v, want ErrSessionInactive", err)
 	}
-
-	rotated, refreshedPrincipal, err := service.Rotate(ctx, pair.RefreshToken)
-	if err != nil {
-		t.Fatalf("refresh after role/scope change: %v", err)
-	}
-	if refreshedPrincipal.UserType != 3 || refreshedPrincipal.TenantID != "auth-role-change-tenant" {
-		t.Fatalf("refreshed principal = %#v, want tenant-scoped role", refreshedPrincipal)
-	}
-	claims, err := service.jwt.ParseToken(ctx, rotated.AccessToken)
-	if err != nil {
-		t.Fatalf("refreshed access token should be valid: %v", err)
-	}
-	if claims.UserType != 3 || claims.TenantID != "auth-role-change-tenant" {
-		t.Fatalf("refreshed claims = %#v, want current role/scope", claims)
+	if _, _, err := service.Rotate(ctx, pair.RefreshToken); !errors.Is(err, ErrSessionInactive) {
+		t.Fatalf("refresh after role/scope change = %v, want ErrSessionInactive", err)
 	}
 
-	// Moving an already tenant-scoped account must invalidate the token even
-	// when its role is unchanged, otherwise the old tenant scope remains usable.
+	current := Principal{
+		UserID: principal.UserID, Username: principal.Username,
+		TenantID: "auth-role-change-tenant", UserType: 3,
+		UserTypeDisplay: "租户", CredentialVersion: principal.CredentialVersion,
+	}
+	second, err := service.Create(ctx, current)
+	if err != nil {
+		t.Fatalf("create session after role change: %v", err)
+	}
 	if _, err := pool.Exec(ctx, `
 		UPDATE iam_accounts
 		SET tenant_id = 'auth-scope-change-tenant'
@@ -289,25 +283,13 @@ func TestRoleAndTenantScopeChangesInvalidateExistingAccessToken(t *testing.T) {
 	`, principal.UserID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.jwt.ParseToken(ctx, rotated.AccessToken); !errors.Is(err, ErrSessionInactive) {
+	if _, err := service.jwt.ParseToken(ctx, second.AccessToken); !errors.Is(err, ErrSessionInactive) {
 		t.Fatalf("access token after tenant scope change = %v, want ErrSessionInactive", err)
 	}
-	rotatedAgain, refreshedPrincipal, err := service.Rotate(ctx, rotated.RefreshToken)
-	if err != nil {
-		t.Fatalf("refresh after tenant scope change: %v", err)
-	}
-	if refreshedPrincipal.UserType != 3 || refreshedPrincipal.TenantID != "auth-scope-change-tenant" {
-		t.Fatalf("principal after tenant scope change = %#v, want new tenant", refreshedPrincipal)
-	}
-	claims, err = service.jwt.ParseToken(ctx, rotatedAgain.AccessToken)
-	if err != nil {
-		t.Fatalf("access token after tenant scope refresh should be valid: %v", err)
-	}
-	if claims.TenantID != "auth-scope-change-tenant" {
-		t.Fatalf("claims after tenant scope refresh = %#v, want new tenant", claims)
+	if _, _, err := service.Rotate(ctx, second.RefreshToken); !errors.Is(err, ErrSessionInactive) {
+		t.Fatalf("refresh after tenant scope change = %v, want ErrSessionInactive", err)
 	}
 }
-
 func TestTenantOperationsAccessTokenUsesOperatorSessionAndTenantScope(t *testing.T) {
 	ctx := context.Background()
 	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 4})
@@ -332,9 +314,12 @@ func TestTenantOperationsAccessTokenUsesOperatorSessionAndTenantScope(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw, err := service.jwt.GenerateTenantOperationsAccessToken(operator, "tenant-operations", "Operations Tenant")
+	raw, derivedTTL, err := service.jwt.GenerateTenantOperationsAccessToken(operator, "tenant-operations", "Operations Tenant")
 	if err != nil {
 		t.Fatalf("generate tenant operations token: %v", err)
+	}
+	if derivedTTL <= 0 || derivedTTL > service.jwt.AccessTokenExpiration() {
+		t.Fatalf("tenant operations TTL = %v, want positive and no longer than parent access TTL", derivedTTL)
 	}
 	claims, err := service.jwt.ParseToken(ctx, raw)
 	if err != nil {
@@ -342,6 +327,9 @@ func TestTenantOperationsAccessTokenUsesOperatorSessionAndTenantScope(t *testing
 	}
 	if !claims.TenantOperations || claims.TenantID != "tenant-operations" || claims.TenantName != "Operations Tenant" {
 		t.Fatalf("tenant operations scope = %#v", claims)
+	}
+	if operator.ExpiresAt == nil || claims.ExpiresAt == nil || !claims.ExpiresAt.Time.Equal(operator.ExpiresAt.Time) {
+		t.Fatalf("tenant operations expiry = %v, parent expiry = %v", claims.ExpiresAt, operator.ExpiresAt)
 	}
 	if claims.UserID != principal.UserID || claims.OperatorID != principal.UserID || claims.OperatorUserType != principal.UserType {
 		t.Fatalf("operator identity = %#v, want %#v", claims, principal)

@@ -329,15 +329,24 @@ func (s *JWTService) GenerateAccessToken(principal Principal, sessionID string) 
 // access token without replacing the platform administrator's refresh
 // session. The effective role is tenant, while OperatorID keeps the real
 // administrator identity available to validation and audit logs.
-func (s *JWTService) GenerateTenantOperationsAccessToken(operator *Claims, tenantID, tenantName string) (string, error) {
+func (s *JWTService) GenerateTenantOperationsAccessToken(operator *Claims, tenantID, tenantName string) (string, time.Duration, error) {
 	if operator == nil || operator.TenantOperations || !ActorFromClaims(operator).Has(CapabilityPlatformAdmin) {
-		return "", fmt.Errorf("platform administrator access token required")
+		return "", 0, fmt.Errorf("platform administrator access token required")
 	}
-	if operator.SessionID == "" || operator.UserID == "" || operator.CredentialVersion <= 0 || tenantID == "" {
-		return "", fmt.Errorf("invalid tenant operations token input")
+	if operator.SessionID == "" || operator.UserID == "" || operator.CredentialVersion <= 0 || tenantID == "" ||
+		operator.ExpiresAt == nil {
+		return "", 0, fmt.Errorf("invalid tenant operations token input")
 	}
 
 	now := time.Now()
+	expiresAt := now.Add(TenantOperationsAccessTokenExpiration)
+	if operator.ExpiresAt.Time.Before(expiresAt) {
+		expiresAt = operator.ExpiresAt.Time
+	}
+	remaining := expiresAt.Sub(now)
+	if remaining <= 0 {
+		return "", 0, fmt.Errorf("platform administrator access token is expired")
+	}
 	claims := Claims{
 		PrincipalType:     "user",
 		TokenUse:          "access",
@@ -353,14 +362,18 @@ func (s *JWTService) GenerateTenantOperationsAccessToken(operator *Claims, tenan
 		OperatorID:        operator.UserID,
 		OperatorUserType:  operator.UserType,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(now.Add(TenantOperationsAccessTokenExpiration)),
+			ExpiresAt: jwt.NewNumericDate(expiresAt),
 			IssuedAt:  jwt.NewNumericDate(now),
 			Issuer:    s.issuer,
 			ID:        uuid.New().String(),
 			Subject:   operator.UserID,
 		},
 	}
-	return s.signClaims(claims)
+	token, err := s.signClaims(claims)
+	if err != nil {
+		return "", 0, err
+	}
+	return token, remaining, nil
 }
 
 func (s *JWTService) signClaims(claims Claims) (string, error) {

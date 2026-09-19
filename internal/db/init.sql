@@ -167,25 +167,30 @@ CREATE UNIQUE INDEX ux_auth_activation_tokens_pending_user
 CREATE INDEX idx_auth_activation_tokens_expires
     ON auth_activation_tokens (expires_at) WHERE consumed_at IS NULL;
 
-CREATE FUNCTION auth_revoke_sessions_on_account_change() RETURNS TRIGGER AS $$
+CREATE FUNCTION auth_revoke_sessions_on_account_change() RETURNS TRIGGER AS $
 BEGIN
-    IF NEW.status <> OLD.status OR NEW.credential_version <> OLD.credential_version THEN
+    IF NEW.status IS DISTINCT FROM OLD.status
+       OR NEW.credential_version IS DISTINCT FROM OLD.credential_version
+       OR NEW.user_type IS DISTINCT FROM OLD.user_type
+       OR NEW.tenant_id IS DISTINCT FROM OLD.tenant_id THEN
         UPDATE auth_sessions
         SET status = 'revoked',
             revoked_at = COALESCE(revoked_at, now()),
             revoke_reason = CASE
-                WHEN NEW.status <> OLD.status THEN 'account_status_changed'
-                ELSE 'credential_changed'
+                WHEN NEW.status IS DISTINCT FROM OLD.status THEN 'account_status_changed'
+                WHEN NEW.credential_version IS DISTINCT FROM OLD.credential_version THEN 'credential_changed'
+                WHEN NEW.user_type IS DISTINCT FROM OLD.user_type THEN 'account_role_changed'
+                ELSE 'tenant_scope_changed'
             END,
             updated_at = now()
         WHERE user_id = NEW.user_id AND status = 'active';
     END IF;
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$ LANGUAGE plpgsql;
 
 CREATE TRIGGER trg_auth_revoke_sessions_on_account_change
-    AFTER UPDATE OF status, credential_version ON iam_accounts
+    AFTER UPDATE OF status, credential_version, user_type, tenant_id ON iam_accounts
     FOR EACH ROW EXECUTE FUNCTION auth_revoke_sessions_on_account_change();
 
 CREATE TABLE auth_audit_logs (
@@ -3218,7 +3223,7 @@ CREATE TABLE dai_schema_metadata (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 45);
+INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 46);
 
 COMMIT;
 
@@ -3243,4 +3248,4 @@ CREATE INDEX ai_request_attempts_endpoint_model_window ON ai_request_attempts(en
 CREATE TABLE ai_upstream_runtime_metadata(singleton boolean PRIMARY KEY DEFAULT true CHECK(singleton), started_at timestamptz NOT NULL DEFAULT now());
 INSERT INTO ai_upstream_runtime_metadata(singleton) VALUES(true);
 
-UPDATE dai_schema_metadata SET version=45,updated_at=now() WHERE singleton;
+UPDATE dai_schema_metadata SET version=46,updated_at=now() WHERE singleton;

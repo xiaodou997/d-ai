@@ -130,7 +130,7 @@ func registerAdminTenants(api huma.API, d adminTenantModule) {
 	huma.Register(api, huma.Operation{
 		OperationID: "admin-enter-tenant-operations", Method: http.MethodPost, Path: "/api/v1/tenants/{id}/operations-token",
 		Summary: "进入租户代运维", Description: "为当前平台管理员签发不改变 Refresh Cookie 的短期租户视角 Access Token。",
-		Tags: []string{"admin-tenants"}, Middlewares: sysUser,
+		Tags: []string{"admin-tenants"}, Middlewares: sysUserSensitive,
 	}, h.enterTenantOperations)
 
 	huma.Register(api, huma.Operation{
@@ -167,13 +167,13 @@ func (h *adminHandlers) enterTenantOperations(ctx context.Context, in *tenantIDI
 	if details.Status != "active" {
 		return nil, httpx.ErrForbidden.WithDetail("只能代运维正常启用的租户")
 	}
-	token, err := h.jwt.GenerateTenantOperationsAccessToken(claims, details.TenantID, details.TenantName)
+	token, expiresIn, err := h.jwt.GenerateTenantOperationsAccessToken(claims, details.TenantID, details.TenantName)
 	if err != nil {
 		return nil, httpx.ErrForbidden.WithDetail("当前账号无法进入租户代运维").WithCause(err)
 	}
 	out := &tenantOperationsTokenOutput{}
 	out.Body.AccessToken = token
-	out.Body.ExpiresIn = int64(auth.TenantOperationsAccessTokenExpiration.Seconds())
+	out.Body.ExpiresIn = int64(expiresIn.Seconds())
 	out.Body.TenantID = details.TenantID
 	out.Body.TenantName = details.TenantName
 	return out, nil
