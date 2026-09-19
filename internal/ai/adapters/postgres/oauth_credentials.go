@@ -411,13 +411,13 @@ func (s *OAuthCredentialStore) selectWeighted(ctx context.Context, poolID string
 
 func (s *OAuthCredentialStore) listActiveWeighted(ctx context.Context, poolID string) ([]OAuthCredentialRow, error) {
 	const q = `
-		SELECT id, pool_id, name, provider_type, email,
-		       access_token_ciphertext, refresh_token_ciphertext,
-		       token_type, scope, expires_at, token_version, auth_metadata,
-		       weight, status, invalid_reason, cooldown_until,
-		       last_used_at, last_refreshed_at, last_failed_at,
-		       consecutive_fail_count, success_count, fail_count,
-		       created_at, updated_at
+		SELECT c.id, c.pool_id, c.name, c.provider_type, c.email,
+		       c.access_token_ciphertext, c.refresh_token_ciphertext,
+		       c.token_type, c.scope, c.expires_at, c.token_version, c.auth_metadata,
+		       c.weight, c.status, c.invalid_reason, c.cooldown_until,
+		       c.last_used_at, c.last_refreshed_at, c.last_failed_at,
+		       c.consecutive_fail_count, c.success_count, c.fail_count,
+		       c.created_at, c.updated_at
 		FROM ai_provider_oauth_credentials c
 		JOIN ai_credential_pools p ON p.id = c.pool_id AND p.status = 'active'
 		WHERE c.pool_id = $1 AND c.status = 'active'
@@ -565,13 +565,13 @@ func (s *OAuthCredentialStore) UpdateTokens(
 // ListExpiring returns active credentials expiring within the given duration.
 func (s *OAuthCredentialStore) ListExpiring(ctx context.Context, within time.Duration) ([]OAuthCredentialRow, error) {
 	const q = `
-		SELECT id, pool_id, name, provider_type, email,
-		       access_token_ciphertext, refresh_token_ciphertext,
-		       token_type, scope, expires_at, token_version, auth_metadata,
-		       weight, status, invalid_reason, cooldown_until,
-		       last_used_at, last_refreshed_at, last_failed_at,
-		       consecutive_fail_count, success_count, fail_count,
-		       created_at, updated_at
+		SELECT c.id, c.pool_id, c.name, c.provider_type, c.email,
+		       c.access_token_ciphertext, c.refresh_token_ciphertext,
+		       c.token_type, c.scope, c.expires_at, c.token_version, c.auth_metadata,
+		       c.weight, c.status, c.invalid_reason, c.cooldown_until,
+		       c.last_used_at, c.last_refreshed_at, c.last_failed_at,
+		       c.consecutive_fail_count, c.success_count, c.fail_count,
+		       c.created_at, c.updated_at
 		FROM ai_provider_oauth_credentials c
 		JOIN ai_credential_pools p ON p.id = c.pool_id AND p.status = 'active'
 		WHERE c.status = 'active'
