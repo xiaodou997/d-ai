@@ -139,6 +139,28 @@ func TestAPIKeyRoutesUseSeparatedPorts(t *testing.T) {
 	}
 }
 
+func TestUserSelfAPIKeyRevealRejectsSameTenantOtherUserKey(t *testing.T) {
+	reader := &apiKeyReaderStub{userKeys: []coreidentity.APIKey{{
+		ID: "key-a", TenantID: "tenant-1", UserID: "user-a", OwnerScope: coreidentity.ScopeUser, Status: "active",
+	}}}
+	secrets := &apiKeySecretStub{}
+	router, api := server.New(server.Options{Title: "test", Version: "test"})
+	registerUserSelfAPIKeys(api, UserSelfControlHTTPDeps{
+		APIKeys:       reader,
+		APIKeySecrets: secrets,
+	})
+	handler := withCommercialClaims(router, &auth.Claims{TenantID: "tenant-1", UserID: "user-a"})
+
+	response := performCommercialRequest(handler, http.MethodPost, "/api/v1/users/me/api-keys/key-b/reveal", "")
+	requireCommercialStatus(t, response, http.StatusNotFound)
+	if reader.userTenantID != "tenant-1" || reader.userID != "user-a" || reader.userListCall != 1 {
+		t.Fatalf("reader scope = tenant %q user %q calls %d", reader.userTenantID, reader.userID, reader.userListCall)
+	}
+	if secrets.revealedID != "" || secrets.revealedTenantID != "" {
+		t.Fatalf("foreign key secret was read: id %q tenant %q", secrets.revealedID, secrets.revealedTenantID)
+	}
+}
+
 func TestAPIKeyReadPortDoesNotEnableLifecycleOrSecretOperations(t *testing.T) {
 	reader := &apiKeyReaderStub{tenantKeys: []coreidentity.APIKey{{ID: "key-1", TenantID: "tenant-1", OwnerScope: coreidentity.ScopeTenant}}}
 	router, api := server.New(server.Options{Title: "test", Version: "test"})
