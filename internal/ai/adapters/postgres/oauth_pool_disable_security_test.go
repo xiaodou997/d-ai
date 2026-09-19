@@ -45,7 +45,7 @@ func TestDisabledOAuthPoolCannotSupplyOrRefreshCredentials(t *testing.T) {
 	}
 
 	for _, tc := range []struct {
-		name string
+		name             string
 		selectCredential func() error
 	}{
 		{name: "round robin", selectCredential: func() error {
