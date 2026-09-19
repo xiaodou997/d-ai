@@ -19,9 +19,9 @@ func TestAPIKeyMetadataUpdateDoesNotReactivateDisabledKey(t *testing.T) {
 	t.Cleanup(func() { _ = cleanup(context.Background()) })
 
 	const (
-		tenantID    = "api-key-preserve-tenant"
-		priceBookID = "47000000-0000-0000-0000-000000000001"
-		groupID     = "47000000-0000-0000-0000-000000000002"
+		tenantID     = "api-key-preserve-tenant"
+		priceBookID  = "47000000-0000-0000-0000-000000000001"
+		groupID      = "47000000-0000-0000-0000-000000000002"
 		keyID        = "47000000-0000-0000-0000-000000000003"
 		expiredKeyID = "47000000-0000-0000-0000-000000000004"
 	)
