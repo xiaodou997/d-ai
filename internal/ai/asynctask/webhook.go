@@ -3,6 +3,7 @@ package asynctask
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net"
@@ -33,12 +34,35 @@ var disallowedWebhookPrefixes = []netip.Prefix{
 }
 
 var ErrUnsafeWebhookTarget = errors.New("unsafe webhook target")
+var ErrUnsignedWebhook = errors.New("webhook signature metadata is incomplete")
+
+const (
+	webhookSignatureHeader = "X-D-AI-Webhook-Signature"
+	webhookTimestampHeader = "X-D-AI-Webhook-Timestamp"
+	webhookDeliveryIDHeader = "X-D-AI-Webhook-ID"
+	webhookAttemptHeader = "X-D-AI-Webhook-Attempt"
+	webhookKeyIDHeader = "X-D-AI-Webhook-Key-ID"
+	webhookSignatureVersion = "v1"
+	webhookSigningDomain = "D-AI-WEBHOOK-V1"
+)
 
 // WebhookRequest is a fully materialized notification. Payload is sent
 // byte-for-byte; callers must not mutate it while Send is running.
 type WebhookRequest struct {
-	URL     string
-	Payload []byte
+	URL        string
+	Payload    []byte
+	DeliveryID string
+	Attempt    int
+	Timestamp  int64
+	KeyID      string
+	Signature  string
+}
+
+// WebhookSigner provides detached signatures without coupling the queue to the
+// authentication package. Production wires the existing RS256 JWT signer so
+// receivers can verify callbacks with the already-published JWKS.
+type WebhookSigner interface {
+	SignDetached(message []byte) (keyID string, signature []byte, err error)
 }
 
 // WebhookSender is the outbound seam. Production uses the guarded HTTPS
@@ -122,8 +146,17 @@ func (s *httpWebhookSender) Send(ctx context.Context, delivery WebhookRequest) (
 	if err != nil {
 		return 0, fmt.Errorf("build webhook request: %w", err)
 	}
+	if delivery.DeliveryID == "" || delivery.Attempt < 1 || delivery.Timestamp <= 0 ||
+		delivery.KeyID == "" || !strings.HasPrefix(delivery.Signature, webhookSignatureVersion+"=") {
+		return 0, ErrUnsignedWebhook
+	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "D-AI-Webhook/1.0")
+	req.Header.Set(webhookSignatureHeader, delivery.Signature)
+	req.Header.Set(webhookTimestampHeader, fmt.Sprintf("%d", delivery.Timestamp))
+	req.Header.Set(webhookDeliveryIDHeader, delivery.DeliveryID)
+	req.Header.Set(webhookAttemptHeader, fmt.Sprintf("%d", delivery.Attempt))
+	req.Header.Set(webhookKeyIDHeader, delivery.KeyID)
 
 	resp, err := s.client.Do(req)
 	if err != nil {
@@ -216,10 +249,44 @@ func (e *Engine) claimAndDeliverWebhook(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
+func webhookSigningInput(timestamp int64, deliveryID string, attempt int, payload []byte) []byte {
+	prefix := fmt.Sprintf("%s\n%d\n%s\n%d\n", webhookSigningDomain, timestamp, deliveryID, attempt)
+	message := make([]byte, 0, len(prefix)+len(payload))
+	message = append(message, prefix...)
+	return append(message, payload...)
+}
+
+func signedWebhookRequest(delivery claimedDelivery, signer WebhookSigner, now time.Time) (WebhookRequest, error) {
+	if signer == nil {
+		return WebhookRequest{}, errors.New("webhook signer is not configured")
+	}
+	timestamp := now.UTC().Unix()
+	keyID, signature, err := signer.SignDetached(webhookSigningInput(
+		timestamp, delivery.ID, delivery.Attempt, delivery.Payload,
+	))
+	if err != nil {
+		return WebhookRequest{}, fmt.Errorf("sign webhook delivery: %w", err)
+	}
+	if keyID == "" || len(signature) == 0 {
+		return WebhookRequest{}, errors.New("webhook signer returned incomplete signature")
+	}
+	return WebhookRequest{
+		URL:        delivery.URL,
+		Payload:    delivery.Payload,
+		DeliveryID: delivery.ID,
+		Attempt:    delivery.Attempt,
+		Timestamp:  timestamp,
+		KeyID:      keyID,
+		Signature:  webhookSignatureVersion + "=" + base64.RawURLEncoding.EncodeToString(signature),
+	}, nil
+}
+
 func (e *Engine) deliverWebhook(ctx context.Context, delivery claimedDelivery) {
-	statusCode, err := e.webhookSender.Send(ctx, WebhookRequest{
-		URL: delivery.URL, Payload: delivery.Payload,
-	})
+	request, err := signedWebhookRequest(delivery, e.webhookSigner, time.Now())
+	statusCode := 0
+	if err == nil {
+		statusCode, err = e.webhookSender.Send(ctx, request)
+	}
 	if ctx.Err() != nil {
 		return
 	}

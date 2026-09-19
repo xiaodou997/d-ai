@@ -3,12 +3,15 @@ package asynctask
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -19,6 +22,13 @@ import (
 	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/internal/ai/testsupport"
 )
+
+type deterministicWebhookSigner struct{}
+
+func (deterministicWebhookSigner) SignDetached(message []byte) (string, []byte, error) {
+	sum := sha256.Sum256(message)
+	return "test-kid", sum[:], nil
+}
 
 func TestNormalizeWebhookURLRequiresAbsoluteHTTPS(t *testing.T) {
 	got, err := normalizeWebhookURL("  https://hooks.example.com/task-events  ")
@@ -61,8 +71,13 @@ func TestWebhookAddressGuardRejectsNonPublicNetworks(t *testing.T) {
 }
 
 func TestHTTPWebhookSenderIdentifiesDAIAndPreservesBody(t *testing.T) {
-	const taskID = "00000000-0000-0000-0000-000000000001"
+	const (
+		taskID = "00000000-0000-0000-0000-000000000001"
+		deliveryID = "00000000-0000-0000-0000-000000000002"
+		timestamp = int64(1_700_000_000)
+	)
 	payload := []byte(`{"source":"D-AI","event":"task.completed","task_id":"` + taskID + `"}`)
+	signature := "v1=" + base64.RawURLEncoding.EncodeToString([]byte("test-signature"))
 	var gotBody []byte
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var err error
@@ -79,13 +94,29 @@ func TestHTTPWebhookSenderIdentifiesDAIAndPreservesBody(t *testing.T) {
 		if got := r.Header.Get("User-Agent"); got != "D-AI-Webhook/1.0" {
 			t.Errorf("user agent = %q", got)
 		}
+		if got := r.Header.Get(webhookDeliveryIDHeader); got != deliveryID {
+			t.Errorf("delivery id = %q", got)
+		}
+		if got := r.Header.Get(webhookAttemptHeader); got != "2" {
+			t.Errorf("attempt = %q", got)
+		}
+		if got := r.Header.Get(webhookTimestampHeader); got != "1700000000" {
+			t.Errorf("timestamp = %q", got)
+		}
+		if got := r.Header.Get(webhookKeyIDHeader); got != "test-kid" {
+			t.Errorf("key id = %q", got)
+		}
+		if got := r.Header.Get(webhookSignatureHeader); got != signature {
+			t.Errorf("signature = %q", got)
+		}
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	defer server.Close()
 
 	sender := newHTTPWebhookSender(server.Client())
 	status, err := sender.Send(context.Background(), WebhookRequest{
-		URL: server.URL, Payload: payload,
+		URL: server.URL, Payload: payload, DeliveryID: deliveryID, Attempt: 2,
+		Timestamp: timestamp, KeyID: "test-kid", Signature: signature,
 	})
 	if err != nil {
 		t.Fatalf("Send: %v", err)
@@ -102,6 +133,8 @@ func TestProductionWebhookSenderRejectsPrivateTargets(t *testing.T) {
 	sender := NewWebhookSender()
 	_, err := sender.Send(context.Background(), WebhookRequest{
 		URL: "https://127.0.0.1/hooks", Payload: []byte(`{}`),
+		DeliveryID: "00000000-0000-0000-0000-000000000003", Attempt: 1,
+		Timestamp: time.Now().Unix(), KeyID: "test-kid", Signature: "v1=dGVzdA",
 	})
 	if !errors.Is(err, ErrUnsafeWebhookTarget) {
 		t.Fatalf("private target error = %v, want ErrUnsafeWebhookTarget", err)
@@ -150,6 +183,7 @@ func TestEngineDeliversTerminalWebhookEndToEnd(t *testing.T) {
 			return identity.Subject{AuthMethod: ref.AuthMethod, TenantID: ref.TenantID, APIKeyID: ref.APIKeyID}, nil
 		}),
 		WebhookSender: newHTTPWebhookSender(server.Client()),
+		WebhookSigner: deterministicWebhookSigner{},
 	})
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -192,6 +226,29 @@ func TestEngineDeliversTerminalWebhookEndToEnd(t *testing.T) {
 		}
 		if request.Header.Get("User-Agent") != "D-AI-Webhook/1.0" {
 			t.Fatalf("user agent = %q", request.Header.Get("User-Agent"))
+		}
+		timestamp, err := strconv.ParseInt(request.Header.Get(webhookTimestampHeader), 10, 64)
+		if err != nil {
+			t.Fatalf("parse webhook timestamp: %v", err)
+		}
+		attempt, err := strconv.Atoi(request.Header.Get(webhookAttemptHeader))
+		if err != nil || attempt != 1 {
+			t.Fatalf("webhook attempt = %q, err=%v", request.Header.Get(webhookAttemptHeader), err)
+		}
+		deliveryID := request.Header.Get(webhookDeliveryIDHeader)
+		if deliveryID == "" {
+			t.Fatal("webhook delivery id is empty")
+		}
+		if request.Header.Get(webhookKeyIDHeader) != "test-kid" {
+			t.Fatalf("webhook key id = %q", request.Header.Get(webhookKeyIDHeader))
+		}
+		wantDigest := sha256.Sum256(webhookSigningInput(timestamp, deliveryID, attempt, body))
+		wantSignature := "v1=" + base64.RawURLEncoding.EncodeToString(wantDigest[:])
+		if got := request.Header.Get(webhookSignatureHeader); got != wantSignature {
+			t.Fatalf("webhook signature = %q, want %q", got, wantSignature)
+		}
+		if skew := time.Since(time.Unix(timestamp, 0)); skew < -time.Minute || skew > time.Minute {
+			t.Fatalf("webhook timestamp skew = %s", skew)
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("webhook was not delivered")
@@ -261,11 +318,36 @@ func TestHTTPWebhookSenderDoesNotFollowRedirects(t *testing.T) {
 	sender := newHTTPWebhookSender(server.Client())
 	status, err := sender.Send(context.Background(), WebhookRequest{
 		URL: server.URL + "/redirect", Payload: []byte(`{}`),
+		DeliveryID: "00000000-0000-0000-0000-000000000004", Attempt: 1,
+		Timestamp: time.Now().Unix(), KeyID: "test-kid", Signature: "v1=dGVzdA",
 	})
 	if err != nil {
 		t.Fatalf("Send: %v", err)
 	}
 	if status != http.StatusFound || finalHit.Load() {
 		t.Fatalf("status=%d finalHit=%v, redirect must not be followed", status, finalHit.Load())
+	}
+}
+
+func TestWebhookSenderRejectsUnsignedRequests(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("unsigned webhook reached network")
+	}))
+	defer server.Close()
+
+	sender := newHTTPWebhookSender(server.Client())
+	_, err := sender.Send(context.Background(), WebhookRequest{URL: server.URL, Payload: []byte(`{}`)})
+	if !errors.Is(err, ErrUnsignedWebhook) {
+		t.Fatalf("unsigned webhook error = %v, want ErrUnsignedWebhook", err)
+	}
+}
+
+func TestSignedWebhookRequestRequiresSigner(t *testing.T) {
+	_, err := signedWebhookRequest(claimedDelivery{
+		ID: "00000000-0000-0000-0000-000000000005", URL: "https://hooks.example.com",
+		Payload: []byte(`{}`), Attempt: 1,
+	}, nil, time.Unix(1_700_000_000, 0))
+	if err == nil {
+		t.Fatal("signedWebhookRequest accepted a nil signer")
 	}
 }

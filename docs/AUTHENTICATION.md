@@ -64,6 +64,34 @@ URL fragment 中，避免令牌发送给 HTTP 服务或反向代理，读取后�
 使用的明文密钥。敏感操作在近期认证过期后返回重新认证提示，可通过
 `POST /api/auth/recent-auth` 使用当前密码（已启用 MFA 的管理员还需验证码）恢复权限。
 
+## 异步任务 Webhook 验签
+
+异步任务终态回调使用现有 JWT RS256 密钥做 detached signature，不新增共享 webhook secret。
+接收方从 `/.well-known/jwks.json` 按 `X-D-AI-Webhook-Key-ID` 取得 RSA 公钥。
+
+每次投递都包含：
+
+- `X-D-AI-Webhook-Signature: v1=<base64url-signature>`
+- `X-D-AI-Webhook-Timestamp: <Unix 秒>`
+- `X-D-AI-Webhook-ID: <delivery UUID>`
+- `X-D-AI-Webhook-Attempt: <从 1 开始的尝试序号>`
+- `X-D-AI-Webhook-Key-ID: <JWKS kid>`
+
+RS256 的签名输入必须按字节精确拼接为：
+
+```text
+D-AI-WEBHOOK-V1\n
+<timestamp>\n
+<delivery-id>\n
+<attempt>\n
+<原始 HTTP body bytes>
+```
+
+接收方应先验签再处理 JSON，并校验时间戳的新鲜度（建议允许不超过 5 分钟的时钟偏差）。
+同一个 `(delivery-id, attempt)` 只能执行一次有副作用的处理；这样即使有效请求在时间窗内被重放，
+也不会重复执行业务动作。密钥轮换时 JWKS 同时发布 active 和 grace 公钥，现有 webhook
+最大重试窗口短于 JWT signing key 的 grace 窗口，因此在途重试仍可验签。
+
 ## 数据库升级
 
 已有 schema 10 数据库必须在部署新二进制前依次人工执行：

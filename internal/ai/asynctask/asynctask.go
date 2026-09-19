@@ -103,6 +103,9 @@ type Deps struct {
 
 	// WebhookSender defaults to the guarded production HTTPS adapter.
 	WebhookSender WebhookSender
+	// WebhookSigner signs every outbound callback. A nil signer leaves normal
+	// task execution available but webhook delivery fails closed.
+	WebhookSigner WebhookSigner
 }
 
 // Engine owns the queue: submission, scheduling, leases, retries and expiry.
@@ -124,6 +127,7 @@ type Engine struct {
 	wake          chan struct{}
 	deliveryWake  chan struct{}
 	webhookSender WebhookSender
+	webhookSigner WebhookSigner
 
 	// cancels lets the submitting instance stop a running task instantly.
 	// Other instances learn via the heartbeat returning zero rows.
@@ -180,6 +184,7 @@ func New(cfg Config, deps Deps) (*Engine, error) {
 		wake:          make(chan struct{}, cfg.Workers),
 		deliveryWake:  make(chan struct{}, cfg.WebhookWorkers),
 		webhookSender: deps.WebhookSender,
+		webhookSigner: deps.WebhookSigner,
 		cancels:       map[string]context.CancelFunc{},
 	}, nil
 }

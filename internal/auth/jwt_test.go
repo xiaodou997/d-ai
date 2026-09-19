@@ -2,6 +2,10 @@ package auth
 
 import (
 	"context"
+	"crypto"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
 	"errors"
 	"strings"
 	"testing"
@@ -14,6 +18,28 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+func TestSignDetachedUsesActiveRS256Key(t *testing.T) {
+	privateKey, err := rsa.GenerateKey(rand.Reader, 1024)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := &JWTService{activeKey: &keyEntry{
+		kid: "webhook-test-kid", privateKey: privateKey, publicKey: &privateKey.PublicKey,
+	}}
+	message := []byte("D-AI-WEBHOOK-V1\n1700000000\ndelivery-1\n1\n{}")
+	kid, signature, err := service.SignDetached(message)
+	if err != nil {
+		t.Fatalf("SignDetached: %v", err)
+	}
+	if kid != "webhook-test-kid" {
+		t.Fatalf("kid = %q", kid)
+	}
+	digest := sha256.Sum256(message)
+	if err := rsa.VerifyPKCS1v15(&privateKey.PublicKey, crypto.SHA256, digest[:], signature); err != nil {
+		t.Fatalf("verify detached signature: %v", err)
+	}
+}
 
 func TestParseTokenReloadsSigningKeysAcrossReplicas(t *testing.T) {
 	ctx := context.Background()

@@ -309,10 +309,11 @@ func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisCl
 		WebhookPollInterval:  cfg.AsyncTasks.WebhookPollInterval,
 		WebhookLeaseTTL:      cfg.AsyncTasks.WebhookLeaseTTL,
 	}, asynctask.Deps{
-		Pool:         pool,
-		Logger:       appLogger,
-		Subjects:     gateway.NewTaskSubjectResolver(pool, q),
-		RedactDetail: serving.RedactInternalErrorDetail,
+		Pool:          pool,
+		Logger:        appLogger,
+		Subjects:      gateway.NewTaskSubjectResolver(pool, q),
+		RedactDetail:  serving.RedactInternalErrorDetail,
+		WebhookSigner: platform.JWT,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("build async task engine failed: %w", err)

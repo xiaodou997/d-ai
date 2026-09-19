@@ -2,8 +2,10 @@ package auth
 
 import (
 	"context"
+	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
@@ -387,6 +389,25 @@ func (s *JWTService) signClaims(claims Claims) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
 	token.Header["kid"] = activeKey.kid
 	return token.SignedString(activeKey.privateKey)
+}
+
+// SignDetached signs a domain-separated message with the current RS256 key.
+ // The returned kid is published through the existing JWKS endpoint. Keeping
+ // this primitive detached lets non-JWT protocols reuse the key lifecycle
+ // without minting a bearer token or exposing private key material.
+func (s *JWTService) SignDetached(message []byte) (string, []byte, error) {
+	s.mu.RLock()
+	activeKey := s.activeKey
+	s.mu.RUnlock()
+	if activeKey == nil {
+		return "", nil, fmt.Errorf("no active signing key")
+	}
+	digest := sha256.Sum256(message)
+	signature, err := rsa.SignPKCS1v15(rand.Reader, activeKey.privateKey, crypto.SHA256, digest[:])
+	if err != nil {
+		return "", nil, fmt.Errorf("sign detached message: %w", err)
+	}
+	return activeKey.kid, signature, nil
 }
 
 func (s *JWTService) AccessTokenExpiration() time.Duration { return s.accessTokenExpiration }
