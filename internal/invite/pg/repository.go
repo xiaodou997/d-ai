@@ -87,8 +87,11 @@ func (r *InviteRepository) GetByCode(ctx context.Context, code string) (*Invitat
 	var expiresAt *time.Time
 	var createdAt, updatedAt time.Time
 	err := r.pool.QueryRow(ctx, `
-        SELECT id, code, tenant_id, created_by, description, max_uses, used_count, status, expires_at, created_at, updated_at
-        FROM iam_invitation_codes WHERE code = $1
+        SELECT ic.id, ic.code, ic.tenant_id, ic.created_by, ic.description,
+               ic.max_uses, ic.used_count, ic.status, ic.expires_at, ic.created_at, ic.updated_at
+        FROM iam_invitation_codes ic
+        JOIN iam_tenants t ON t.tenant_id = ic.tenant_id AND t.status = 'active'
+        WHERE ic.code = $1
     `, code).Scan(
 		&ic.ID, &ic.Code, &ic.TenantID, &ic.CreatedBy, &description,
 		&ic.MaxUses, &ic.UsedCount, &status, &expiresAt,
@@ -249,10 +252,18 @@ func (r *InviteRepository) RegisterEndUser(ctx context.Context, input EndUserReg
 	}
 
 	result, err := tx.Exec(ctx, `
-		UPDATE iam_invitation_codes
-		SET used_count = used_count + 1, updated_at = $2
-		WHERE code = $1 AND status = 'active' AND (max_uses = 0 OR used_count < max_uses)
-	`, input.InvitationCode, now)
+		UPDATE iam_invitation_codes ic
+		SET used_count = ic.used_count + 1, updated_at = $2
+		WHERE ic.code = $1
+		  AND ic.tenant_id = $3
+		  AND ic.status = 'active'
+		  AND (ic.expires_at IS NULL OR ic.expires_at > $2)
+		  AND (ic.max_uses = 0 OR ic.used_count < ic.max_uses)
+		  AND EXISTS (
+		      SELECT 1 FROM iam_tenants t
+		      WHERE t.tenant_id = ic.tenant_id AND t.status = 'active'
+		  )
+	`, input.InvitationCode, now, input.TenantID)
 	if err != nil {
 		return fmt.Errorf("consume invitation code: %w", err)
 	}
