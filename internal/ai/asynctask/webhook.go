@@ -37,13 +37,13 @@ var ErrUnsafeWebhookTarget = errors.New("unsafe webhook target")
 var ErrUnsignedWebhook = errors.New("webhook signature metadata is incomplete")
 
 const (
-	webhookSignatureHeader   = "X-D-AI-Webhook-Signature"
-	webhookTimestampHeader   = "X-D-AI-Webhook-Timestamp"
-	webhookDeliveryIDHeader  = "X-D-AI-Webhook-ID"
-	webhookAttemptHeader     = "X-D-AI-Webhook-Attempt"
-	webhookKeyIDHeader       = "X-D-AI-Webhook-Key-ID"
-	webhookSignatureVersion  = "v1"
-	webhookSigningDomain     = "D-AI-WEBHOOK-V1"
+	webhookSignatureHeader  = "X-D-AI-Webhook-Signature"
+	webhookTimestampHeader  = "X-D-AI-Webhook-Timestamp"
+	webhookDeliveryIDHeader = "X-D-AI-Webhook-ID"
+	webhookAttemptHeader    = "X-D-AI-Webhook-Attempt"
+	webhookKeyIDHeader      = "X-D-AI-Webhook-Key-ID"
+	webhookSignatureVersion = "v1"
+	webhookSigningDomain    = "D-AI-WEBHOOK-V1"
 )
 
 // WebhookRequest is a fully materialized notification. Payload is sent
