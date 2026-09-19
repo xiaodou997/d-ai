@@ -19,9 +19,9 @@ func TestProtectSensitiveEndpointHeadersBackfillsAndSecretReaderDecrypts(t *test
 	t.Cleanup(func() { _ = cleanup(context.Background()) })
 
 	const (
-		oldKey    = "0123456789abcdef0123456789abcdef"
-		newKey    = "abcdef0123456789abcdef0123456789"
-		accountID = "49000000-0000-0000-0000-000000000001"
+		oldKey     = "0123456789abcdef0123456789abcdef"
+		newKey     = "abcdef0123456789abcdef0123456789"
+		accountID  = "49000000-0000-0000-0000-000000000001"
 		endpointID = "49000000-0000-0000-0000-000000000002"
 	)
 	if err := clientsecret.Configure(oldKey); err != nil {
