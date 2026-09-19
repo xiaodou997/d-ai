@@ -167,7 +167,7 @@ CREATE UNIQUE INDEX ux_auth_activation_tokens_pending_user
 CREATE INDEX idx_auth_activation_tokens_expires
     ON auth_activation_tokens (expires_at) WHERE consumed_at IS NULL;
 
-CREATE FUNCTION auth_revoke_sessions_on_account_change() RETURNS TRIGGER AS $
+CREATE FUNCTION auth_revoke_sessions_on_account_change() RETURNS TRIGGER AS $$
 BEGIN
     IF NEW.status IS DISTINCT FROM OLD.status
        OR NEW.credential_version IS DISTINCT FROM OLD.credential_version
@@ -187,7 +187,7 @@ BEGIN
     END IF;
     RETURN NEW;
 END;
-$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
 CREATE TRIGGER trg_auth_revoke_sessions_on_account_change
     AFTER UPDATE OF status, credential_version, user_type, tenant_id ON iam_accounts

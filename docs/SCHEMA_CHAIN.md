@@ -3,7 +3,7 @@
 
 Baseline: `internal/db/init.sql` v**46**<br>
 Runtime contract: `internal/db/schema.go` v**46**<br>
-Baseline SHA-256: `9af969e2142c453309819d40112e192af5d4e1854a56d17a70817a1c335f53a2`<br>
+Baseline SHA-256: `a7124f0454db0f40a16f0d46d01e1c7e9e0b59003a05c71bf5c256fa2c7c9fb3`<br>
 Forward chain: **v1 → v46**, 45 migrations, no gaps
 
 This is a generated review artifact. `init.sql` is the complete empty-database baseline; `changes/` is the forward-only upgrade chain for existing databases. The application only verifies the metadata version and never executes these scripts. Release automation must apply the required SQL explicitly, with backup and recovery controls.
