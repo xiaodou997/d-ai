@@ -167,25 +167,30 @@ func (s *PaymentService) GetOrder(ctx context.Context, orderID string) (*payment
 	return o, nil
 }
 
-// GetOrderForScope combines order lookup with the caller's tenant/user scope.
-// Keeping this check in the payment application boundary prevents HTTP
-// handlers from deciding ownership after reading an unrestricted order.
-func (s *PaymentService) GetOrderForScope(ctx context.Context, orderID, tenantID, userID string) (*payment.Order, error) {
+// GetOrderForScope combines order lookup with the caller's scene and
+// tenant/user scope. Keeping this check in the payment application boundary
+// prevents HTTP handlers from deciding ownership after reading an unrestricted
+// order.
+func (s *PaymentService) GetOrderForScope(ctx context.Context, orderID, scene, tenantID, userID string) (*payment.Order, error) {
 	o, err := s.GetOrder(ctx, orderID)
-	if err != nil || !orderOwnedByScope(o, tenantID, userID) {
+	if err != nil || !orderOwnedByScope(o, scene, tenantID, userID) {
 		return nil, domain.ErrPaymentOrderNotFound
 	}
 	return o, nil
 }
 
-func orderOwnedByScope(order *payment.Order, tenantID, userID string) bool {
-	if order == nil || tenantID == "" || order.TenantID != tenantID {
+func orderOwnedByScope(order *payment.Order, scene, tenantID, userID string) bool {
+	if order == nil || scene == "" || order.Scene != scene || tenantID == "" || order.TenantID != tenantID {
 		return false
 	}
-	// Tenant self-service orders have no user_id; callers must pass an empty
-	// userID for that scene so the tenant scope remains the authorization
-	// boundary. Customer orders always carry their owning user id.
-	return userID == "" || order.UserID == userID
+	switch scene {
+	case payment.SceneTenantTopup:
+		return userID == "" && order.UserID == ""
+	case payment.SceneUserTopup:
+		return userID != "" && order.UserID == userID
+	default:
+		return false
+	}
 }
 
 func (s *PaymentService) ListOrders(ctx context.Context, p payment.ListOrdersParams) ([]*payment.Order, int64, error) {
