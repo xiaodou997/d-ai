@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"strings"
 )
 
 type lookupNetIPFunc func(context.Context, string, string) ([]netip.Addr, error)
@@ -131,6 +132,19 @@ func (c *Client) pinRequestForProxy(req *http.Request) (*http.Request, string, e
 	pinned := req.Clone(req.Context())
 	urlCopy := *req.URL
 	urlCopy.Host = net.JoinHostPort(addrs[0].String(), port)
+	// For a plain HTTP upstream sent through an HTTP(S) forward proxy, Go's
+	// Request.WriteProxy normally rebuilds the absolute request URI from
+	// Request.Host. We intentionally keep Request.Host as the original
+	// authority for virtual-host routing, so encode the already-vetted IP in
+	// URL.Opaque to make the proxy request line use the pinned destination.
+	// HTTPS proxying uses CONNECT and is already pinned by URL.Host.
+	if strings.EqualFold(urlCopy.Scheme, "http") {
+		path := urlCopy.EscapedPath()
+		if path == "" {
+			path = "/"
+		}
+		urlCopy.Opaque = "//" + urlCopy.Host + path
+	}
 	pinned.URL = &urlCopy
 	pinned.Host = req.Host
 	if pinned.Host == "" {
