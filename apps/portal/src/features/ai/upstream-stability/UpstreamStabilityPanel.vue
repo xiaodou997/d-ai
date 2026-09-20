@@ -261,7 +261,6 @@ async function resume() {
                 <span class="stability-ref" :title="row.endpoint_id || row.credential_id || undefined">{{ row.target }}</span>
               </div>
             </template>
-            <template #cell-successRateLabel="{ row }"><span class="stability-rate">{{ row.successRateLabel }}</span></template>
           </DsTable>
         </section>
       </div>
@@ -286,7 +285,7 @@ async function resume() {
 .stability-model-cell strong { color: var(--ds-ink); font-weight: 650; }
 .stability-ref { color: var(--ds-ink-soft); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
 .stability-rate { color: var(--ds-ink-soft); font-variant-numeric: tabular-nums; }
-.stability-ok { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 10px 12px; border: 1px solid var(--ds-line); border-radius: var(--ds-radius-control); color: var(--ds-muted); font-size: 12px; }
+.stability-ok { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--ds-line); border-radius: var(--ds-radius-control); color: var(--ds-muted); font-size: 12px; }
 .stability-loading,
 .stability-empty { padding: 36px 12px; color: var(--ds-muted); font-size: 13px; text-align: center; }
 @media (max-width: 1100px) { .stability-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
