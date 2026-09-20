@@ -66,9 +66,6 @@ func TestDiagnosticClientUsesBusinessProxySelector(t *testing.T) {
 		if r.URL.Host != "93.184.216.34:80" {
 			t.Errorf("pinned target host=%s", r.URL.Host)
 		}
-		if r.Host != "upstream.invalid" {
-			t.Errorf("original Host header=%s", r.Host)
-		}
 		io.WriteString(w, `{"ok":true}`)
 	}))
 	defer proxy.Close()
@@ -80,6 +77,16 @@ func TestDiagnosticClientUsesBusinessProxySelector(t *testing.T) {
 	}
 	client.SetProxySelector(selector)
 	req, _ := http.NewRequest(http.MethodPost, "http://upstream.invalid/v1/responses", strings.NewReader(`{}`))
+	pinned, _, err := client.pinRequestForProxy(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pinned.Host != "upstream.invalid" {
+		t.Fatalf("original Host header=%s", pinned.Host)
+	}
+	if pinned.URL.Host != "93.184.216.34:80" || pinned.URL.Opaque != "//93.184.216.34:80/v1/responses" {
+		t.Fatalf("pinned URL=%s opaque=%s", pinned.URL.Host, pinned.URL.Opaque)
+	}
 	res, err := client.DiagnosticClient().Do(req)
 	if err != nil {
 		t.Fatal(err)
