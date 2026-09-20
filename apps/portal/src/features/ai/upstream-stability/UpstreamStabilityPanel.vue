@@ -54,20 +54,19 @@ const outcomeLabels: Record<string, string> = {
   rejected: '未发送（不计失败）'
 };
 
+const failureOutcomes = new Set(['server_error', 'timeout', 'network_error', 'unauthorized', 'rate_limited', 'model_error']);
+
 const stateColumns: DsTableColumn[] = [
-  { key: 'model', title: '影响模型', width: 180 },
-  { key: 'target', title: '端点 / 凭据', width: 180 },
-  { key: 'phase', title: '运行状态', width: 110 },
-  { key: 'reasonLabel', title: '最近原因', width: 150 },
-  { key: 'retry_at', title: '可重新调用时间', width: 180 },
-  { key: 'verified_at', title: '最近验证成功', width: 180 }
+  { key: 'scope', title: '影响范围', width: 280, wrap: true },
+  { key: 'phase', title: '状态', width: 120 },
+  { key: 'reasonLabel', title: '原因', width: 170 },
+  { key: 'nextAction', title: '下一步', width: 220, wrap: true }
 ];
 const modelColumns: DsTableColumn[] = [
-  { key: 'model', title: '模型 / 目标', width: 230, wrap: true },
-  { key: 'operationLabel', title: '请求格式', width: 160 },
-  { key: 'streamLabel', title: '传输', width: 78 },
-  { key: 'result', title: '调用结果 / 最近错误', width: 260, wrap: true },
-  { key: 'count', title: '次数', width: 70, align: 'right' },
+  { key: 'model', title: '模型 / 目标', width: 240, wrap: true },
+  { key: 'requestLabel', title: '请求', width: 220, wrap: true },
+  { key: 'successRateLabel', title: '成功率', width: 110, align: 'right' },
+  { key: 'attemptsLabel', title: '有效尝试', width: 150 },
   { key: 'latencyLabel', title: '成功延迟', width: 190, wrap: true }
 ];
 
@@ -106,34 +105,76 @@ function availabilityTone(value?: string): 'positive' | 'warning' | 'danger' | '
   return 'neutral';
 }
 
-function outcomeTone(value?: string): 'positive' | 'warning' | 'danger' | 'neutral' {
-  if (value === 'success') return 'positive';
-  if (['client_error', 'canceled', 'circuit_open', 'rejected'].includes(value || '')) return 'neutral';
-  if (value) return 'danger';
-  return 'neutral';
-}
-
 const activeWindowLabel = computed(() => windowLabels[runtime.window.value] || runtime.window.value);
-const stateRows = computed(() => (detail.value?.states || []).map(state => ({
-  ...state,
-  key: state.scope.key,
-  model: state.scope.model || '所有模型',
-  target: targetLabel({ endpoint_id: state.scope.endpoint_id, credential_id: state.scope.credential_id }),
-  reasonLabel: outcomeLabels[state.reason || ''] || state.reason || '—'
-})));
-const modelRows = computed(() => (detail.value?.models || []).map((row, key) => ({
-  ...row,
-  key: `${row.endpoint_id || row.credential_id || row.model}|${row.operation}|${row.stream}|${row.outcome}|${key}`,
-  model: row.model || '未标注模型',
-  operationLabel: operationLabel(row.operation),
-  target: targetLabel(row),
-  streamLabel: row.stream ? '流式' : '非流式',
-  result: outcomeLabels[row.outcome] || row.outcome || '—',
-  p50Label: durationLabel(row.p50_ms),
-  p95Label: durationLabel(row.p95_ms),
-  lastError: row.last_error || '—',
-  latencyLabel: row.p50_ms > 0 || row.p95_ms > 0 ? `P50 ${durationLabel(row.p50_ms)} · P95 ${durationLabel(row.p95_ms)}` : '无成功样本'
-})));
+const stateRows = computed(() => (detail.value?.states || [])
+  .filter(state => state.phase === 'cooling' || state.phase === 'recovering')
+  .map(state => ({
+    ...state,
+    key: state.scope.key,
+    model: state.scope.model || '所有模型',
+    target: targetLabel({ endpoint_id: state.scope.endpoint_id, credential_id: state.scope.credential_id }),
+    reasonLabel: outcomeLabels[state.reason || ''] || state.reason || '—',
+    nextAction: state.phase === 'cooling'
+      ? `等待至 ${time(state.retry_at)}`
+      : state.busy ? '试用请求进行中' : '已可参与业务选路'
+  })));
+const hasRetryableState = computed(() => stateRows.value.some(row => row.phase === 'cooling'));
+
+type AttemptSummary = {
+  key: string;
+  endpoint_id: string;
+  credential_id: string;
+  model: string;
+  target: string;
+  operationLabel: string;
+  streamLabel: string;
+  successes: number;
+  failures: number;
+  p50_ms: number;
+  p95_ms: number;
+};
+
+const modelRows = computed(() => {
+  const groups = new Map<string, AttemptSummary>();
+  for (const row of detail.value?.models || []) {
+    if (row.outcome !== 'success' && !failureOutcomes.has(row.outcome)) continue;
+    const key = `${row.endpoint_id || ''}|${row.credential_id || ''}|${row.model || ''}|${row.operation || ''}|${row.stream}`;
+    let summary = groups.get(key);
+    if (!summary) {
+      summary = {
+        key,
+        endpoint_id: row.endpoint_id || '',
+        credential_id: row.credential_id || '',
+        model: row.model || '未标注模型',
+        target: targetLabel(row),
+        operationLabel: operationLabel(row.operation),
+        streamLabel: row.stream ? '流式' : '非流式',
+        successes: 0,
+        failures: 0,
+        p50_ms: 0,
+        p95_ms: 0
+      };
+      groups.set(key, summary);
+    }
+    if (row.outcome === 'success') {
+      summary.successes += row.count;
+      summary.p50_ms = Math.max(summary.p50_ms, row.p50_ms || 0);
+      summary.p95_ms = Math.max(summary.p95_ms, row.p95_ms || 0);
+    } else {
+      summary.failures += row.count;
+    }
+  }
+  return [...groups.values()].map(row => {
+    const samples = row.successes + row.failures;
+    return {
+      ...row,
+      requestLabel: `${row.operationLabel} · ${row.streamLabel}`,
+      successRateLabel: samples ? `${(row.successes * 100 / samples).toFixed(1)}%` : '—',
+      attemptsLabel: `${row.successes} 成功 · ${row.failures} 失败`,
+      latencyLabel: row.successes > 0 ? `P50 ${durationLabel(row.p50_ms)} · P95 ${durationLabel(row.p95_ms)}` : '—'
+    };
+  });
+});
 
 function time(value?: number) { return value ? new Date(value).toLocaleString('zh-CN') : '—'; }
 
@@ -152,7 +193,7 @@ async function resume() {
 </script>
 
 <template>
-  <PortalContentCard title="运行状态与稳定性" description="按账号、模型和结果聚合真实上游尝试，不是单条请求日志；取消、冷却跳过和本地拒绝不计入成功率。">
+  <PortalContentCard title="运行诊断" description="聚合真实上游尝试，优先展示当前可用性、失败与恢复状态。">
     <div class="stability-toolbar">
       <label class="stability-toolbar__field">
         <span>统计范围</span>
@@ -164,7 +205,7 @@ async function resume() {
       <DsTag v-if="detail && !detail.state_error" :tone="availabilityTone(detail.availability)">{{ availabilityLabels[detail.availability] }}</DsTag>
       <DsTag v-if="detail?.repeated_failure" tone="danger">最近一小时反复异常</DsTag>
       <span class="stability-toolbar__spacer" />
-      <el-button :disabled="!detail || detail.config_status === 'disabled' || Boolean(detail.state_error)" :loading="resuming" :title="detail?.state_error ? '运行状态服务不可用，暂时无法执行恢复操作' : undefined" @click="resume">允许立即重试</el-button>
+      <el-button v-if="hasRetryableState" :disabled="!detail || detail.config_status === 'disabled' || Boolean(detail.state_error)" :loading="resuming" :title="detail?.state_error ? '运行状态服务不可用，暂时无法执行恢复操作' : undefined" @click="resume">允许立即重试</el-button>
     </div>
 
     <el-alert
@@ -179,56 +220,48 @@ async function resume() {
     <div v-if="runtime.loading.value && !detail" class="stability-loading">正在加载运行统计…</div>
     <template v-else-if="detail">
       <div class="stability-metrics">
-        <DsMetricCard label="上游尝试成功率" :value="detail.success_rate == null ? '暂无样本' : `${detail.success_rate.toFixed(1)}%`" :hint="`${detail.samples} 次有效尝试`" />
-        <DsMetricCard label="有效样本" :value="String(detail.samples)" :hint="`${detail.successes} 次成功 · ${detail.failures} 次失败`" />
-        <DsMetricCard label="上游失败" :value="String(detail.failures)" :hint="'仅统计真实上游失败'" />
-        <DsMetricCard label="最近 1 小时进入冷却" :value="String(detail.cooldowns_last_hour)" :hint="`${detail.excluded} 次取消或本地跳过未计入成功率`" />
+        <DsMetricCard label="成功率" :value="detail.success_rate == null ? '暂无样本' : `${detail.success_rate.toFixed(1)}%`" :hint="`${detail.samples} 次有效尝试 · ${detail.successes} 次成功`" />
+        <DsMetricCard label="失败尝试" :value="String(detail.failures)" :hint="detail.excluded ? `${detail.excluded} 次取消或本地跳过未计入` : '仅统计真实上游失败'" />
+        <DsMetricCard label="最近 1 小时冷却" :value="String(detail.cooldowns_last_hour)" :hint="detail.repeated_failure ? '反复异常，需要关注' : '未达到反复异常阈值'" />
       </div>
 
-      <p class="stability-note">统计窗口：{{ activeWindowLabel }} · 覆盖始于 {{ time(detail.coverage_started_at) }}。流式请求按首个有效输出统计延迟，其他请求按完成耗时统计。</p>
+      <p class="stability-note">{{ activeWindowLabel }} · 覆盖始于 {{ time(detail.coverage_started_at) }}。流式按首个有效输出计时，其他请求按完成耗时计时。</p>
 
       <div class="stability-table-stack">
-        <section class="stability-table-section">
+        <section v-if="!detail.state_error" class="stability-table-section">
           <div class="stability-section-heading">
             <div>
-              <h3>故障与恢复</h3>
-              <p>上游报错后会暂时等待，再用新的业务请求验证恢复。可点击“允许立即重试”提前结束等待。</p>
+              <h3>当前故障与恢复</h3>
+              <p>只显示正在冷却或等待业务请求验证的范围。</p>
             </div>
           </div>
-          <DsTable
-            :columns="stateColumns"
-            :rows="stateRows"
-            row-key="key"
-            :empty-title="detail.state_error ? '运行状态暂不可读取' : '暂无故障或恢复记录'"
-            :empty-description="detail.state_error ? '历史调用统计仍可查看。' : '当前没有冷却或恢复中的运行范围。'"
-          >
-            <template #cell-target="{ row }"><span class="stability-ref" :title="row.scope.endpoint_id || row.scope.credential_id || undefined">{{ row.target }}</span></template>
-            <template #cell-phase="{ row }"><DsTag :tone="row.phase === 'cooling' ? 'danger' : row.phase === 'recovering' ? 'warning' : 'positive'">{{ phaseLabels[row.phase] || row.phase }}</DsTag></template>
-            <template #cell-verified_at="{ row }">{{ row.verified_at ? time(row.verified_at) : '尚未验证成功' }}</template>
-            <template #cell-retry_at="{ row }">{{ row.phase === 'cooling' ? time(row.retry_at) : row.phase === 'recovering' ? (row.busy ? '试用请求进行中' : '已到期，可参与业务选路') : '—' }}</template>
+          <DsTable v-if="stateRows.length" :columns="stateColumns" :rows="stateRows" row-key="key">
+            <template #cell-scope="{ row }">
+              <div class="stability-model-cell">
+                <strong>{{ row.model }}</strong>
+                <span class="stability-ref" :title="row.scope.endpoint_id || row.scope.credential_id || undefined">{{ row.target }}</span>
+              </div>
+            </template>
+            <template #cell-phase="{ row }"><DsTag :tone="row.phase === 'cooling' ? 'danger' : 'warning'">{{ phaseLabels[row.phase] || row.phase }}</DsTag></template>
           </DsTable>
+          <div v-else class="stability-ok"><DsTag tone="positive">无需干预</DsTag><span>当前没有冷却或恢复中的范围。</span></div>
         </section>
 
         <section class="stability-table-section">
           <div class="stability-section-heading">
             <div>
-              <h3>调用明细</h3>
-              <p>按模型、请求格式和结果汇总；P50/P95 没有成功样本时显示为 —。</p>
+              <h3>调用概览</h3>
+              <p>按模型、目标、请求格式和传输方式合并，只展示计入成功率的有效尝试。</p>
             </div>
           </div>
-          <DsTable :columns="modelColumns" :rows="modelRows" row-key="key" empty-title="当前时间范围暂无调用记录">
+          <DsTable :columns="modelColumns" :rows="modelRows" row-key="key" empty-title="当前时间范围暂无有效上游尝试">
             <template #cell-model="{ row }">
               <div class="stability-model-cell">
                 <strong>{{ row.model }}</strong>
                 <span class="stability-ref" :title="row.endpoint_id || row.credential_id || undefined">{{ row.target }}</span>
               </div>
             </template>
-            <template #cell-result="{ row }">
-              <div class="stability-result-cell">
-                <DsTag :tone="outcomeTone(row.outcome)">{{ row.result }}</DsTag>
-                <span v-if="row.lastError !== '—'" class="stability-error">{{ row.lastError }}</span>
-              </div>
-            </template>
+            <template #cell-successRateLabel="{ row }"><span class="stability-rate">{{ row.successRateLabel }}</span></template>
           </DsTable>
         </section>
       </div>
@@ -242,18 +275,18 @@ async function resume() {
 .stability-toolbar__field { display: inline-flex; align-items: center; gap: 8px; color: var(--ds-muted); font-size: 12px; font-weight: 600; }
 .stability-toolbar__field :deep(.el-select) { width: 150px; }
 .stability-toolbar__spacer { flex: 1; }
-.stability-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 18px 0; }
-.stability-note { margin: 0 0 18px; padding: 10px 12px; border: 1px solid var(--ds-line); border-radius: var(--ds-radius-control); background: var(--ds-panel-muted); color: var(--ds-muted); font-size: 12px; line-height: 1.6; }
+.stability-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 18px 0; }
+.stability-note { margin: 0 0 18px; color: var(--ds-muted); font-size: 12px; line-height: 1.6; }
 .stability-table-stack { display: flex; flex-direction: column; gap: 22px; margin-top: 4px; }
 .stability-table-section { min-width: 0; }
 .stability-section-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
 .stability-section-heading h3 { margin: 0; color: var(--ds-ink); font-size: 14px; }
 .stability-section-heading p { margin: 4px 0 0; color: var(--ds-muted); font-size: 12px; line-height: 1.5; }
-.stability-model-cell,
-.stability-result-cell { display: flex; flex-direction: column; gap: 4px; min-width: 0; white-space: normal; }
+.stability-model-cell { display: flex; flex-direction: column; gap: 4px; min-width: 0; white-space: normal; }
 .stability-model-cell strong { color: var(--ds-ink); font-weight: 650; }
 .stability-ref { color: var(--ds-ink-soft); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
-.stability-error { display: block; max-width: 300px; color: var(--ds-ink-soft); line-height: 1.5; overflow-wrap: anywhere; white-space: normal; }
+.stability-rate { color: var(--ds-ink-soft); font-variant-numeric: tabular-nums; }
+.stability-ok { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 10px 12px; border: 1px solid var(--ds-line); border-radius: var(--ds-radius-control); color: var(--ds-muted); font-size: 12px; }
 .stability-loading,
 .stability-empty { padding: 36px 12px; color: var(--ds-muted); font-size: 13px; text-align: center; }
 @media (max-width: 1100px) { .stability-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
