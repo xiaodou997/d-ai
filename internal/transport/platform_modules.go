@@ -176,7 +176,7 @@ type PaymentCashHTTPService interface {
 type PaymentTopupHTTPService interface {
 	GetTopupConfigView(context.Context, string, string) (*paymentsvc.TopupConfigView, error)
 	CreateTopupOrder(context.Context, paymentsvc.CreateTopupOrderParams) (*paymentpkg.Order, error)
-	GetOrderForScope(context.Context, string, string, string) (*paymentpkg.Order, error)
+	GetOrderForScope(context.Context, string, string, string, string) (*paymentpkg.Order, error)
 	ListOrders(context.Context, paymentpkg.ListOrdersParams) ([]*paymentpkg.Order, int64, error)
 }
 

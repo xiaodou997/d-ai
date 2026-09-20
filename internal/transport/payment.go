@@ -241,7 +241,7 @@ func (h *paymentHandlers) getOrder(ctx context.Context, in *getTopupOrderInput) 
 	// Tenant top-up orders deliberately have no user_id.  Do not pass the
 	// tenant operator's JWT user id into the user-scoped lookup, otherwise a
 	// perfectly valid tenant order is returned as 404 during QR polling.
-	order, err := h.svc.GetOrderForScope(ctx, in.OrderID, claims.TenantID, orderLookupUserID(scene, claims))
+	order, err := h.svc.GetOrderForScope(ctx, in.OrderID, scene, claims.TenantID, orderLookupUserID(scene, claims))
 	if err != nil {
 		return nil, toProblem(err)
 	}

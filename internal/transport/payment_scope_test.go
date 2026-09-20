@@ -10,7 +10,9 @@ import (
 )
 
 type topupLookupStub struct {
-	userID string
+	scene    string
+	tenantID string
+	userID   string
 }
 
 func (s *topupLookupStub) GetTopupConfigView(context.Context, string, string) (*paymentsvc.TopupConfigView, error) {
@@ -21,7 +23,9 @@ func (s *topupLookupStub) CreateTopupOrder(context.Context, paymentsvc.CreateTop
 	return nil, nil
 }
 
-func (s *topupLookupStub) GetOrderForScope(_ context.Context, _, _ string, userID string) (*payment.Order, error) {
+func (s *topupLookupStub) GetOrderForScope(_ context.Context, _, scene, tenantID, userID string) (*payment.Order, error) {
+	s.scene = scene
+	s.tenantID = tenantID
 	s.userID = userID
 	return &payment.Order{OrderID: "order-1", TenantID: "tenant-1", Status: payment.OrderStatusPaid}, nil
 }
@@ -40,6 +44,12 @@ func TestGetTopupOrderUsesTenantScopeForTenantOrders(t *testing.T) {
 	if _, err := h.getOrder(ctx, &getTopupOrderInput{OrderID: "order-1"}); err != nil {
 		t.Fatalf("getOrder returned error: %v", err)
 	}
+	if stub.scene != payment.SceneTenantTopup {
+		t.Fatalf("tenant order lookup scene = %q, want %q", stub.scene, payment.SceneTenantTopup)
+	}
+	if stub.tenantID != "tenant-1" {
+		t.Fatalf("tenant order lookup tenant id = %q, want tenant-1", stub.tenantID)
+	}
 	if stub.userID != "" {
 		t.Fatalf("tenant order lookup user id = %q, want empty", stub.userID)
 	}
@@ -54,6 +64,12 @@ func TestGetTopupOrderUsesUserScopeForCustomerOrders(t *testing.T) {
 
 	if _, err := h.getOrder(ctx, &getTopupOrderInput{OrderID: "order-1"}); err != nil {
 		t.Fatalf("getOrder returned error: %v", err)
+	}
+	if stub.scene != payment.SceneUserTopup {
+		t.Fatalf("customer order lookup scene = %q, want %q", stub.scene, payment.SceneUserTopup)
+	}
+	if stub.tenantID != "tenant-1" {
+		t.Fatalf("customer order lookup tenant id = %q, want tenant-1", stub.tenantID)
 	}
 	if stub.userID != "user-1" {
 		t.Fatalf("customer order lookup user id = %q, want user-1", stub.userID)
