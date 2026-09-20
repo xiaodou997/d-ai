@@ -2,6 +2,35 @@
 
 All notable changes to D-AI are documented in this file.
 
+## [0.3.25] - 2026-09-20
+
+### Security and authorization
+
+- Protect invitation bearer credentials, bind invitation use to an active tenant, and refresh the invitation authentication contract.
+- Enforce disabled OAuth-pool boundaries when resolving active pool credentials.
+- Encrypt sensitive upstream endpoint headers, including caller-supplied sensitive headers, before persistence.
+- Sign async-task webhook deliveries with JWKS-verifiable signatures and cover the signed-delivery path with regression tests.
+- Redact endpoint secrets from diagnostics and close sensitive diagnostic read paths.
+- Expand multi-tenant ownership coverage for user API keys and subscription orders, and scope top-up order detail access by billing scene.
+
+### Network security
+
+- Harden remote image downloads against SSRF.
+- Guard direct upstream HTTP egress, pin validated destination addresses, and pin proxy request targets after validation.
+
+### Reliability
+
+- Preserve disabled API-key and proxy states across patch/update operations.
+- Preserve nullable API-key limits on patch.
+
+### Upgrade notes
+
+- No new database migration is introduced in v0.3.25; the schema contract remains at v46.
+
+### Validation
+
+- Re-run the complete Go and Portal suites, PostgreSQL no-skip gates, authorization and OpenAPI contracts, ownership regressions, release artifacts, SBOM/provenance, hardened production image, and HIGH/CRITICAL container vulnerability baseline.
+
 ## [0.3.24] - 2026-09-19
 
 ### Security and authorization
