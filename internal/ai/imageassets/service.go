@@ -36,6 +36,23 @@ const (
 	imageCleanupLeaseName = ".image-cleanup-lease"
 )
 
+var disallowedImageDownloadPrefixes = []netip.Prefix{
+	netip.MustParsePrefix("0.0.0.0/8"),
+	netip.MustParsePrefix("100.64.0.0/10"),
+	netip.MustParsePrefix("192.0.0.0/24"),
+	netip.MustParsePrefix("192.0.2.0/24"),
+	netip.MustParsePrefix("198.18.0.0/15"),
+	netip.MustParsePrefix("198.51.100.0/24"),
+	netip.MustParsePrefix("203.0.113.0/24"),
+	netip.MustParsePrefix("240.0.0.0/4"),
+	netip.MustParsePrefix("64:ff9b::/96"),
+	netip.MustParsePrefix("64:ff9b:1::/48"),
+	netip.MustParsePrefix("2001::/32"),
+	netip.MustParsePrefix("2001:db8::/32"),
+	netip.MustParsePrefix("2002::/16"),
+	netip.MustParsePrefix("fec0::/10"),
+}
+
 type Config struct {
 	StorageDir     string
 	Retention      time.Duration
@@ -660,16 +677,9 @@ func (s *Service) imageBytes(ctx context.Context, item responseImageItem) ([]byt
 }
 
 func (s *Service) download(ctx context.Context, rawURL string) ([]byte, string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
-	if err != nil {
-		return nil, "", err
-	}
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return nil, "", err
-	}
-	defer resp.Body.Close()
-	return s.readImageResponse(resp)
+	// Provider-returned URLs are just as untrusted as caller-provided image URLs.
+	// Keep every remote image fetch on the same guarded path.
+	return s.downloadExternal(ctx, rawURL)
 }
 
 func (s *Service) downloadExternal(ctx context.Context, rawURL string) ([]byte, string, error) {
@@ -717,26 +727,56 @@ func externalImageTransport(base http.RoundTripper) http.RoundTripper {
 	}
 	if transport, ok := base.(*http.Transport); ok {
 		cloned := transport.Clone()
+		// Do not let an ambient HTTP(S) proxy resolve the untrusted destination on
+		// our behalf, and force HTTPS through the guarded DialContext below.
+		cloned.Proxy = nil
+		cloned.DialTLSContext = nil
 		dialer := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
-		cloned.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
-			host, port, err := net.SplitHostPort(address)
-			if err != nil {
-				return nil, err
-			}
-			ips, err := net.DefaultResolver.LookupNetIP(ctx, "ip", host)
-			if err != nil {
-				return nil, err
-			}
-			for _, ip := range ips {
-				if !isPublicImageDownloadAddr(ip.Unmap()) {
-					return nil, errors.New("image url host resolved to a disallowed address")
-				}
-			}
-			return dialer.DialContext(ctx, network, net.JoinHostPort(host, port))
-		}
+		cloned.DialContext = guardedImageDialContext(net.DefaultResolver.LookupNetIP, dialer.DialContext)
 		return cloned
 	}
 	return base
+}
+
+func guardedImageDialContext(
+	lookup func(context.Context, string, string) ([]netip.Addr, error),
+	dial func(context.Context, string, string) (net.Conn, error),
+) func(context.Context, string, string) (net.Conn, error) {
+	return func(ctx context.Context, network, address string) (net.Conn, error) {
+		host, port, err := net.SplitHostPort(address)
+		if err != nil {
+			return nil, err
+		}
+		var addrs []netip.Addr
+		if literal, parseErr := netip.ParseAddr(host); parseErr == nil {
+			addrs = []netip.Addr{literal}
+		} else {
+			addrs, err = lookup(ctx, "ip", host)
+			if err != nil {
+				return nil, err
+			}
+		}
+		if len(addrs) == 0 {
+			return nil, errors.New("image url host resolved to no addresses")
+		}
+		vetted := make([]netip.Addr, 0, len(addrs))
+		for _, addr := range addrs {
+			addr = addr.Unmap()
+			if !isPublicImageDownloadAddr(addr) {
+				return nil, fmt.Errorf("image url host resolved to a disallowed address: %s", addr)
+			}
+			vetted = append(vetted, addr)
+		}
+		var dialErr error
+		for _, addr := range vetted {
+			conn, err := dial(ctx, network, net.JoinHostPort(addr.String(), port))
+			if err == nil {
+				return conn, nil
+			}
+			dialErr = errors.Join(dialErr, err)
+		}
+		return nil, dialErr
+	}
 }
 
 func (s *Service) readImageResponse(resp *http.Response) ([]byte, string, error) {
@@ -954,13 +994,19 @@ func validateImageDownloadURL(rawURL string) error {
 }
 
 func isPublicImageDownloadAddr(addr netip.Addr) bool {
-	return addr.IsValid() &&
-		!addr.IsLoopback() &&
-		!addr.IsPrivate() &&
-		!addr.IsLinkLocalUnicast() &&
-		!addr.IsLinkLocalMulticast() &&
-		!addr.IsMulticast() &&
-		!addr.IsUnspecified()
+	addr = addr.Unmap()
+	if !addr.IsValid() || !addr.IsGlobalUnicast() ||
+		addr.IsLoopback() || addr.IsPrivate() ||
+		addr.IsLinkLocalUnicast() || addr.IsLinkLocalMulticast() ||
+		addr.IsMulticast() || addr.IsUnspecified() {
+		return false
+	}
+	for _, prefix := range disallowedImageDownloadPrefixes {
+		if prefix.Contains(addr) {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *Service) storeOne(ctx context.Context, taskID string, index int, data []byte, contentType, assetKey string, expiresAt time.Time) (StoredAsset, error) {

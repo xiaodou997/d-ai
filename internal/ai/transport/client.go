@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strings"
 	"time"
@@ -21,9 +22,12 @@ import (
 
 // Client implements serving.Transporter.
 type Client struct {
-	http          *http.Client
-	baseTransport *http.Transport
-	selector      ProxySelector
+	http              *http.Client
+	baseTransport     *http.Transport
+	selector          ProxySelector
+	lookupNetIP       lookupNetIPFunc
+	directDialContext dialContextFunc
+	allowAddress      func(netip.Addr) bool
 }
 
 // ProxySelector chooses the egress proxy for one upstream attempt. Returning
@@ -45,21 +49,25 @@ type ProxySelector interface {
 // PerAttemptTimeout); Do does not add — and must not prematurely cancel — its
 // own context.
 func NewClient(headerTimeout time.Duration) *Client {
+	dialer := &net.Dialer{KeepAlive: 30 * time.Second}
+	client := &Client{
+		lookupNetIP:       net.DefaultResolver.LookupNetIP,
+		directDialContext: dialer.DialContext,
+		allowAddress:      isPublicUpstreamAddr,
+	}
 	transport := &http.Transport{
 		MaxIdleConns:        100,
 		MaxIdleConnsPerHost: 20,
 		IdleConnTimeout:     90 * time.Second,
 	}
+	transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+		return client.dialPublicTarget(ctx, network, address, client.directDialContext)
+	}
 	if headerTimeout > 0 {
 		transport.ResponseHeaderTimeout = headerTimeout
 	}
-	client := &Client{
-		baseTransport: transport,
-		http: &http.Client{
-			// No Timeout — see comment above.
-			Transport: transport,
-		},
-	}
+	client.baseTransport = transport
+	client.http = newUpstreamHTTPClient(transport)
 	return client
 }
 
@@ -112,6 +120,7 @@ func (d diagnosticHTTPClient) Do(req *http.Request) (*http.Response, error) {
 func (c *Client) doHTTPRequest(httpReq *http.Request) (*http.Response, error) {
 	ctx := httpReq.Context()
 	client := c.http
+	request := httpReq
 	if c.selector != nil {
 		proxyURL, selectErr := c.selector.SelectProxy(ctx)
 		if selectErr != nil {
@@ -129,18 +138,39 @@ func (c *Client) doHTTPRequest(httpReq *http.Request) (*http.Response, error) {
 				return nil, fmt.Errorf("create socks5 proxy dialer: %w", dialErr)
 			}
 			transport.Proxy = nil
-			transport.DialContext = func(_ context.Context, network, address string) (net.Conn, error) {
-				return dialer.Dial(network, address)
+			transport.DialTLSContext = nil
+			transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+				return c.dialPublicTarget(ctx, network, address, func(_ context.Context, network, address string) (net.Conn, error) {
+					return dialer.Dial(network, address)
+				})
 			}
-			client = &http.Client{Transport: transport}
+			client = newUpstreamHTTPClient(transport)
 		} else if proxyURL != nil {
+			pinned, serverName, pinErr := c.pinRequestForProxy(httpReq)
+			if pinErr != nil {
+				return nil, pinErr
+			}
+			request = pinned
 			transport := c.baseTransport.Clone()
 			transport.Proxy = http.ProxyURL(proxyURL)
-			client = &http.Client{Transport: transport}
+			// The proxy is trusted deployment infrastructure and may legitimately
+			// live on a private network. The untrusted upstream target has already
+			// been resolved and pinned into request.URL by pinRequestForProxy.
+			transport.DialContext = c.directDialContext
+			transport.DialTLSContext = nil
+			if strings.EqualFold(request.URL.Scheme, "https") {
+				transport.TLSClientConfig = tlsConfigForServer(c.baseTransport.TLSClientConfig, serverName)
+			}
+			if strings.EqualFold(proxyURL.Scheme, "https") {
+				transport.DialTLSContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+					return dialTLSFirstHop(ctx, network, address, proxyURL.Hostname(), c.directDialContext, c.baseTransport.TLSClientConfig)
+				}
+			}
+			client = newUpstreamHTTPClient(transport)
 		}
 	}
 
-	resp, err := client.Do(httpReq)
+	resp, err := client.Do(request)
 	if err != nil {
 		return nil, err
 	}
