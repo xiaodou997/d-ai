@@ -30,7 +30,7 @@ func TestResponsesDiagnosticUsesContextAndNoTinyOutputCap(t *testing.T) {
 		io.WriteString(w, "data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"output_text\":\"Duplicate reads extend expiration.\"}}\n\n")
 	}))
 	defer server.Close()
-	result := runUpstreamAccountTest(context.Background(), NewClient(0).DiagnosticClient(), upstreamTestConfig{BaseURL: server.URL, APIFormat: string(domain.ProtocolOpenAIResponses), UpstreamModel: "bound-model", Capability: "chat"})
+	result := runUpstreamAccountTest(context.Background(), newPrivateNetworkTestClient().DiagnosticClient(), upstreamTestConfig{BaseURL: server.URL, APIFormat: string(domain.ProtocolOpenAIResponses), UpstreamModel: "bound-model", Capability: "chat"})
 	if !result.OK || result.ResponseContentType != "text/event-stream" || result.UpstreamRequestID != "upstream-review-1" {
 		t.Fatalf("result=%+v", result)
 	}
