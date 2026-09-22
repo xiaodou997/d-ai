@@ -40,6 +40,7 @@ function account(index: number) {
     id: `account-${index}`,
     name: `Account ${index}`,
     tenant_display_name: `Display ${index}`,
+    description: `Description ${index}`,
     tenant_access_mode: index % 2 ? 'public' : 'restricted',
     tenant_multiplier: 1,
     status: 'active',
@@ -86,24 +87,29 @@ describe('UpstreamAccountsWorkspace', () => {
     vi.mocked(stabilityApi.list).mockReset().mockResolvedValue({ items: [{ resource_id: 'account-1', window: '24h', availability: 'partial', success_rate: 80, samples: 10 }] } as any)
   })
 
-  it('renders a full-width account table with separate config, runtime and success-rate information', async () => {
+  it('renders descriptions and styled multipliers without a standalone endpoint-count column', async () => {
     const { wrapper } = await mountPage()
-    expect(wrapper.get('table').attributes('aria-label')).toBe('上游账号列表')
-    expect(wrapper.text()).toContain('Account 1')
-    expect(wrapper.text()).toContain('成功率 80.0%')
-    expect(wrapper.text()).toContain('样本较少')
-    expect(wrapper.text()).toContain('部分受限')
-    expect(wrapper.find('.account-content-column').exists()).toBe(false)
+    const table = wrapper.get('table')
+    expect(table.attributes('aria-label')).toBe('上游账号列表')
+    expect(table.text()).toContain('Account 1')
+    expect(table.text()).toContain('Description 1')
+    expect(table.text()).toContain('成功率 80.0%')
+    expect(table.text()).toContain('样本较少')
+    expect(table.text()).toContain('部分受限')
+    expect(table.text()).toContain('1×')
+    expect(table.findAll('thead th').map(cell => cell.text())).toContain('描述')
+    expect(table.findAll('thead th').map(cell => cell.text())).not.toContain('端点')
+    expect(table.find('.description-cell').attributes('title')).toBe('Description 1')
     wrapper.unmount()
   })
 
   it('filters by name and persists filters in the URL', async () => {
     const { wrapper, router } = await mountPage()
-    await wrapper.get('input').setValue('api-2.example.com')
+    await wrapper.get('input').setValue('Description 2')
     await flushPromises()
     expect(wrapper.text()).not.toContain('Account 1')
     expect(wrapper.text()).toContain('Account 2')
-    expect(router.currentRoute.value.query.q).toBe('api-2.example.com')
+    expect(router.currentRoute.value.query.q).toBe('Description 2')
     wrapper.findAllComponents(SelectStub)[0]!.vm.$emit('update:modelValue', 'disabled')
     await flushPromises()
     expect(router.currentRoute.value.query.status).toBe('disabled')
