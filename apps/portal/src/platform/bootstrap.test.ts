@@ -1,28 +1,27 @@
 import { defineComponent, h, type Plugin } from "vue";
 import { describe, expect, it } from "vitest";
+import { ElEmpty } from "element-plus";
 
-import { bootstrapPortalApp } from "./bootstrap";
+import { bootstrapStandardPortalApp } from "./bootstrap";
 
-const noopRouter: Plugin = {
-  install() {}
+const testRouter: Plugin = {
+  install(app) {
+    app.component("RouterView", defineComponent({ render: () => h(ElEmpty) }));
+  }
 };
 
-describe("bootstrapPortalApp", () => {
-  it("registers the shared Element Plus component set globally", () => {
+describe("bootstrapStandardPortalApp", () => {
+  it("provides the Chinese locale to locally imported components", () => {
     const mountTarget = document.createElement("div");
     mountTarget.id = "bootstrap-test-app";
     document.body.append(mountTarget);
 
-    const app = bootstrapPortalApp({
+    const app = bootstrapStandardPortalApp({
       mountSelector: "#bootstrap-test-app",
-      root: defineComponent({ render: () => h("div") }),
-      router: noopRouter
+      router: testRouter
     });
 
-    expect(app.component("ElButton")).toBeTruthy();
-    expect(app.component("ElDialog")).toBeTruthy();
-    expect(app.component("ElDrawer")).toBeTruthy();
-    expect(app.component("ElInput")).toBeTruthy();
+    expect(mountTarget.textContent).toContain("暂无数据");
 
     app.unmount();
     mountTarget.remove();

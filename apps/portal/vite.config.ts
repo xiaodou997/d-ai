@@ -1,6 +1,8 @@
 import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
 import tailwindcss from "@tailwindcss/vite";
+import Components from "unplugin-vue-components/vite";
+import { ElementPlusResolver } from "unplugin-vue-components/resolvers";
 import { resolve } from "path";
 
 const devProxyTarget = process.env.DAI_DEV_PROXY_TARGET?.trim() || "http://127.0.0.1:19641";
@@ -9,7 +11,15 @@ const portalOutDir = process.env.DAI_PORTAL_OUT_DIR?.trim() || "../../cmd/server
 export default defineConfig({
   // Build commands run from the repository root; the Portal owns the Vite root.
   root: import.meta.dirname,
-  plugins: [vue(), tailwindcss()],
+  plugins: [
+    vue(),
+    tailwindcss(),
+    Components({
+      dirs: [],
+      dts: false,
+      resolvers: [ElementPlusResolver({ importStyle: "css" })]
+    })
+  ],
   resolve: {
     alias: {
       "@": resolve(import.meta.dirname, "src")
@@ -39,6 +49,7 @@ export default defineConfig({
     }
   },
   build: {
+    manifest: true,
     outDir: portalOutDir,
     emptyOutDir: true
   }

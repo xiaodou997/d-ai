@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { ElButton, ElInput } from 'element-plus'
 import { Delete, Plus } from '@element-plus/icons-vue'
 
 const props = defineProps<{ modelValue?: Record<string, any> }>()

@@ -1,3 +1,5 @@
+import { defineAsyncComponent } from "vue";
+
 export { default as DsAppShell } from "./layout/DsAppShell.vue";
 export { default as DsSidebar } from "./layout/DsSidebar.vue";
 export { default as DsTopbar } from "./layout/DsTopbar.vue";
@@ -14,7 +16,8 @@ export { default as DsSelect } from "./controls/DsSelect.vue";
 export { default as DsTable } from "./data/DsTable.vue";
 export { default as DsFilterBar } from "./data/DsFilterBar.vue";
 export { default as DsFilterField } from "./data/DsFilterField.vue";
-export { default as DsTrendChart } from "./data/DsTrendChart.vue";
+// The shared shell imports this barrel; load the chart engine only when a chart mounts.
+export const DsTrendChart = defineAsyncComponent(() => import("./data/DsTrendChart.vue"));
 export type { DsTableColumn } from "./data/types";
 export { default as DsEmpty } from "./feedback/DsEmpty.vue";
 export { default as DsSkeleton } from "./feedback/DsSkeleton.vue";

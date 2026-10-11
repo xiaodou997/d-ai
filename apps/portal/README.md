@@ -11,6 +11,19 @@ Portal 是仓库唯一的前端项目。原 `packages/*` 的 UI、shell、鉴权
 - `src/views`：按 `userType` 组织的路由页面。
 - `scripts`：统一 OpenAPI 契约的 TypeScript 类型生成与 freshness 检查。
 
+## 首屏加载约定
+
+Element Plus 模板组件和 `v-loading` 等指令由 Vite 的 `ElementPlusResolver` 按需导入，
+样式随组件所在的 chunk 加载；不要在入口全量安装 Element Plus、注册整个图标库或导入
+`element-plus/dist/index.css`。图标使用具名导入，中文配置由根组件的 `ElConfigProvider` 提供。
+脚本中直接调用的 Message / MessageBox 样式由 `src/main.ts` 引入；手动导入的其他组件也需要
+显式引入对应 `element-plus/es/components/<name>/style/css`。`DsTrendChart` 通过异步组件加载，
+避免公共 UI 导出把 ECharts 带入应用壳。
+
+两种生产构建均生成 Vite manifest，并自动执行 `scripts/validate-bundle-size.mjs`：
+按入口、登录页、应用壳分别累计去重后的静态 JS/CSS 依赖及 gzip 大小，超出预算则构建失败。
+应用壳预算不包含具体业务页面；图表等按需加载资源仍计入实际使用它们的页面。
+
 ## 常用命令
 
 ```bash

@@ -1,5 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page, type Request, type Route } from "@playwright/test";
+import type { OverviewSnapshot } from "../apps/portal/src/api/types/overview";
 
 type PortalRole = {
   userType: 1 | 2 | 3 | 4;
@@ -69,7 +70,9 @@ function watchBrowserErrors(page: Page) {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(`pageerror: ${error.message}`));
   page.on("console", (message) => {
-    if (message.type() === "error") errors.push(`console: ${message.text()}`);
+    if (message.type() === "error" || /Failed to resolve (component|directive)/.test(message.text())) {
+      errors.push(`console: ${message.text()}`);
+    }
   });
   return errors;
 }
@@ -404,6 +407,9 @@ for (const role of roles) {
       expect(menu).not.toContain("用户管理");
     }
     await page.waitForLoadState("networkidle");
+    if (useMockApi && role.theme === "admin") {
+      await expect(page.locator(".ds-trend-chart canvas").first()).toBeVisible();
+    }
     await expectNoAccessibilityViolations(page);
     expect(errors).toEqual([]);
   });
@@ -442,6 +448,12 @@ test("tenant user management creates an activation credential", async ({ page })
 
   await page.getByRole("button", { name: "创建用户" }).first().click();
   const createDialog = page.getByRole("dialog", { name: "创建终端用户" });
+  const createButton = createDialog.getByRole("button", { name: "创建", exact: true });
+  await expect(createButton).toHaveCSS("display", "inline-flex");
+  expect(await createButton.evaluate((button) => {
+    const style = getComputedStyle(button);
+    return style.getPropertyValue("--el-color-primary").trim() === style.getPropertyValue("--ds-accent").trim();
+  })).toBe(true);
   await createDialog.getByLabel("用户名").fill("created-user");
   await createDialog.getByLabel("邮箱").fill("created@example.com");
   await createDialog.getByRole("button", { name: "创建" }).click();
@@ -1010,6 +1022,26 @@ function adminRechargeOrderFixture(state: MockState) {
 }
 
 function fixtureFor(path: string, method: string, state: MockState): unknown {
+  if (path === "/api/v1/admin/overview/snapshot") {
+    return {
+      meta: { view: "dashboard", date_from: 0, date_to: 0, generated_at: 0 },
+      summary: {
+        total_requests: 10, successful_requests: 10, failed_requests: 0, total_tokens: 100,
+        total_prompt_tokens: 80, total_completion_tokens: 20, cache_read_tokens: 0, cache_write_tokens: 0,
+        active_tenants: 1, active_users: 1, active_accounts: 1, new_tenants: 0, new_users: 0,
+        total_catalog_base_usd: 1, total_tenant_payable_usd: 2, total_user_charged_usd: 3,
+        gross_margin_usd: 1, avg_request_total_ms: 100, p95_request_total_ms: 120,
+        avg_first_response_byte_ms: 50, p95_first_response_byte_ms: 60
+      },
+      trends: [{
+        date: "2026-09-20", request_count: 10, success_count: 10, failed_count: 0, total_tokens: 100,
+        prompt_tokens: 80, completion_tokens: 20, cache_read_tokens: 0, cache_write_tokens: 0,
+        catalog_base_usd: 1, tenant_payable_usd: 2, user_charged_usd: 3,
+        avg_latency_ms: 100, avg_request_total_ms: 100, avg_first_response_byte_ms: 50
+      }],
+      accounts: [], models: [], tenants: [], users: []
+    } satisfies OverviewSnapshot;
+  }
   if (path === "/api/v1/customer/portal-brand") return { siteName: "D-AI", faviconPath: "" };
   if (path.includes("topup-config")) return topupConfigFixture();
   if (path === "/api/v1/tenant/balance-ledger") {

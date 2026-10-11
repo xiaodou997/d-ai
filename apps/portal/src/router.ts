@@ -8,8 +8,6 @@ import {
   defaultPortalPathForUserType,
   userHasPortalCapability
 } from "./modules/portalModules";
-import LegalCenterLayout from "./platform/legal/LegalCenterLayout.vue";
-import LegalDocumentView from "./platform/legal/LegalDocumentView.vue";
 import { useAuthStore } from "./stores/auth";
 
 const LayoutView = () => import("./views/LayoutView.vue");
@@ -41,13 +39,13 @@ export const routes: RouteRecordRaw[] = [
   },
   {
     path: "/legal",
-    component: LegalCenterLayout,
+    component: () => import("./platform/legal/LegalCenterLayout.vue"),
     meta: { public: true, title: "法律中心" },
     children: [
       { path: "", redirect: "/legal/privacy" },
       {
         path: ":document",
-        component: LegalDocumentView,
+        component: () => import("./platform/legal/LegalDocumentView.vue"),
         meta: { public: true, title: "法律文件" }
       }
     ]
