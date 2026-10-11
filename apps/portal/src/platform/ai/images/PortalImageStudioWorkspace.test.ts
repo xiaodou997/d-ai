@@ -13,6 +13,13 @@ const ElInputStub = {
   template: "<textarea :value=\"modelValue\" />"
 };
 
+const workspaceStubs = {
+  PortalImageComposer: false,
+  PortalImageTaskCard: false,
+  PortalImageReferenceTray: true,
+  ElInput: ElInputStub
+};
+
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
@@ -46,11 +53,11 @@ describe("PortalImageStudioWorkspace", () => {
     const wrapper = shallowMount(PortalImageStudioWorkspace, {
       props: {
         api,
-      formatUSD: (value: number | null | undefined) => `$${value ?? 0}`,
+        formatUSD: (value: number | null | undefined) => `$${value ?? 0}`,
         usageMessage: "usage",
         pollIntervalMs: 1_234
       },
-      global: { config: { warnHandler: () => undefined } }
+      global: { config: { warnHandler: () => undefined }, stubs: workspaceStubs }
     });
     await flushPromises();
 
@@ -59,7 +66,7 @@ describe("PortalImageStudioWorkspace", () => {
     await vi.advanceTimersByTimeAsync(1);
     await flushPromises();
     expect(api.getTask).toHaveBeenCalledOnce();
-    expect(api.getTask).toHaveBeenCalledWith("task-1");
+    expect(api.getTask).toHaveBeenCalledWith("task-1", expect.any(AbortSignal));
 
     wrapper.unmount();
   });
@@ -91,11 +98,11 @@ describe("PortalImageStudioWorkspace", () => {
     const wrapper = shallowMount(PortalImageStudioWorkspace, {
       props: {
         api,
-      formatUSD: (value: number | null | undefined) => `$${value ?? 0}`,
+        formatUSD: (value: number | null | undefined) => `$${value ?? 0}`,
         usageMessage: "usage",
         confirmDelete
       },
-      global: { config: { warnHandler: () => undefined } }
+      global: { config: { warnHandler: () => undefined }, stubs: workspaceStubs }
     });
     await flushPromises();
 
@@ -142,12 +149,12 @@ describe("PortalImageStudioWorkspace", () => {
     const wrapper = shallowMount(PortalImageStudioWorkspace, {
       props: {
         api,
-      formatUSD: (value: number | null | undefined) => `$${value ?? 0}`,
+        formatUSD: (value: number | null | undefined) => `$${value ?? 0}`,
         usageMessage: "usage"
       },
       global: {
         config: { warnHandler: () => undefined },
-        stubs: { ElInput: ElInputStub }
+        stubs: workspaceStubs
       }
     });
     await flushPromises();
@@ -179,6 +186,44 @@ describe("PortalImageStudioWorkspace", () => {
     expect(form.get("n")).toBe("1");
     expect(form.get("size")).toBe("auto");
 
+    wrapper.unmount();
+  });
+
+  it("retains the prompt and reference files when task creation fails", async () => {
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:reference");
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
+    const notifyError = vi.fn();
+    const api: PortalImageApi = {
+      listModels: vi.fn().mockResolvedValue([
+        { model_code: "image-model", capability_type: "image", status: "active" }
+      ]),
+      listJobs: vi.fn().mockResolvedValue([]),
+      createTask: vi.fn().mockRejectedValue(new Error("额度不足")),
+      getTask: vi.fn(),
+      cancelTask: vi.fn(),
+      deleteTask: vi.fn()
+    };
+    const wrapper = shallowMount(PortalImageStudioWorkspace, {
+      props: { api, formatUSD: (value) => `$${value ?? 0}`, usageMessage: "usage", notifyError },
+      global: { config: { warnHandler: () => undefined }, stubs: workspaceStubs }
+    });
+    await flushPromises();
+
+    const reference = new File(["reference"], "reference.png", { type: "image/png" });
+    const tray = wrapper.findComponent(PortalImageReferenceTray);
+    tray.vm.$emit("add", [reference]);
+    await flushPromises();
+    const promptInput = wrapper.findAllComponents({ name: "ElInput" })[0];
+    promptInput.vm.$emit("update:modelValue", "保留 @图片1 的构图");
+    await flushPromises();
+    await wrapper.find(".composer-send").trigger("click");
+    await flushPromises();
+
+    expect(api.createTask).toHaveBeenCalledOnce();
+    expect(notifyError).toHaveBeenCalledWith("额度不足");
+    expect(promptInput.props("modelValue")).toBe("保留 @图片1 的构图");
+    expect(tray.props("references")).toHaveLength(1);
+    expect(api.getTask).not.toHaveBeenCalled();
     wrapper.unmount();
   });
 });

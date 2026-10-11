@@ -624,6 +624,29 @@ test("tenant finance cockpit surfaces operating conclusions and action panels", 
   expect(errors).toEqual([]);
 });
 
+test("customer image composer preserves expanded edits and submits a task", async ({ page }, testInfo) => {
+  test.skip(!useMockApi, "uses deterministic image fixtures; run with DAI_E2E_MOCK=1");
+  const errors = watchBrowserErrors(page);
+  const state = await loginAs(page, roles[3], "/customer/workbench/images");
+  await page.goto("/customer/workbench/images");
+  await expect(page.getByRole("heading", { name: "AI 生图" })).toBeVisible();
+  await page.getByRole("button", { name: "展开编辑提示词" }).click();
+  const editor = page.getByRole("dialog", { name: "编辑提示词" });
+  await editor.getByRole("textbox").fill("一只 E2E 小猫");
+  await editor.getByRole("button", { name: "完成", exact: true }).click();
+  await expect(editor).toBeHidden();
+  const prompt = page.locator(".composer").getByPlaceholder("描述你希望生成的画面");
+  await expect(prompt).toHaveValue("一只 E2E 小猫");
+  await page.getByRole("button", { name: "生成图片", exact: true }).click();
+  await expect.poll(() => state.imageTaskCreated).toBe(true);
+  await expect(page.locator(".task-card")).toContainText("一只 E2E 小猫");
+  await expect(page.locator(".task-card")).toContainText("完成");
+  await expect(prompt).toBeEmpty();
+  await expect(page.getByRole("button", { name: "删除任务记录" })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("image-studio.png"), fullPage: true, animations: "disabled" });
+  expect(errors).toEqual([]);
+});
+
 test("tenant finance shows full user counts and recovers unavailable sections", async ({ page }, testInfo) => {
   test.skip(!useMockApi, "uses controlled tenant analytics failures");
   const errors = watchBrowserErrors(page);
@@ -643,6 +666,31 @@ test("tenant finance shows full user counts and recovers unavailable sections", 
   await expect(unavailable).toHaveCount(0);
   await expect(page.getByText("低余额 251", { exact: true })).toBeVisible();
   await expect(page.getByText("本期经营结论", { exact: true })).toBeVisible();
+  expect(errors.filter((error) => !error.includes("503"))).toEqual([]);
+});
+
+test("customer image acceptance survives status failure without duplicate submission", async ({ page }, testInfo) => {
+  test.skip(!useMockApi, "uses controlled image status failures");
+  const errors = watchBrowserErrors(page);
+  const state = await loginAs(page, roles[3], "/customer/workbench/images");
+  await page.goto("/customer/workbench/images");
+  state.failedPaths = ["/runtime/v1/images/tasks/e2e-image-task"];
+  await page.getByPlaceholder("描述你希望生成的画面").fill("一只 E2E 小猫");
+  await page.getByRole("button", { name: "生成图片", exact: true }).click();
+  await expect.poll(() => state.imageTaskCreated).toBe(true);
+  const warning = page.getByRole("alert", { name: "图片工作区更新失败" });
+  await expect(warning).toContainText("请勿重复提交");
+  await expect(warning).toBeInViewport();
+  await expect(page.locator(".task-card")).toContainText("一只 E2E 小猫");
+  await expect(page.locator(".task-card")).toContainText("已受理");
+  await expect(page.locator(".task-card")).toContainText("费用待同步");
+  await page.screenshot({ path: testInfo.outputPath("image-status-unavailable.png"), fullPage: true, animations: "disabled" });
+  await expect(page.getByPlaceholder("描述你希望生成的画面")).toBeEmpty();
+  state.failedPaths = [];
+  await warning.getByRole("button", { name: "重新加载" }).click();
+  await expect(page.locator(".task-card")).toContainText("已完成");
+  await expect(warning).toHaveCount(0);
+  expect(state.requests.filter((request) => request.method === "POST" && request.path.endsWith("/images/tasks"))).toHaveLength(1);
   expect(errors.filter((error) => !error.includes("503"))).toEqual([]);
 });
 

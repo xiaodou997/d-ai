@@ -15,7 +15,8 @@ export interface PortalRuntimeTransport {
     method: string,
     path: string,
     body?: unknown,
-    query?: Record<string, string | number | undefined>
+    query?: Record<string, string | number | undefined>,
+    signal?: AbortSignal
   ) => Promise<T>;
   formRequest: <T>(method: string, path: string, body: FormData) => Promise<T>;
   streamChatMessage: (payload: PortalChatStreamInput) => Promise<void>;
@@ -36,13 +37,15 @@ export function createPortalRuntimeTransport(options: CreatePortalRuntimeTranspo
     method: string,
     path: string,
     body?: unknown,
-    query?: Record<string, string | number | undefined>
+    query?: Record<string, string | number | undefined>,
+    signal?: AbortSignal
   ): Promise<T> {
     const response = await executeWithRecovery(() =>
       fetch(joinUrl(options.baseUrl(), appendPortalQuery(path, query)), {
         method,
         headers: runtimeHeaders(body !== undefined ? { "Content-Type": "application/json" } : {}),
-        body: body !== undefined ? JSON.stringify(body) : undefined
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+        signal
       })
     );
     if (!response) {

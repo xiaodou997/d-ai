@@ -1295,13 +1295,14 @@ export const aiTenantApi = {
       baseUrl: baseUrl()
     }).then((value) => ({ deleted: value.deleted }));
   },
-  listWorkspaceImageJobs(params: OperationQuery<"ai-api-v1-tenants-me-workspace-image-jobs"> = {}) {
+  listWorkspaceImageJobs(params: OperationQuery<"ai-api-v1-tenants-me-workspace-image-jobs"> = {}, signal?: AbortSignal) {
     return typedRequest<"ai-api-v1-tenants-me-workspace-image-jobs">({
       method: "GET",
       path: "/api/v1/tenants/me/workspace/image/jobs",
       headers: headers(),
       query: { limit: 50, ...params },
-      baseUrl: baseUrl()
+      baseUrl: baseUrl(),
+      signal
     }).then(toWorkspaceImageJobs);
   }
 };
@@ -1331,11 +1332,11 @@ export const runtimeChatApi = {
 };
 
 export const runtimeImageApi = {
-  async listModels() {
-    return runtimeTransport.request<ConsoleImageModel[]>("GET", `${runtimeBasePath}/images/models`);
+  async listModels(signal?: AbortSignal) {
+    return runtimeTransport.request<ConsoleImageModel[]>("GET", `${runtimeBasePath}/images/models`, undefined, undefined, signal);
   },
-  async listJobs() {
-    return (await aiTenantApi.listWorkspaceImageJobs()).items ?? [];
+  async listJobs(signal?: AbortSignal) {
+    return (await aiTenantApi.listWorkspaceImageJobs({}, signal)).items ?? [];
   },
   createTask(body: ConsoleImageGenerateRequest | FormData) {
     if (body instanceof FormData) {
@@ -1343,8 +1344,8 @@ export const runtimeImageApi = {
     }
     return runtimeTransport.request<PortalImageTaskCreateResponse>("POST", `${runtimeBasePath}/images/tasks`, body);
   },
-  getTask(taskId: string) {
-    return runtimeTransport.request<ConsoleImageJob>("GET", `${runtimeBasePath}/images/tasks/${encodeURIComponent(taskId)}`);
+  getTask(taskId: string, signal?: AbortSignal) {
+    return runtimeTransport.request<ConsoleImageJob>("GET", `${runtimeBasePath}/images/tasks/${encodeURIComponent(taskId)}`, undefined, undefined, signal);
   },
   cancelTask(taskId: string) {
     return runtimeTransport.request<ConsoleImageJob>("POST", `${runtimeBasePath}/images/tasks/${encodeURIComponent(taskId)}/cancel`);

@@ -65,4 +65,17 @@ describe("AI runtime transport", () => {
     });
     await expect(transport.request("GET", "/runtime/v1/models")).rejects.toThrow("Model not authorized");
   });
+
+  it("forwards cancellation to runtime reads", async () => {
+    const fetchMock = vi.fn((_url: string, init: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const transport = createPortalRuntimeTransport({ baseUrl: () => "/", getAccessToken: () => "token" });
+    const controller = new AbortController();
+    const request = transport.request("GET", "/runtime/v1/images/tasks/task-1", undefined, undefined, controller.signal);
+    controller.abort();
+    await expect(request).rejects.toMatchObject({ name: "AbortError" });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
 });

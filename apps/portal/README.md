@@ -33,6 +33,13 @@ Element Plus 模板组件和 `v-loading` 等指令由 Vite 的 `ElementPlusResol
   子面板接收同一份响应式数据，不独立发起重复请求。
   低余额人数使用后端概览的 `lowBalanceUserCount`，统计全租户启用且余额不超过 1 USD 的用户，
   不从分页列表推算。失败来源由 `failedSources` 标记，相应面板展示重试入口，避免把旧数据或默认值当作当前结果。
+- 图片工作区 `platform/ai/images/PortalImageStudioWorkspace.vue` 负责筛选、预览和结果滚动。
+  `usePortalImageJobs` 管理任务 API 与操作状态；`PortalImageComposer` / `usePortalImageComposer`
+  管理提示词、参考图和提交参数；`PortalImageTaskCard` 展示任务并上抛操作事件，
+  `imageJobPresentation.ts` 集中生成任务卡片的展示状态。编辑器仅在创建请求成功后清理输入。
+  创建成功即保留任务 ID；详情未同步时展示“已受理／费用待同步”，查询失败不会重发创建请求。
+  `usePortalImageTaskQueue` 串行调度列表刷新与任务轮询，单个任务失败不丢弃其他结果；读取 15 秒超时，
+  连续失败指数退避（默认轮询从 20 秒递增至最多 120 秒），后台暂停，回到前台重新同步，卸载时取消读取。
 
 ## 常用命令
 

@@ -56,12 +56,27 @@ export interface PortalImageTaskCreateResponse {
   status: string;
 }
 
+export type PortalImageTaskPayload = Parameters<PortalImageApi["createTask"]>[0];
+
+export interface PortalImageWorkspaceProps {
+  api: PortalImageApi;
+  formatUSD: (value: number | null | undefined) => string;
+  usageMessage: string;
+  refreshIcon?: unknown;
+  submitIcon?: unknown;
+  assetBaseUrl?: string;
+  pollIntervalMs?: number;
+  confirmDelete?: (job: PortalImageJobRecord) => boolean | Promise<boolean>;
+  notifySuccess?: (message: string) => void;
+  notifyError?: (message: string) => void;
+}
+
 export interface PortalImageApi<
   TModel extends PortalImageModelRecord = PortalImageModelRecord,
   TJob extends PortalImageJobRecord = PortalImageJobRecord
 > {
-  listModels: () => Promise<TModel[]>;
-  listJobs: () => Promise<TJob[]>;
+  listModels: (signal?: AbortSignal) => Promise<TModel[]>;
+  listJobs: (signal?: AbortSignal) => Promise<TJob[]>;
   createTask: (payload: {
     operation?: "generation" | "edit";
     model: string;
@@ -79,7 +94,7 @@ export interface PortalImageApi<
     output_compression?: number;
     user?: string;
   } | FormData) => Promise<PortalImageTaskCreateResponse>;
-  getTask: (taskId: string) => Promise<TJob>;
+  getTask: (taskId: string, signal?: AbortSignal) => Promise<TJob>;
   cancelTask: (taskId: string) => Promise<TJob>;
   deleteTask: (taskId: string) => Promise<{ deleted: boolean }>;
 }
