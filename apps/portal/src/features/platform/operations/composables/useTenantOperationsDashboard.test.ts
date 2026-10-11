@@ -40,6 +40,7 @@ vi.mock("@/features/ai/usage", () => ({
 }));
 
 import { useTenantOperationsDashboard } from "./useTenantOperationsDashboard";
+import { useTenantFinanceSummary } from "./useTenantFinanceSummary";
 
 const financialSummary = {
   total_requests: 12,
@@ -56,15 +57,28 @@ const financialSummary = {
   avg_latency_ms: 420
 };
 
+const overviewStats = {
+  endUserCount: 3,
+  inviteCodeCount: 1,
+  userDeductionUsd: 8.5,
+  userTotalBalanceUsd: 12,
+  lowBalanceUserCount: 0,
+  activeUserCount: 2,
+  userConsumptionCount: 10,
+  settlementIncomeMicroUsd: 7_000_000
+};
+
 function mountDashboard() {
   let state!: ReturnType<typeof useTenantOperationsDashboard>;
+  let finance!: ReturnType<typeof useTenantFinanceSummary>;
   const wrapper = mount(defineComponent({
     setup() {
       state = useTenantOperationsDashboard();
+      finance = useTenantFinanceSummary(state);
       return () => h("div");
     }
   }));
-  return { state, wrapper };
+  return { state, finance, wrapper };
 }
 
 describe("useTenantOperationsDashboard", () => {
@@ -82,15 +96,7 @@ describe("useTenantOperationsDashboard", () => {
       serviceState: "active",
       balanceLots: []
     });
-    apiMocks.getAnalyticsOverview.mockResolvedValue({
-      endUserCount: 3,
-      inviteCodeCount: 1,
-      userDeductionUsd: 8.5,
-      userTotalBalanceUsd: 12,
-      activeUserCount: 2,
-      userConsumptionCount: 10,
-      settlementIncomeMicroUsd: 7_000_000
-    });
+    apiMocks.getAnalyticsOverview.mockResolvedValue(overviewStats);
     apiMocks.getUserConsumption.mockResolvedValue([]);
     apiMocks.getAppConsumption.mockResolvedValue([]);
     apiMocks.getUsers.mockResolvedValue({ items: [], total: 0, page: 1, size: 200 });
@@ -101,10 +107,12 @@ describe("useTenantOperationsDashboard", () => {
   });
 
   it("loads the AI settlement cost into the financial overview", async () => {
-    const { state, wrapper } = mountDashboard();
+    const { state, finance, wrapper } = mountDashboard();
     await flushPromises();
 
     expect(state.financialSummary.value?.total_tenant_payable_usd).toBe(6.5);
+    expect(finance.userRevenue.value).toBe(8.5);
+    expect(finance.netCashReference.value).toBe(0.5);
     expect(apiMocks.getDashboardSummary).toHaveBeenCalledWith({
       date_from: expect.any(String),
       date_to: expect.any(String)
@@ -122,14 +130,76 @@ describe("useTenantOperationsDashboard", () => {
   it("keeps unavailable settlement data distinct from a real zero cost", async () => {
     const error = new Error("dashboard unavailable");
     apiMocks.getDashboardSummary.mockRejectedValue(error);
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
 
-    const { state, wrapper } = mountDashboard();
+    const { state, finance, wrapper } = mountDashboard();
     await flushPromises();
 
     expect(state.financialSummary.value).toBeNull();
-    expect(consoleError).toHaveBeenCalledWith("获取租户 AI 结算概览失败:", error);
+    expect(finance.platformCost.value).toBeNull();
+    expect(finance.netCashReference.value).toBeNull();
+    expect(finance.userRevenue.value).toBe(8.5);
+    expect(state.failedSources("overview", "summary")).toEqual(["AI 结算汇总"]);
     wrapper.unmount();
-    consoleError.mockRestore();
+  });
+
+  it("updates the extracted finance model when the reporting period changes", async () => {
+    const { state, finance, wrapper } = mountDashboard();
+    await flushPromises();
+    apiMocks.getDashboardSummary.mockResolvedValue({
+      ...financialSummary,
+      total_user_charged_usd: 0,
+      total_tenant_payable_usd: 0
+    });
+
+    await state.selectRange("7d");
+    await flushPromises();
+
+    expect(finance.rangeLabel.value).toBe(state.selectedRangeLabel.value);
+    expect(finance.userRevenue.value).toBe(0);
+    expect(finance.platformCost.value).toBe(0);
+    expect(finance.netCashReference.value).toBe(7);
+    wrapper.unmount();
+  });
+
+  it("uses the full tenant aggregate rather than the paginated directory for low-balance counts", async () => {
+    apiMocks.getAnalyticsOverview.mockResolvedValue({ ...overviewStats, lowBalanceUserCount: 251 });
+    const { state, finance, wrapper } = mountDashboard();
+    await flushPromises();
+    expect(state.users.value).toEqual([]);
+    expect(finance.lowBalanceCount.value).toBe(251);
+    expect(finance.signals.value.find((signal) => signal.key === "users")?.detail).toContain("251 名启用用户");
+    wrapper.unmount();
+  });
+
+  it("marks unavailable sources without replacing known data with zeros and recovers on retry", async () => {
+    const { state, wrapper } = mountDashboard();
+    await flushPromises();
+    apiMocks.getAnalyticsOverview.mockRejectedValue(new Error("offline"));
+    apiMocks.listBalanceLedger.mockRejectedValue(new Error("offline"));
+    await state.refresh();
+    expect(state.overview.value.userTotalBalanceUsd).toBe(12);
+    expect(state.failedSources("overview", "summary", "ledger")).toEqual(["经营概览与用户统计", "账务记录"]);
+    expect(state.loading.value).toBe(false);
+
+    apiMocks.getAnalyticsOverview.mockResolvedValue(overviewStats);
+    apiMocks.listBalanceLedger.mockResolvedValue({ items: [] });
+    await state.refresh();
+    expect(state.failedSources("overview", "ledger")).toEqual([]);
+    wrapper.unmount();
+  });
+
+  it("ignores a late failure from an older reporting period", async () => {
+    const { state, wrapper } = mountDashboard();
+    await flushPromises();
+    let rejectOld!: (error: Error) => void;
+    apiMocks.getAnalyticsOverview.mockReturnValueOnce(new Promise((_resolve, reject) => { rejectOld = reject; }));
+    const oldRange = state.selectRange("7d");
+    apiMocks.getAnalyticsOverview.mockResolvedValue({ ...overviewStats, lowBalanceUserCount: 42 });
+    await state.selectRange("today");
+    rejectOld(new Error("old request failed"));
+    await oldRange;
+    expect(state.overview.value.lowBalanceUserCount).toBe(42);
+    expect(state.failedSources("overview")).toEqual([]);
+    wrapper.unmount();
   });
 });

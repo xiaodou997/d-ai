@@ -15,6 +15,7 @@ const analytics = {
   inviteCodeCount: 1,
   userDeductionUsd: 3,
   userTotalBalanceUsd: 7,
+  lowBalanceUserCount: 0,
   activeUserCount: 1,
   userConsumptionCount: 4,
   settlementIncomeMicroUsd: 5_000_000

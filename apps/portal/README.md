@@ -24,6 +24,16 @@ Element Plus 模板组件和 `v-loading` 等指令由 Vite 的 `ElementPlusResol
 按入口、登录页、应用壳分别累计去重后的静态 JS/CSS 依赖及 gzip 大小，超出预算则构建失败。
 应用壳预算不包含具体业务页面；图表等按需加载资源仍计入实际使用它们的页面。
 
+## 复杂页面维护边界
+
+- 租户经营页 `features/platform/operations/TenantOperationsWorkbench.vue` 负责页面组装、时间范围和刷新。
+  `useTenantOperationsDashboard` 负责请求与加载状态，`useTenantFinanceSummary` 负责跨面板的财务计算，
+  `financePresentation.ts` 负责格式化。`components/TenantFinance*.vue` 分别维护经营结论、额度资金流、
+  用户健康、经营信号、成本结构和近期记录；面板共用的布局样式由页面容器提供，专属样式留在面板内。
+  子面板接收同一份响应式数据，不独立发起重复请求。
+  低余额人数使用后端概览的 `lowBalanceUserCount`，统计全租户启用且余额不超过 1 USD 的用户，
+  不从分页列表推算。失败来源由 `failedSources` 标记，相应面板展示重试入口，避免把旧数据或默认值当作当前结果。
+
 ## 常用命令
 
 ```bash

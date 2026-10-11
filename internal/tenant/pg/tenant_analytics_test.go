@@ -3,6 +3,7 @@ package pg
 import (
 	"context"
 	"testing"
+	"time"
 
 	"xiaodou/dai/internal/dbtest"
 )
@@ -56,5 +57,44 @@ func TestTenantAnalyticsReadModelsPreserveProjectionSemantics(t *testing.T) {
 	}
 	if len(clients) != 1 || clients[0].ClientID != "portal" || clients[0].ClientName != "portal" || clients[0].AmountUSD != 0.000007 {
 		t.Fatalf("client consumption = %#v", clients)
+	}
+}
+
+func TestLowBalanceUserCountIncludesAllActiveTenantUsers(t *testing.T) {
+	ctx := context.Background()
+	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 2})
+	if err != nil {
+		t.Skipf("database unavailable: %v", err)
+	}
+	t.Cleanup(func() { _ = cleanup(context.Background()) })
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO iam_tenants (tenant_id, tenant_name) VALUES ('balance-tenant', 'Balance'), ('other-tenant', 'Other');
+		INSERT INTO iam_accounts (user_id, tenant_id, username, password_hash, user_type)
+		SELECT 'low-' || n, 'balance-tenant', 'low-' || n, 'hash', 4 FROM generate_series(1, 205) n;
+		INSERT INTO iam_accounts (user_id, tenant_id, username, password_hash, user_type, status) VALUES
+		('at-threshold', 'balance-tenant', 'at-threshold', 'hash', 4, 'active'),
+		('above-threshold', 'balance-tenant', 'above-threshold', 'hash', 4, 'active'),
+		('negative', 'balance-tenant', 'negative', 'hash', 4, 'active'),
+		('disabled', 'balance-tenant', 'disabled', 'hash', 4, 'disabled'),
+		('deleted', 'balance-tenant', 'deleted', 'hash', 4, 'deleted'),
+		('locked', 'balance-tenant', 'locked', 'hash', 4, 'locked'),
+		('inherited', 'balance-tenant', 'inherited', 'hash', 4, 'inherited_disabled'),
+		('owner', 'balance-tenant', 'owner', 'hash', 3, 'active'),
+		('other-user', 'other-tenant', 'other-user', 'hash', 4, 'active');
+		UPDATE bill_accounts SET balance_micro = 1000000 WHERE account_id = 'at-threshold';
+		UPDATE bill_accounts SET balance_micro = 1000001 WHERE account_id = 'above-threshold';
+		UPDATE bill_accounts SET balance_micro = -1 WHERE account_id = 'negative';
+	`); err != nil {
+		t.Fatalf("seed balance fixture: %v", err)
+	}
+
+	// A future reporting period must not filter current account balances.
+	from, to := time.Now().AddDate(1, 0, 0), time.Now().AddDate(1, 0, 1)
+	stats, err := NewTenantRepo(pool).GetTenantOverviewStats(ctx, "balance-tenant", &from, &to)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.LowBalanceUserCount != 207 {
+		t.Fatalf("low balance users = %d, want 207", stats.LowBalanceUserCount)
 	}
 }

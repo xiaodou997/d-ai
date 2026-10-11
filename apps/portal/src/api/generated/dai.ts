@@ -1389,7 +1389,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 邀请码列表 */
+        /**
+         * 邀请码列表
+         * @description 返回可直接用于注册的完整邀请码，因此读取也要求近期重新认证。
+         */
         get: operations["tenant-list-invitations"];
         put?: never;
         /** 创建邀请码 */
@@ -5354,7 +5357,7 @@ export interface components {
             created_by?: string;
             /**
              * Format: int64
-             * @description 过期时间，Unix 毫秒；为空表示不过期
+             * @description 过期时间，Unix 毫秒；创建时为空表示不过期；更新时字段缺省保留，显式 null 或 0 清除过期时间
              */
             expires_at?: number | null;
             /** @description 密钥唯一绑定的分组 ID */
@@ -5365,11 +5368,11 @@ export interface components {
             name: string;
             /**
              * Format: int64
-             * @description 额度上限，单位 micro-USD；为空表示无限制
+             * @description 额度上限，单位 micro-USD；创建时为空表示无限制；更新时字段缺省保留，显式 null 清为无限制
              */
             quota_limit_micro_usd?: number | null;
             /**
-             * @description 状态；为空默认 active
+             * @description 状态；创建时为空默认 active，更新时为空保留当前状态
              * @enum {string}
              */
             status?: "active" | "disabled";
@@ -8562,7 +8565,10 @@ export interface components {
             password?: string;
             /** @enum {string} */
             proxyType: "http" | "socks5";
-            /** @enum {string} */
+            /**
+             * @description 状态；创建时为空默认 active，更新时为空保留当前状态
+             * @enum {string}
+             */
             status?: "active" | "disabled";
             username?: string;
             /** Format: int64 */
@@ -10016,6 +10022,11 @@ export interface components {
             endUserCount: number;
             /** Format: int64 */
             inviteCodeCount: number;
+            /**
+             * Format: int64
+             * @description 当前启用且余额不超过 1 USD 的终端用户总数，不受时间范围或分页限制
+             */
+            lowBalanceUserCount: number;
             /** Format: int64 */
             settlementIncomeMicroUsd: number;
             /** Format: int64 */

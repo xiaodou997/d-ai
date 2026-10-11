@@ -27,6 +27,7 @@ const emptyOverview = (): TenantAnalyticsOverview => ({
   inviteCodeCount: 0,
   userDeductionUsd: 0,
   userTotalBalanceUsd: 0,
+  lowBalanceUserCount: 0,
   activeUserCount: 0,
   userConsumptionCount: 0,
   settlementIncomeMicroUsd: 0
@@ -43,9 +44,38 @@ function rangeParams(range: WorkbenchRangeOption) {
   return { timeFrom: window.startTime, timeTo: window.endTime };
 }
 
+const sourceLabels = {
+  balance: "服务额度",
+  users: "用户余额明细",
+  ledger: "账务记录",
+  overview: "经营概览与用户统计",
+  summary: "AI 结算汇总",
+  ranking: "用户消费排行",
+  recent: "近期消费记录",
+  apps: "消费来源",
+  models: "模型成本"
+} as const;
+type DashboardSource = keyof typeof sourceLabels;
+
+export type TenantOperationsDashboard = ReturnType<typeof useTenantOperationsDashboard>;
+
 export function useTenantOperationsDashboard() {
   // 财务决策需要一个足够稳定的观察窗口，默认近 30 天比“今天”更能避免
   // 新租户或低频租户打开页面时看到一整屏 0。
+  const errors = shallowRef<Partial<Record<DashboardSource, boolean>>>({});
+
+  function recordResults(results: Partial<Record<DashboardSource, PromiseSettledResult<unknown>>>) {
+    const next = { ...errors.value };
+    for (const key of Object.keys(results) as DashboardSource[]) {
+      next[key] = results[key]?.status === "rejected";
+    }
+    errors.value = next;
+  }
+
+  function failedSources(...sources: DashboardSource[]) {
+    return sources.filter((source) => errors.value[source]).map((source) => sourceLabels[source]);
+  }
+
   const selectedRangeId = shallowRef<WorkbenchRangeId>("30d");
   const serviceBalance = shallowRef<AccountBalance>(emptyServiceBalance());
   const overview = shallowRef<TenantAnalyticsOverview>(emptyOverview());
@@ -89,20 +119,12 @@ export function useTenantOperationsDashboard() {
 
     if (requestEpoch !== latestAccountRequestEpoch) return;
 
+    recordResults({ balance: balanceResult, users: usersResult, ledger: ledgerResult });
     if (balanceResult.status === "fulfilled") serviceBalance.value = balanceResult.value;
-    else console.error("获取 USD 余额失败:", balanceResult.reason);
 
     if (usersResult.status === "fulfilled") users.value = usersResult.value.items ?? [];
-    else {
-      users.value = [];
-      console.error("获取终端用户余额失败:", usersResult.reason);
-    }
 
     if (ledgerResult.status === "fulfilled") balanceLedger.value = ledgerResult.value.items ?? [];
-    else {
-      balanceLedger.value = [];
-      console.error("获取余额流水失败:", ledgerResult.reason);
-    }
 
     serviceBalanceLoading.value = false;
     usersLoading.value = false;
@@ -133,41 +155,27 @@ export function useTenantOperationsDashboard() {
     ]);
     if (requestEpoch !== latestRangeRequestEpoch) return;
 
+    recordResults({
+      overview: overviewResult, summary: financialResult, ranking: rankingResult,
+      recent: recentResult, apps: appResult, models: modelResult
+    });
     if (overviewResult.status === "fulfilled") {
       overview.value = overviewResult.value;
-    } else {
-      overview.value = emptyOverview();
-      console.error("获取租户经营概览失败:", overviewResult.reason);
     }
     if (financialResult.status === "fulfilled") {
       financialSummary.value = financialResult.value;
-    } else {
-      financialSummary.value = null;
-      console.error("获取租户 AI 结算概览失败:", financialResult.reason);
     }
     if (rankingResult.status === "fulfilled") {
       consumptionRanking.value = rankingResult.value;
-    } else {
-      consumptionRanking.value = [];
-      console.error("获取用户消费贡献榜失败:", rankingResult.reason);
     }
     if (recentResult.status === "fulfilled") {
       recentConsumption.value = recentResult.value.records ?? [];
-    } else {
-      recentConsumption.value = [];
-      console.error("获取近期用户消费失败:", recentResult.reason);
     }
     if (appResult.status === "fulfilled") {
       appConsumption.value = appResult.value;
-    } else {
-      appConsumption.value = [];
-      console.error("获取消费来源结构失败:", appResult.reason);
     }
     if (modelResult.status === "fulfilled") {
       topModels.value = modelResult.value.items ?? [];
-    } else {
-      topModels.value = [];
-      console.error("获取模型成本结构失败:", modelResult.reason);
     }
 
     summaryLoading.value = false;
@@ -200,6 +208,8 @@ export function useTenantOperationsDashboard() {
   });
 
   return {
+    errors: computed(() => errors.value),
+    failedSources,
     selectedRangeId: computed(() => selectedRangeId.value),
     selectedRangeLabel,
     serviceBalance: computed(() => serviceBalance.value),

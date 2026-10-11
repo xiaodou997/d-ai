@@ -27,6 +27,8 @@ type MockState = {
   chatSessionCreated: boolean;
   chatMessageSent: boolean;
   imageTaskCreated: boolean;
+  failedPaths?: string[];
+  lowBalanceUserCount?: number;
   adminRefunded: boolean;
 };
 
@@ -126,6 +128,11 @@ async function installMockApi(page: Page, role: PortalRole, options: Partial<Moc
 
     const body = readPostData(request);
     state.requests.push({ method: request.method(), path: url.pathname, body });
+
+    if (state.failedPaths?.includes(url.pathname)) {
+      await fulfillJson(route, { message: "temporarily unavailable" }, 503);
+      return;
+    }
 
     if (url.pathname === "/api/auth/login" && request.method() === "POST") {
       const username = typeof body === "object" && body !== null && "username" in body
@@ -599,21 +606,44 @@ test("tenant and customer AI, user, usage, account, recharge, and subscription p
   expect(errors).toEqual([]);
 });
 
-test("tenant finance cockpit surfaces operating conclusions and action panels", async ({ page }) => {
+test("tenant finance cockpit surfaces operating conclusions and action panels", async ({ page }, testInfo) => {
   test.skip(!useMockApi, "uses deterministic tenant finance fixtures; run with DAI_E2E_MOCK=1");
   const errors = watchBrowserErrors(page);
   await loginAs(page, roles[2], "/tenant/overview/finance");
   await page.goto("/tenant/overview/finance");
 
-  await expect(page.getByRole("heading", { name: "经营与结算" })).toBeVisible();
-  await expect(page.getByText("本期经营结果", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "经营分析" })).toBeVisible();
+  await expect(page.getByText("本期经营结论", { exact: true })).toBeVisible();
   await expect(page.getByText("服务额度安全垫", { exact: true })).toBeVisible();
   await expect(page.getByText("用户资金健康", { exact: true })).toBeVisible();
   await expect(page.getByText("需要关注", { exact: true })).toBeVisible();
   await expect(page.getByText("模型成本结构", { exact: true })).toBeVisible();
   await expect(page.getByText("最近账务动作", { exact: true })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("tenant-finance.png"), fullPage: true, animations: "disabled" });
   await expectNoAccessibilityViolations(page);
   expect(errors).toEqual([]);
+});
+
+test("tenant finance shows full user counts and recovers unavailable sections", async ({ page }, testInfo) => {
+  test.skip(!useMockApi, "uses controlled tenant analytics failures");
+  const errors = watchBrowserErrors(page);
+  const state = await loginAs(page, roles[2], "/tenant/overview/finance", {
+    lowBalanceUserCount: 251,
+    failedPaths: ["/api/v1/tenants/analytics/overview"]
+  });
+  await page.goto("/tenant/overview/finance");
+  const unavailable = page.getByRole("alert", { name: "用户资金健康加载失败" });
+  await expect(unavailable).toContainText("暂时无法展示准确数据");
+  await expect(page.getByText("低余额 0", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("本期经营结论", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("模型成本结构", { exact: true })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("finance-unavailable.png"), fullPage: true, animations: "disabled" });
+  state.failedPaths = [];
+  await unavailable.getByRole("button", { name: "重新加载" }).click();
+  await expect(unavailable).toHaveCount(0);
+  await expect(page.getByText("低余额 251", { exact: true })).toBeVisible();
+  await expect(page.getByText("本期经营结论", { exact: true })).toBeVisible();
+  expect(errors.filter((error) => !error.includes("503"))).toEqual([]);
 });
 
 test("admin billing and usage paths expose recharge/refund workflow surfaces", async ({ page }) => {
@@ -1079,6 +1109,7 @@ function fixtureFor(path: string, method: string, state: MockState): unknown {
       inviteCodeCount: 2,
       userDeductionUsd: 86.4,
       userTotalBalanceUsd: 142.8,
+      lowBalanceUserCount: state.lowBalanceUserCount ?? 0,
       activeUserCount: 9,
       userConsumptionCount: 184,
       settlementIncomeMicroUsd: 120_000_000

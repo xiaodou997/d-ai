@@ -302,6 +302,14 @@ func (r *TenantRepo) GetTenantOverviewStats(ctx context.Context, tenantID string
 		}
 	}
 
+	// 存量风险与用户列表分页无关，沿用用户目录的余额和账号状态口径。
+	if err := r.pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM user_admin_end_user_projection
+		WHERE tenant_id = $1 AND status = 'active' AND balance_micro <= 1000000
+	`, tenantID).Scan(&stats.LowBalanceUserCount); err != nil {
+		return nil, err
+	}
+
 	behaviorBase := `
 		FROM tenant_usage_projection
 		WHERE tenant_id = $1

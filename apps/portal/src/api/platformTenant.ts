@@ -47,6 +47,7 @@ function toAnalyticsOverview(value: AnalyticsOverviewTransport): TenantAnalytics
     inviteCodeCount: value.inviteCodeCount,
     userDeductionUsd: value.userDeductionUsd,
     userTotalBalanceUsd: value.userTotalBalanceUsd,
+    lowBalanceUserCount: value.lowBalanceUserCount,
     activeUserCount: value.activeUserCount,
     userConsumptionCount: value.userConsumptionCount,
     settlementIncomeMicroUsd: value.settlementIncomeMicroUsd

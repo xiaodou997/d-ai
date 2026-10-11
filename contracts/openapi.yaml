@@ -9820,6 +9820,10 @@ components:
         inviteCodeCount:
           format: int64
           type: integer
+        lowBalanceUserCount:
+          description: 当前启用且余额不超过 1 USD 的终端用户总数，不受时间范围或分页限制
+          format: int64
+          type: integer
         settlementIncomeMicroUsd:
           format: int64
           type: integer
@@ -9837,6 +9841,7 @@ components:
         - inviteCodeCount
         - userDeductionUsd
         - userTotalBalanceUsd
+        - lowBalanceUserCount
         - activeUserCount
         - userConsumptionCount
         - settlementIncomeMicroUsd

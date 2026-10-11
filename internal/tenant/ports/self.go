@@ -53,6 +53,7 @@ type TenantOverviewStats struct {
 	InviteCodeCount          int64   `json:"inviteCodeCount"`
 	UserDeductionUSD         float64 `json:"userDeductionUsd"`
 	UserTotalBalanceUSD      float64 `json:"userTotalBalanceUsd"`
+	LowBalanceUserCount      int64   `json:"lowBalanceUserCount" doc:"当前启用且余额不超过 1 USD 的终端用户总数，不受时间范围或分页限制"`
 	ActiveUserCount          int64   `json:"activeUserCount"`
 	UserConsumptionCount     int64   `json:"userConsumptionCount"`
 	SettlementIncomeMicroUSD int64   `json:"settlementIncomeMicroUsd"`

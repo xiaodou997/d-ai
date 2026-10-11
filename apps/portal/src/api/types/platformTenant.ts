@@ -9,6 +9,7 @@ export interface TenantAnalyticsOverview {
 	inviteCodeCount: number;
 	userDeductionUsd: number;
 	userTotalBalanceUsd: number;
+	lowBalanceUserCount: number;
 	activeUserCount: number;
 	userConsumptionCount: number;
 	settlementIncomeMicroUsd: number;
