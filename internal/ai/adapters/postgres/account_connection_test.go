@@ -1,6 +1,7 @@
 package postgres
 
 import (
+	"errors"
 	"reflect"
 	"testing"
 
@@ -8,6 +9,49 @@ import (
 	"xiaodou/dai/internal/ai/testsupport"
 	"xiaodou/dai/internal/ai/upstreamcontrol"
 )
+
+func TestAccountRepoSerializesConcurrentEndpointCreation(t *testing.T) {
+	ctx := t.Context()
+	pool, cleanup, err := testsupport.OpenAsyncTaskTestPool(ctx, testsupport.AsyncTaskPoolOptions{MaxConns: 4})
+	if err != nil {
+		t.Skipf("open single endpoint test pool: %v", err)
+	}
+	defer func() { _ = cleanup(ctx) }()
+	var accountID string
+	if err := pool.QueryRow(ctx, `INSERT INTO ai_upstream_accounts(name,tenant_display_name,api_key_ciphertext) VALUES('repair-account','Repair','test-secret') RETURNING id::text`).Scan(&accountID); err != nil {
+		t.Fatal(err)
+	}
+	repo := NewAccountRepo(NewQueries(pool), pool)
+	results := make(chan error, 2)
+	start := make(chan struct{})
+	for _, format := range []domain.UpstreamProtocol{domain.ProtocolOpenAIResponses, domain.ProtocolOpenAIChat} {
+		go func() {
+			<-start
+			_, err := repo.CreateEndpoint(ctx, accountID, domain.UpstreamAccountEndpointWrite{
+				APIFormat: format, BaseURL: "https://example.test", AuthScheme: domain.EndpointAuthFormatDefault, Status: domain.EndpointStatusActive,
+			})
+			results <- err
+		}()
+	}
+	close(start)
+	var succeeded, rejected int
+	for range 2 {
+		if err := <-results; err == nil {
+			succeeded++
+		} else if errors.Is(err, domain.ErrValidation) {
+			rejected++
+		} else {
+			t.Fatal(err)
+		}
+	}
+	if succeeded != 1 || rejected != 1 {
+		t.Fatalf("concurrent creates succeeded/rejected = %d/%d", succeeded, rejected)
+	}
+	endpoints, err := repo.ListEndpoints(ctx, accountID)
+	if err != nil || len(endpoints) != 1 {
+		t.Fatalf("endpoints = %v, error = %v", endpoints, err)
+	}
+}
 
 func TestAccountRepoConnectionUpdateIsAtomic(t *testing.T) {
 	ctx := t.Context()
@@ -22,7 +66,6 @@ func TestAccountRepoConnectionUpdateIsAtomic(t *testing.T) {
 		Name: "Original", APIKey: "original-key", Status: domain.UpstreamAccountStatusActive,
 		Endpoints: []domain.UpstreamAccountEndpointWrite{
 			{APIFormat: domain.ProtocolOpenAIResponses, BaseURL: "https://responses.example"},
-			{APIFormat: domain.ProtocolOpenAIChat, BaseURL: "https://chat.example"},
 		},
 	})
 	if err != nil {
@@ -67,19 +110,17 @@ func TestAccountRepoConnectionUpdateIsAtomic(t *testing.T) {
 		})
 	}
 
-	// Edit one existing endpoint, add a format, and remove the omitted endpoint
-	// together with a credential rotation.
+	// Edit the existing endpoint and rotate its credential in the same transaction.
 	updated, err := svc.UpdateAccount(ctx, upstreamcontrol.UpdateAccountInput{
 		ID: account.ID, Name: "Updated", APIKey: "new-key",
 		Endpoints: []upstreamcontrol.AccountEndpointUpdate{
 			{ID: first.ID, UpstreamAccountEndpointWrite: write},
-			{UpstreamAccountEndpointWrite: domain.UpstreamAccountEndpointWrite{APIFormat: domain.ProtocolAnthropicMessages, BaseURL: "https://claude.example"}},
 		},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if updated.Name != "Updated" || len(updated.Endpoints) != 2 {
+	if updated.Name != "Updated" || len(updated.Endpoints) != 1 {
 		t.Fatal("combined update missing account or endpoints")
 	}
 	retained, err := repo.GetEndpoint(ctx, account.ID, first.ID)
@@ -105,7 +146,6 @@ func TestAccountRepoConnectionUpdateIsAtomic(t *testing.T) {
 		ID: account.ID, Name: "Metadata only",
 		Endpoints: []upstreamcontrol.AccountEndpointUpdate{
 			{ID: first.ID, UpstreamAccountEndpointWrite: write},
-			{ID: updated.Endpoints[0].ID, UpstreamAccountEndpointWrite: domain.UpstreamAccountEndpointWrite{APIFormat: domain.ProtocolAnthropicMessages, BaseURL: "https://claude.example"}},
 		},
 	}); err != nil {
 		t.Fatal(err)

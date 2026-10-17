@@ -177,6 +177,23 @@ func TestUpstreamAccountRoutesRequireSeparatedPorts(t *testing.T) {
 	}
 }
 
+func TestUpstreamAccountRoutesRejectMultipleEndpointsBeforeWriting(t *testing.T) {
+	stub := &upstreamAccountPortsStub{}
+	router, api := server.New(server.Options{Title: "test", Version: "test"})
+	registerUpstreamAccounts(api, UpstreamAccountManagementHTTPDeps{Accounts: stub, AccountManager: stub})
+	body := `{"name":"account","api_key":"test-secret","endpoints":[{"api_format":"openai_responses","base_url":"https://one.test"},{"api_format":"openai_chat","base_url":"https://two.test"}]}`
+	for _, request := range []struct{ method, path string }{
+		{http.MethodPost, "/api/v1/upstream-accounts"},
+		{http.MethodPatch, "/api/v1/upstream-accounts/account"},
+	} {
+		recorder := performUpstreamAccountRequest(router, request.method, request.path, body)
+		requireUpstreamAccountStatus(t, recorder, http.StatusUnprocessableEntity)
+	}
+	if stub.createInput.Name != "" || stub.updateInput.Name != "" {
+		t.Fatal("multi endpoint payload reached account manager")
+	}
+}
+
 func TestUpstreamAccountTransferComposesCatalogReaderAndManager(t *testing.T) {
 	concurrency := 3
 	stub := &upstreamAccountPortsStub{

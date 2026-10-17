@@ -22,7 +22,7 @@ type accountDTO struct {
 	TenantDisplayName string               `json:"tenant_display_name" doc:"租户侧展示名称"`
 	Description       string               `json:"description,omitempty"`
 	TenantAccessMode  string               `json:"tenant_access_mode" enum:"public,restricted" doc:"租户访问范围"`
-	Endpoints         []accountEndpointDTO `json:"endpoints" doc:"账号支持的请求端点；同一 API 格式至多一个"`
+	Endpoints         []accountEndpointDTO `json:"endpoints" doc:"账号唯一的请求端点；保留数组结构兼容现有客户端"`
 	ConcurrencyLimit  *int32               `json:"concurrency_limit,omitempty" doc:"最大并发请求数；为空表示不限制"`
 	PriceBookID       string               `json:"price_book_id,omitempty" doc:"租户结算价格表 ID"`
 	TenantMultiplier  *float64             `json:"tenant_multiplier,omitempty" doc:"默认租户扣费倍率"`
@@ -83,7 +83,7 @@ type createAccountRequest struct {
 	TenantDisplayName string                        `json:"tenant_display_name,omitempty" doc:"租户侧展示名称；为空时使用账号名称"`
 	TenantAccessMode  string                        `json:"tenant_access_mode,omitempty" enum:"public,restricted" doc:"租户访问范围；为空保留原值"`
 	APIKey            string                        `json:"api_key" doc:"上游 API key 明文；仅写入时接收，响应不返回"`
-	Endpoints         []AccountEndpointWriteRequest `json:"endpoints" minItems:"1" doc:"账号支持的请求端点；同一 API 格式至多一个"`
+	Endpoints         []AccountEndpointWriteRequest `json:"endpoints" minItems:"1" maxItems:"1" doc:"账号唯一的请求端点，必须且只能配置一个"`
 	ConcurrencyLimit  *int32                        `json:"concurrency_limit,omitempty" minimum:"1" doc:"最大并发请求数；为空表示不限制"`
 	PriceBookID       string                        `json:"price_book_id,omitempty" doc:"租户结算价格表 ID；为空不绑定"`
 	TenantMultiplier  *float64                      `json:"tenant_multiplier,omitempty" doc:"默认租户扣费倍率；为空不设置"`
@@ -95,7 +95,7 @@ type updateAccountRequest struct {
 	TenantDisplayName string                         `json:"tenant_display_name,omitempty" doc:"租户侧展示名称；为空时使用账号名称"`
 	TenantAccessMode  string                         `json:"tenant_access_mode,omitempty" enum:"public,restricted" doc:"租户访问范围；为空默认 public"`
 	APIKey            string                         `json:"api_key,omitempty" doc:"上游 API key 明文；为空保留原密文"`
-	Endpoints         []accountEndpointUpdateRequest `json:"endpoints,omitempty" minItems:"1" doc:"与账号及 API Key 原子保存的完整端点列表；省略或 null 保留原配置，未列出的旧端点会被删除"`
+	Endpoints         []accountEndpointUpdateRequest `json:"endpoints,omitempty" minItems:"1" maxItems:"1" doc:"与账号及 API Key 原子保存的唯一端点；省略或 null 保留原配置"`
 	ConcurrencyLimit  *int32                         `json:"concurrency_limit,omitempty" minimum:"1" doc:"最大并发请求数；为空表示不限制"`
 	PriceBookID       string                         `json:"price_book_id,omitempty" doc:"租户结算价格表 ID；为空不绑定"`
 	TenantMultiplier  *float64                       `json:"tenant_multiplier,omitempty" doc:"默认租户扣费倍率；为空不设置"`

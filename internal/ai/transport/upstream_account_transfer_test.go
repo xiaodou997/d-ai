@@ -9,6 +9,20 @@ import (
 	"xiaodou/dai/libs/go/httpx"
 )
 
+func TestImportPreviewRejectsMultipleEndpointsWithoutDroppingAny(t *testing.T) {
+	account := upstreamAccountTransferAccountDTO{
+		Name: "Legacy", APIKey: "test-key",
+		Endpoints: []upstreamAccountTransferEndpointDTO{
+			{APIFormat: "openai_responses", BaseURL: "https://responses.example"},
+			{APIFormat: "openai_chat", BaseURL: "https://chat.example"},
+		},
+	}
+	preview := previewImportAccount(account, map[string]struct{}{}, map[string]struct{}{})
+	if preview.Action != "error" || preview.EndpointCount != 2 || preview.Reason == "" {
+		t.Fatalf("invalid connection preview = %+v", preview)
+	}
+}
+
 func TestValidateImportPriceBook(t *testing.T) {
 	tests := []struct {
 		name       string

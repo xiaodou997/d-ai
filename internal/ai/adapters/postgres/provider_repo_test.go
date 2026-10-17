@@ -70,7 +70,7 @@ func openAccountRepoTestPool(t *testing.T) (*pgxpool.Pool, context.Context) {
 				account_id UUID NOT NULL REFERENCES %s.ai_upstream_accounts(id) ON DELETE CASCADE,
 				api_format TEXT NOT NULL,
 				base_url TEXT NOT NULL,
-				UNIQUE (account_id, api_format)
+				UNIQUE (account_id)
 			)`, schema, schema),
 			fmt.Sprintf(`CREATE TABLE %s.ai_group_targets (
 				id UUID PRIMARY KEY,
@@ -252,30 +252,25 @@ func TestAccountRepoSerializesEndpointAvailabilityInvariant(t *testing.T) {
 	const (
 		deleteAccountID   = "71000000-0000-0000-0000-000000000001"
 		deleteActiveID    = "71000000-0000-0000-0000-000000000002"
-		deleteDormantID   = "71000000-0000-0000-0000-000000000003"
 		raceAccountID     = "72000000-0000-0000-0000-000000000001"
 		raceFirstID       = "72000000-0000-0000-0000-000000000002"
-		raceSecondID      = "72000000-0000-0000-0000-000000000003"
 		activateAccountID = "73000000-0000-0000-0000-000000000001"
 	)
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO ai_upstream_accounts (id, name, tenant_display_name, api_key_ciphertext, status)
 		VALUES
 			($1::uuid, 'delete-invariant', 'Delete Invariant', 'cipher', 'active'),
-			($2::uuid, 'race-invariant', 'Race Invariant', 'cipher', 'active'),
+			($2::uuid, 'race-invariant', 'Race Invariant', 'cipher', 'disabled'),
 			($3::uuid, 'activate-invariant', 'Activate Invariant', 'cipher', 'disabled')
 	`, deleteAccountID, raceAccountID, activateAccountID); err != nil {
 		t.Fatalf("seed endpoint invariant accounts: %v", err)
 	}
 	if _, err := pool.Exec(ctx, `
-		INSERT INTO ai_upstream_account_endpoints (id, account_id, api_format, base_url, status)
-		VALUES
-			($3::uuid, $1::uuid, 'openai_responses', 'https://example.test', 'active'),
-			($4::uuid, $1::uuid, 'openai_chat', 'https://example.test', 'disabled'),
-			($5::uuid, $2::uuid, 'openai_responses', 'https://example.test', 'active'),
-			($6::uuid, $2::uuid, 'openai_chat', 'https://example.test', 'active'),
-			(gen_random_uuid(), $7::uuid, 'openai_responses', 'https://example.test', 'active')
-	`, deleteAccountID, raceAccountID, deleteActiveID, deleteDormantID, raceFirstID, raceSecondID, activateAccountID); err != nil {
+        INSERT INTO ai_upstream_account_endpoints (id, account_id, api_format, base_url, status)
+        VALUES ($2::uuid, $1::uuid, 'openai_responses', 'https://example.test', 'active'),
+               ($4::uuid, $3::uuid, 'openai_responses', 'https://example.test', 'active'),
+               (gen_random_uuid(), $5::uuid, 'openai_responses', 'https://example.test', 'active')
+    `, deleteAccountID, deleteActiveID, raceAccountID, raceFirstID, activateAccountID); err != nil {
 		t.Fatalf("seed endpoint invariant endpoints: %v", err)
 	}
 	if _, err := pool.Exec(ctx, `
@@ -290,20 +285,17 @@ func TestAccountRepoSerializesEndpointAvailabilityInvariant(t *testing.T) {
 	}
 
 	results := make(chan error, 2)
-	for _, endpoint := range []struct {
-		id       string
-		protocol domain.UpstreamProtocol
-	}{{raceFirstID, domain.ProtocolOpenAIResponses}, {raceSecondID, domain.ProtocolOpenAIChat}} {
-		endpoint := endpoint
-		go func() {
-			_, err := repo.UpdateEndpoint(ctx, raceAccountID, endpoint.id, domain.UpstreamAccountEndpointWrite{
-				APIFormat: endpoint.protocol, BaseURL: "https://example.test",
-				AuthScheme: domain.EndpointAuthFormatDefault, ExtraHeaders: []byte(`{}`),
-				Status: domain.EndpointStatusDisabled,
-			})
-			results <- err
-		}()
-	}
+	go func() {
+		_, err := repo.UpdateAccountStatus(ctx, raceAccountID, domain.UpstreamAccountStatusActive)
+		results <- err
+	}()
+	go func() {
+		_, err := repo.UpdateEndpoint(ctx, raceAccountID, raceFirstID, domain.UpstreamAccountEndpointWrite{
+			APIFormat: domain.ProtocolOpenAIResponses, BaseURL: "https://example.test",
+			AuthScheme: domain.EndpointAuthFormatDefault, ExtraHeaders: []byte(`{}`), Status: domain.EndpointStatusDisabled,
+		})
+		results <- err
+	}()
 	var succeeded, rejected int
 	for range 2 {
 		if err := <-results; err == nil {
@@ -317,12 +309,14 @@ func TestAccountRepoSerializesEndpointAvailabilityInvariant(t *testing.T) {
 	if succeeded != 1 || rejected != 1 {
 		t.Fatalf("concurrent endpoint updates succeeded/rejected = %d/%d, want 1/1", succeeded, rejected)
 	}
-	var active int
-	if err := pool.QueryRow(ctx, `SELECT count(*) FROM ai_upstream_account_endpoints WHERE account_id = $1::uuid AND status = 'active'`, raceAccountID).Scan(&active); err != nil {
+	var unsafe int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM ai_upstream_accounts a
+        JOIN ai_upstream_account_endpoints e ON e.account_id=a.id
+        WHERE a.id=$1 AND a.status='active' AND e.status<>'active'`, raceAccountID).Scan(&unsafe); err != nil {
 		t.Fatal(err)
 	}
-	if active != 1 {
-		t.Fatalf("active endpoints after concurrent updates = %d, want 1", active)
+	if unsafe != 0 {
+		t.Fatal("concurrent updates left an active account with a disabled endpoint")
 	}
 	if _, err := repo.UpdateAccountStatus(ctx, activateAccountID, domain.UpstreamAccountStatusActive); !errors.Is(err, domain.ErrValidation) {
 		t.Fatalf("UpdateAccountStatus(incompatible bindings) error = %v, want validation", err)

@@ -1031,8 +1031,8 @@ CREATE INDEX idx_ledger_credit_leases_account
 
   -- ============================================================================
   -- AI Upstream Account Endpoints（直连账号支持的真实请求端点）
-  -- Endpoint 是 API 格式、URL、认证形态和附加请求头的事实源。一个账号可以支持
-  -- 多种格式，但同一格式只能配置一次；模型属于账号，不按 Endpoint 重复维护。
+  -- Endpoint 是 API 格式、URL、认证形态和附加请求头的事实源。
+  -- 一个账号只对应一个 Endpoint；模型属于账号。
   -- ============================================================================
   CREATE TABLE IF NOT EXISTS ai_upstream_account_endpoints (
     id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1051,7 +1051,7 @@ CREATE INDEX idx_ledger_credit_leases_account
     last_checked_at TIMESTAMPTZ,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-	UNIQUE (account_id, api_format),
+	UNIQUE (account_id),
 	CHECK (auth_scheme <> 'custom_header' OR btrim(auth_header) <> '')
   );
 
@@ -3223,7 +3223,7 @@ CREATE TABLE dai_schema_metadata (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 46);
+INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 47);
 
 COMMIT;
 
@@ -3248,4 +3248,4 @@ CREATE INDEX ai_request_attempts_endpoint_model_window ON ai_request_attempts(en
 CREATE TABLE ai_upstream_runtime_metadata(singleton boolean PRIMARY KEY DEFAULT true CHECK(singleton), started_at timestamptz NOT NULL DEFAULT now());
 INSERT INTO ai_upstream_runtime_metadata(singleton) VALUES(true);
 
-UPDATE dai_schema_metadata SET version=46,updated_at=now() WHERE singleton;
+UPDATE dai_schema_metadata SET version=47,updated_at=now() WHERE singleton;

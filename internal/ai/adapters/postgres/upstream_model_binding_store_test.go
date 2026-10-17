@@ -85,6 +85,11 @@ func TestUpstreamModelBindingStoreCRUDAndScopeIsolation(t *testing.T) {
 	if !slices.Equal(codes, []string{"gpt-test"}) {
 		t.Fatalf("codes = %v", codes)
 	}
+	// After disabling the chat binding, switch this account's single endpoint
+	// before adding the alternate capability.
+	if _, err := pool.Exec(ctx, `UPDATE ai_upstream_account_endpoints SET api_format='openai_embeddings' WHERE account_id=$1`, directBindingScopeID); err != nil {
+		t.Fatal(err)
+	}
 	activeWrite := write
 	activeWrite.CapabilityType = "embedding"
 	activeWrite.Status = "active"
@@ -219,8 +224,7 @@ func seedBindingTargets(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO ai_upstream_account_endpoints (account_id, api_format, base_url, status)
 		VALUES
-			($1::uuid, 'openai_responses', 'https://example.test', 'active'),
-			($1::uuid, 'openai_embeddings', 'https://example.test', 'active')
+			($1::uuid, 'openai_responses', 'https://example.test', 'active')
 	`, directBindingScopeID); err != nil {
 		t.Fatalf("seed direct model binding endpoints: %v", err)
 	}

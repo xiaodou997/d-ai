@@ -75,12 +75,14 @@ describe('UpstreamAccountDetailWorkspace', () => {
     api.deleteUpstreamAccount.mockReset().mockResolvedValue({})
   })
 
-  it('shows account identity, success rate and four focused detail tabs', async () => {
+  it('shows the single connection in the account overview', async () => {
     const { wrapper } = await mountDetail()
     expect(wrapper.text()).toContain('Primary upstream')
     expect(wrapper.text()).toContain('成功率 75.0%')
     expect(wrapper.text()).toContain('样本较少')
-    expect(wrapper.findAll('[role="tab"]').map(tab => tab.text())).toEqual(['账号概览', '请求端点', '模型绑定', '运行诊断'])
+    expect(wrapper.findAll('[role="tab"]').map(tab => tab.text())).toEqual(['账号概览', '模型绑定', '运行诊断'])
+    expect(wrapper.text()).toContain('https://api.example.com/v1')
+    expect(wrapper.text()).toContain('OpenAI · Responses')
     wrapper.unmount()
   })
 
@@ -101,16 +103,14 @@ describe('UpstreamAccountDetailWorkspace', () => {
     const editor = wrapper.findComponent({ name: 'UpstreamAccountEditorDialog' })
     expect(editor.props('modelValue')).toBe(true)
     expect(editor.props('account')).toMatchObject({ id: 'account-1', endpoints: [{ id: 'endpoint-1' }] })
-    expect(editor.props('addEndpointOnOpen')).toBe(false)
     wrapper.unmount()
   })
 
-  it('stages a new endpoint in the same account editor', async () => {
+  it('keeps old endpoint links usable through the unified overview', async () => {
     const { wrapper } = await mountDetail('/admin/ai/upstreams/accounts/account-1?tab=endpoints')
-    await wrapper.findAll('button').find(button => button.text() === '添加端点')!.trigger('click')
-    const editor = wrapper.findComponent({ name: 'UpstreamAccountEditorDialog' })
-    expect(editor.props('modelValue')).toBe(true)
-    expect(editor.props('addEndpointOnOpen')).toBe(true)
+    expect(wrapper.findAll('[role="tab"]')[0]!.attributes('aria-selected')).toBe('true')
+    expect(wrapper.text()).toContain('https://api.example.com/v1')
+    expect(wrapper.text()).not.toContain('添加端点')
     wrapper.unmount()
   })
 

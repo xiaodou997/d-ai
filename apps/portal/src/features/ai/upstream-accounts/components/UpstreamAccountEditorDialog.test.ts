@@ -74,19 +74,29 @@ describe('UpstreamAccountEditorDialog', () => {
     expect(body.endpoints[0]).toMatchObject({ id: 'ep', extra_headers: { Authorization: '***REDACTED***' } })
   })
 
-  it('stages endpoint additions and removals until the combined save', async () => {
+  it('offers exactly one connection without add or remove actions', async () => {
     const existing = { id: 'existing', name: 'Existing', status: 'disabled', endpoints: [{ id: 'ep', api_format: 'openai_responses', base_url: 'https://example.com', status: 'active' }] }
-    const wrapper = mount(UpstreamAccountEditorDialog, { props: { modelValue: true, account: existing as any, addEndpointOnOpen: true }, global })
-    expect(wrapper.findAll('input[placeholder="https://api.example.com"]')).toHaveLength(2)
-    await wrapper.findAll('input[placeholder="https://api.example.com"]')[1]!.setValue('https://new.example.com')
-    await wrapper.findAll('button').find(button => button.text() === '移除')!.trigger('click')
+    const wrapper = mount(UpstreamAccountEditorDialog, { props: { modelValue: true, account: existing as any }, global })
+    expect(wrapper.findAll('input[placeholder="https://api.example.com"]')).toHaveLength(1)
+    expect(wrapper.findAll('button').map(button => button.text())).not.toEqual(expect.arrayContaining(['添加格式', '移除']))
+    await wrapper.get('input[placeholder="https://api.example.com"]').setValue('https://new.example.com')
     expect(api.updateUpstreamAccount).not.toHaveBeenCalled()
     expect(existing.endpoints).toHaveLength(1)
     await wrapper.findAll('button').find(button => button.text() === '保存')!.trigger('click')
     await flushPromises()
     const body = api.updateUpstreamAccount.mock.calls[0]![1]
-    expect(body.endpoints).toEqual([expect.objectContaining({ api_format: 'openai_chat', base_url: 'https://new.example.com' })])
-    expect(body.endpoints[0]).not.toHaveProperty('id')
+    expect(body.endpoints).toEqual([expect.objectContaining({ id: 'ep', api_format: 'openai_responses', base_url: 'https://new.example.com' })])
+  })
+
+  it('does not silently drop connections from an unexpected legacy account', async () => {
+    const existing = { id: 'existing', name: 'Legacy', status: 'disabled', endpoints: [
+      { id: 'ep-1', api_format: 'openai_responses', base_url: 'https://responses.example', status: 'active' },
+      { id: 'ep-2', api_format: 'openai_chat', base_url: 'https://chat.example', status: 'active' }
+    ] }
+    const wrapper = mount(UpstreamAccountEditorDialog, { props: { modelValue: true, account: existing as any }, global })
+    await wrapper.findAll('button').find(button => button.text() === '保存')!.trigger('click')
+    expect(api.updateUpstreamAccount).not.toHaveBeenCalled()
+    expect(existing.endpoints).toHaveLength(2)
   })
 
   it('keeps the dialog and edits available when the combined request fails', async () => {

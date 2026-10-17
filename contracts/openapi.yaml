@@ -47,7 +47,7 @@ components:
         description:
           type: string
         endpoints:
-          description: 账号支持的请求端点；同一 API 格式至多一个
+          description: 账号唯一的请求端点；保留数组结构兼容现有客户端
           items:
             $ref: "#/components/schemas/AccountEndpointDTO"
           type:
@@ -1973,9 +1973,10 @@ components:
         description:
           type: string
         endpoints:
-          description: 账号支持的请求端点；同一 API 格式至多一个
+          description: 账号唯一的请求端点，必须且只能配置一个
           items:
             $ref: "#/components/schemas/AccountEndpointWriteRequest"
+          maxItems: 1
           minItems: 1
           type:
             - array
@@ -10838,9 +10839,10 @@ components:
         description:
           type: string
         endpoints:
-          description: 与账号及 API Key 原子保存的完整端点列表；省略或 null 保留原配置，未列出的旧端点会被删除
+          description: 与账号及 API Key 原子保存的唯一端点；省略或 null 保留原配置
           items:
             $ref: "#/components/schemas/AccountEndpointUpdateRequest"
+          maxItems: 1
           minItems: 1
           type:
             - array

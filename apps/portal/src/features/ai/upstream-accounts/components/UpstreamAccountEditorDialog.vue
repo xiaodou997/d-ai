@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, shallowRef, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
 
 import { aiAdminApi } from '@/api/aiAdmin'
 import type { AccountDTO, AccountWriteRequest, UpstreamAccountEndpointWriteRequest } from '@/api/types/ai'
@@ -15,11 +14,9 @@ const props = withDefaults(defineProps<{
   modelValue: boolean
   account?: AccountDTO | null
   priceBooks?: PriceBookRecord[]
-  addEndpointOnOpen?: boolean
 }>(), {
   account: null,
-  priceBooks: () => [],
-  addEndpointOnOpen: false
+  priceBooks: () => []
 })
 
 const emit = defineEmits<{
@@ -38,7 +35,7 @@ interface AccountForm {
   tenant_display_name: string
   tenant_access_mode: 'public' | 'restricted'
   api_key: string
-  endpoints: EndpointDraft[]
+  endpoint: EndpointDraft
   concurrency_limit: number | null
   price_book_id: string
   tenant_multiplier: number | null
@@ -46,6 +43,7 @@ interface AccountForm {
 
 const submitting = shallowRef(false)
 const isEditing = computed(() => Boolean(props.account?.id))
+const invalidEndpointCount = computed(() => isEditing.value && props.account?.endpoints?.length !== 1)
 const activePriceBookId = computed(() => firstActivePriceBookId(props.priceBooks))
 
 function blankEndpoint(): EndpointDraft {
@@ -63,7 +61,7 @@ function blankEndpoint(): EndpointDraft {
 function blankAccount(): AccountForm {
   return {
     name: '', description: '', tenant_display_name: '', tenant_access_mode: 'public', api_key: '',
-    endpoints: [blankEndpoint()], concurrency_limit: null, price_book_id: activePriceBookId.value, tenant_multiplier: 1
+    endpoint: blankEndpoint(), concurrency_limit: null, price_book_id: activePriceBookId.value, tenant_multiplier: 1
   }
 }
 
@@ -81,11 +79,10 @@ function resetForm() {
     tenant_display_name: account.tenant_display_name || account.name,
     tenant_access_mode: account.tenant_access_mode || 'public',
     api_key: '',
-    endpoints: (account.endpoints || []).map(endpoint => ({
-      ...endpoint,
-      extra_headers: endpoint.extra_headers && typeof endpoint.extra_headers === 'object'
-        ? { ...endpoint.extra_headers as Record<string, unknown> } : {}
-    })),
+    endpoint: account.endpoints?.length === 1 ? {
+      ...account.endpoints[0],
+      extra_headers: { ...account.endpoints[0]?.extra_headers as Record<string, unknown> }
+    } : blankEndpoint(),
     concurrency_limit: account.concurrency_limit ?? null,
     price_book_id: account.price_book_id || '',
     tenant_multiplier: account.tenant_multiplier ?? null
@@ -95,7 +92,6 @@ function resetForm() {
 watch(() => props.modelValue, (open) => {
   if (!open) return
   resetForm()
-  if (props.addEndpointOnOpen) addEndpoint()
 }, { immediate: true })
 watch(activePriceBookId, (id) => {
   if (props.modelValue && !isEditing.value && !form.price_book_id) form.price_book_id = id
@@ -114,50 +110,21 @@ function endpointPayload(endpoint: EndpointDraft): UpstreamAccountEndpointWriteR
   }
 }
 
-function validateEndpoints() {
-  if (!form.endpoints.length) {
-    ElMessage.warning('至少配置一个请求端点')
+function validateEndpoint() {
+  if (invalidEndpointCount.value) {
+    ElMessage.warning('账号应对应一个端点，请刷新页面后重试')
     return false
   }
-  const formats = new Set<string>()
-  for (const endpoint of form.endpoints) {
-    if (!endpoint.base_url.trim()) {
-      ElMessage.warning(`请填写 ${upstreamAPIFormatLabel(endpoint.api_format)} 的 Base URL`)
-      return false
-    }
-    if (formats.has(endpoint.api_format)) {
-      ElMessage.warning(`API 格式不能重复：${upstreamAPIFormatLabel(endpoint.api_format)}`)
-      return false
-    }
-    if (endpoint.auth_scheme === 'custom_header' && !endpoint.auth_header?.trim()) {
-      ElMessage.warning('自定义认证方式必须填写请求头名称')
-      return false
-    }
-    formats.add(endpoint.api_format)
+  const endpoint = form.endpoint
+  if (!endpoint.base_url.trim()) {
+    ElMessage.warning(`请填写 ${upstreamAPIFormatLabel(endpoint.api_format)} 的 Base URL`)
+    return false
+  }
+  if (endpoint.auth_scheme === 'custom_header' && !endpoint.auth_header?.trim()) {
+    ElMessage.warning('自定义认证方式必须填写请求头名称')
+    return false
   }
   return true
-}
-
-function addEndpoint() {
-  const used = new Set(form.endpoints.map((endpoint) => endpoint.api_format))
-  const next = upstreamAPIFormatOptions.find((option) => !used.has(option.value))
-  if (!next) {
-    ElMessage.info('所有 API 格式都已配置')
-    return
-  }
-  form.endpoints.push({ ...blankEndpoint(), api_format: next.value })
-}
-
-function removeEndpoint(index: number) {
-  if (form.endpoints.length <= 1) {
-    ElMessage.warning('账号至少需要一个请求端点')
-    return
-  }
-  form.endpoints.splice(index, 1)
-}
-
-function formatDisabled(format: string, index: number) {
-  return form.endpoints.some((endpoint, candidateIndex) => candidateIndex !== index && endpoint.api_format === format)
 }
 
 function payload(): AccountWriteRequest {
@@ -170,7 +137,7 @@ function payload(): AccountWriteRequest {
     price_book_id: form.price_book_id || undefined,
     tenant_multiplier: form.tenant_multiplier ?? undefined
   }
-  value.endpoints = form.endpoints.map(endpointPayload)
+  value.endpoints = [endpointPayload(form.endpoint)]
   if (form.api_key.trim()) value.api_key = form.api_key.trim()
   return value
 }
@@ -178,9 +145,9 @@ function payload(): AccountWriteRequest {
 async function submit() {
   if (!form.name.trim()) { ElMessage.warning('请填写账号名称'); return }
   if (!isEditing.value && !form.api_key.trim()) { ElMessage.warning('请填写上游 API key'); return }
-  if (!validateEndpoints()) return
-  if (props.account?.status === 'active' && !form.endpoints.some(endpoint => endpoint.status === 'active')) {
-    ElMessage.warning('启用账号至少需要一个启用中的请求端点')
+  if (!validateEndpoint()) return
+  if (props.account?.status === 'active' && form.endpoint.status !== 'active') {
+    ElMessage.warning('启用账号的请求端点必须启用')
     return
   }
   submitting.value = true
@@ -210,6 +177,7 @@ async function submit() {
     @update:model-value="emit('update:modelValue', $event)"
   >
     <div class="connection-form-scroll">
+      <el-alert v-if="invalidEndpointCount" title="账号应对应一个端点，请刷新页面后重试" type="warning" :closable="false" />
       <el-form label-width="130px">
         <el-form-item label="名称" required><el-input v-model="form.name" placeholder="如 OpenAI 官方 / 某中转" /></el-form-item>
         <el-form-item label="描述"><el-input v-model="form.description" type="textarea" :rows="2" maxlength="200" show-word-limit placeholder="给租户展示的一句话说明（可选）" /></el-form-item>
@@ -219,32 +187,27 @@ async function submit() {
         </el-form-item>
         <el-form-item label="API Key" :required="!isEditing">
           <el-input v-model="form.api_key" type="password" show-password :placeholder="isEditing ? '留空不改；密文存储' : '输入上游 API Key（密文存储）'" />
-          <span class="hint">以下端点共用此密钥；地址与密钥可一起修改、一次保存。</span>
+          <span class="hint">此账号对应一个端点；地址、协议与密钥一起保存。</span>
         </el-form-item>
 
         <div class="endpoint-drafts">
           <div class="endpoint-drafts__head">
-            <div><strong>请求端点</strong><p>地址、协议与账号凭据一起保存；每种 API 格式最多配置一个端点。</p></div>
-            <el-button size="small" :icon="Plus" @click="addEndpoint">添加格式</el-button>
+            <div><strong>请求端点</strong><p>一个账号对应一个端点。需要其他地址或 API 格式时，新增上游账号。</p></div>
           </div>
-          <div v-for="(endpoint, index) in form.endpoints" :key="index" class="endpoint-draft">
-            <div class="endpoint-draft__title">
-              <span>端点 {{ index + 1 }}</span>
-              <el-button link type="danger" :disabled="form.endpoints.length <= 1" @click="removeEndpoint(index)">移除</el-button>
-            </div>
+          <div class="endpoint-draft">
             <el-form-item label="API 格式" required>
-              <el-select v-model="endpoint.api_format" class="w-full">
-                <el-option v-for="option in upstreamAPIFormatOptions" :key="option.value" :label="option.label" :value="option.value" :disabled="formatDisabled(option.value, index)" />
+              <el-select v-model="form.endpoint.api_format" class="w-full">
+                <el-option v-for="option in upstreamAPIFormatOptions" :key="option.value" :label="option.label" :value="option.value" />
               </el-select>
             </el-form-item>
-            <el-form-item label="Base URL" required><el-input v-model="endpoint.base_url" placeholder="https://api.example.com" /></el-form-item>
-            <el-form-item label="路径覆盖"><el-input v-model="endpoint.path_override" placeholder="留空使用该 API 格式的默认路径" /></el-form-item>
+            <el-form-item label="Base URL" required><el-input v-model="form.endpoint.base_url" placeholder="https://api.example.com" /></el-form-item>
+            <el-form-item label="路径覆盖"><el-input v-model="form.endpoint.path_override" placeholder="留空使用该 API 格式的默认路径" /></el-form-item>
             <el-form-item label="认证方式">
-              <el-select v-model="endpoint.auth_scheme" class="w-full"><el-option v-for="option in endpointAuthSchemeOptions" :key="option.value" :label="option.label" :value="option.value" /></el-select>
+              <el-select v-model="form.endpoint.auth_scheme" class="w-full"><el-option v-for="option in endpointAuthSchemeOptions" :key="option.value" :label="option.label" :value="option.value" /></el-select>
             </el-form-item>
-            <el-form-item v-if="endpoint.auth_scheme === 'custom_header'" label="认证请求头" required><el-input v-model="endpoint.auth_header" placeholder="如 X-API-Key" /></el-form-item>
-            <el-form-item label="状态"><el-switch v-model="endpoint.status" active-value="active" inactive-value="disabled" active-text="启用" inactive-text="停用" /></el-form-item>
-            <el-form-item label="附加请求头"><KeyValueEditor v-model="endpoint.extra_headers" /><span v-if="isEditing" class="hint">敏感值保持 ***REDACTED*** 可保留原配置。</span></el-form-item>
+            <el-form-item v-if="form.endpoint.auth_scheme === 'custom_header'" label="认证请求头" required><el-input v-model="form.endpoint.auth_header" placeholder="如 X-API-Key" /></el-form-item>
+            <el-form-item label="状态"><el-switch v-model="form.endpoint.status" active-value="active" inactive-value="disabled" active-text="启用" inactive-text="停用" /></el-form-item>
+            <el-form-item label="附加请求头"><KeyValueEditor v-model="form.endpoint.extra_headers" /><span v-if="isEditing" class="hint">敏感值保持 ***REDACTED*** 可保留原配置。</span></el-form-item>
           </div>
         </div>
 
@@ -265,7 +228,7 @@ async function submit() {
     </div>
     <template #footer>
       <el-button @click="emit('update:modelValue', false)">取消</el-button>
-      <el-button type="primary" :loading="submitting" @click="submit">保存</el-button>
+      <el-button type="primary" :loading="submitting" :disabled="invalidEndpointCount" @click="submit">保存</el-button>
     </template>
   </el-dialog>
 </template>
@@ -274,11 +237,9 @@ async function submit() {
 .connection-form-scroll { max-height: 70vh; overflow-y: auto; padding-right: 4px; }
 .hint { color: var(--ds-faint); font-size: 12px; margin-left: 8px; }
 .endpoint-drafts { display: flex; flex-direction: column; gap: 12px; margin: 8px 0 18px; }
-.endpoint-drafts__head,
-.endpoint-draft__title { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.endpoint-drafts__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .endpoint-drafts__head p { margin: 4px 0 0; color: var(--ds-muted); font-size: 12px; }
 .endpoint-draft { padding: 14px 14px 2px; border: 1px solid var(--ds-line); border-radius: var(--ds-radius-control); background: var(--ds-panel-muted); }
-.endpoint-draft__title { margin-bottom: 10px; color: var(--ds-ink); font-weight: 700; }
 @media (max-width: 600px) {
   .connection-form-scroll :deep(.el-form-item) { display: block; }
   .connection-form-scroll :deep(.el-form-item__label) { width: auto !important; justify-content: flex-start; padding: 0; }

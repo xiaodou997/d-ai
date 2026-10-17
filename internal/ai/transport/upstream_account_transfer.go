@@ -441,7 +441,7 @@ func previewImportAccount(account upstreamAccountTransferAccountDTO, existingNam
 	}
 	if name == "" || strings.TrimSpace(account.APIKey) == "" || len(account.Endpoints) == 0 {
 		item.Action = "error"
-		item.Reason = "name, api_key and at least one endpoint are required"
+		item.Reason = "name, api_key and exactly one endpoint are required"
 		return item
 	}
 	if _, err := upstreamcontrol.NormalizeEndpointWrites(transferEndpointsToWrites(account.Endpoints)); err != nil {

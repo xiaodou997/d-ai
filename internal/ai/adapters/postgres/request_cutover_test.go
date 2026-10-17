@@ -120,6 +120,13 @@ func TestRequestCutoverPreservesAssetsAndReleasesHistory(t *testing.T) {
 	if _, err = pool.Exec(ctx, string(migration46)); err != nil {
 		t.Fatal(err)
 	}
+	migration47, err := os.ReadFile(filepath.Join(string(bytesTrimSpace(root)), "internal/db/changes/0047_20261017_single_upstream_account_endpoint.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = pool.Exec(ctx, string(migration47)); err != nil {
+		t.Fatal(err)
+	}
 	if err = db.VerifySchema(ctx, pool); err != nil {
 		t.Fatal(err)
 	}

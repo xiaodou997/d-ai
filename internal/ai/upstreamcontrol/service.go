@@ -41,9 +41,6 @@ func (s *Service) CreateAccount(ctx context.Context, in CreateAccountInput) (dom
 	if strings.TrimSpace(in.Name) == "" || strings.TrimSpace(in.APIKey) == "" {
 		return domain.UpstreamAccount{}, domain.NewValidationError("", "name and api_key are required")
 	}
-	if len(in.Endpoints) == 0 {
-		return domain.UpstreamAccount{}, domain.NewValidationError("endpoints", "at least one endpoint is required")
-	}
 	endpoints, err := NormalizeEndpointWrites(in.Endpoints)
 	if err != nil {
 		return domain.UpstreamAccount{}, err
@@ -199,50 +196,36 @@ func (s *Service) prepareAccountEndpoints(ctx context.Context, accountID string,
 	if items == nil {
 		return nil, nil
 	}
-	if len(items) == 0 {
-		return nil, domain.NewValidationError("endpoints", "account must keep at least one endpoint")
+	if len(items) != 1 {
+		return nil, domain.NewValidationError("endpoints", "each account requires exactly one endpoint")
 	}
-	out := make([]AccountEndpointUpdate, 0, len(items))
-	seenIDs := make(map[string]bool, len(items))
-	seenFormats := make(map[domain.UpstreamProtocol]bool, len(items))
-	for _, item := range items {
-		id := strings.TrimSpace(item.ID)
-		write, err := normalizeEndpointWrite(item.UpstreamAccountEndpointWrite)
+	item := items[0]
+	id := strings.TrimSpace(item.ID)
+	write, err := normalizeEndpointWrite(item.UpstreamAccountEndpointWrite)
+	if err != nil {
+		return nil, err
+	}
+	var current domain.UpstreamAccountEndpoint
+	if id != "" {
+		// Preserve masked header ciphertext from the stored endpoint.
+		current, err = s.repo.GetEndpoint(ctx, accountID, id)
 		if err != nil {
 			return nil, err
 		}
-		if seenFormats[write.APIFormat] {
-			return nil, domain.NewValidationError("endpoints", "each API format may only be configured once")
-		}
-		seenFormats[write.APIFormat] = true
-		var current domain.UpstreamAccountEndpoint
-		if id != "" {
-			if seenIDs[id] {
-				return nil, domain.NewValidationError("endpoints", "endpoint IDs must be unique")
-			}
-			seenIDs[id] = true
-			// Read the stored headers, rather than decrypted AccountSecret headers,
-			// so masked values preserve their existing ciphertext.
-			current, err = s.repo.GetEndpoint(ctx, accountID, id)
-			if err != nil {
-				return nil, err
-			}
-		} else if err := rejectUnboundRedactedHeaders(write.ExtraHeaders); err != nil {
-			return nil, err
-		}
-		write.ExtraHeaders, err = encryptSensitiveExtraHeaders(write.ExtraHeaders, s.encrypt)
+	} else if err := rejectUnboundRedactedHeaders(write.ExtraHeaders); err != nil {
+		return nil, err
+	}
+	write.ExtraHeaders, err = encryptSensitiveExtraHeaders(write.ExtraHeaders, s.encrypt)
+	if err != nil {
+		return nil, err
+	}
+	if id != "" {
+		write.ExtraHeaders, err = preserveRedactedExtraHeaders(current.ExtraHeaders, write.ExtraHeaders)
 		if err != nil {
 			return nil, err
 		}
-		if id != "" {
-			write.ExtraHeaders, err = preserveRedactedExtraHeaders(current.ExtraHeaders, write.ExtraHeaders)
-			if err != nil {
-				return nil, err
-			}
-		}
-		out = append(out, AccountEndpointUpdate{ID: id, UpstreamAccountEndpointWrite: write})
 	}
-	return out, nil
+	return []AccountEndpointUpdate{{ID: id, UpstreamAccountEndpointWrite: write}}, nil
 }
 
 func (s *Service) UpdateAccountStatus(ctx context.Context, id, status string) (domain.UpstreamAccount, error) {
@@ -330,7 +313,7 @@ func (s *Service) CreateEndpoint(ctx context.Context, accountID string, write do
 	if err != nil {
 		return domain.UpstreamAccountEndpoint{}, err
 	}
-	if err := s.ensureEndpointFormatAvailable(ctx, accountID, "", normalized.APIFormat); err != nil {
+	if err := s.ensureSingleEndpointAvailable(ctx, accountID, ""); err != nil {
 		return domain.UpstreamAccountEndpoint{}, err
 	}
 	return s.repo.CreateEndpoint(ctx, accountID, normalized)
@@ -354,7 +337,7 @@ func (s *Service) UpdateEndpoint(ctx context.Context, accountID, endpointID stri
 	if err != nil {
 		return domain.UpstreamAccountEndpoint{}, err
 	}
-	if err := s.ensureEndpointFormatAvailable(ctx, accountID, endpointID, normalized.APIFormat); err != nil {
+	if err := s.ensureSingleEndpointAvailable(ctx, accountID, endpointID); err != nil {
 		return domain.UpstreamAccountEndpoint{}, err
 	}
 	if normalized.Status == domain.EndpointStatusDisabled {
@@ -421,14 +404,14 @@ func (s *Service) DeleteEndpoint(ctx context.Context, accountID, endpointID stri
 	return s.repo.DeleteEndpoint(ctx, accountID, endpointID)
 }
 
-func (s *Service) ensureEndpointFormatAvailable(ctx context.Context, accountID, excludeID string, format domain.UpstreamProtocol) error {
+func (s *Service) ensureSingleEndpointAvailable(ctx context.Context, accountID, excludeID string) error {
 	items, err := s.repo.ListEndpoints(ctx, accountID)
 	if err != nil {
 		return err
 	}
 	for _, item := range items {
-		if item.ID != excludeID && item.APIFormat == format {
-			return domain.NewValidationError("api_format", "account already has an endpoint for this API format")
+		if item.ID != excludeID {
+			return domain.NewValidationError("endpoints", "each account supports only one endpoint; edit the existing connection")
 		}
 	}
 	return nil
@@ -451,26 +434,20 @@ func validateManagedStatus(status string) (string, error) {
 	}
 }
 
-// NormalizeEndpointWrites validates and canonicalizes one account's endpoint set.
+// NormalizeEndpointWrites validates and canonicalizes one account's single endpoint.
 // It is also used by import preview so preview and commit cannot drift.
 func NormalizeEndpointWrites(items []domain.UpstreamAccountEndpointWrite) ([]domain.UpstreamAccountEndpointWrite, error) {
-	out := make([]domain.UpstreamAccountEndpointWrite, 0, len(items))
-	seen := make(map[domain.UpstreamProtocol]struct{}, len(items))
-	for _, item := range items {
-		normalized, err := normalizeEndpointWrite(item)
-		if err != nil {
-			return nil, err
-		}
-		if err := rejectUnboundRedactedHeaders(normalized.ExtraHeaders); err != nil {
-			return nil, err
-		}
-		if _, exists := seen[normalized.APIFormat]; exists {
-			return nil, domain.NewValidationError("endpoints", "each API format may only be configured once")
-		}
-		seen[normalized.APIFormat] = struct{}{}
-		out = append(out, normalized)
+	if len(items) != 1 {
+		return nil, domain.NewValidationError("endpoints", "each account requires exactly one endpoint")
 	}
-	return out, nil
+	normalized, err := normalizeEndpointWrite(items[0])
+	if err != nil {
+		return nil, err
+	}
+	if err := rejectUnboundRedactedHeaders(normalized.ExtraHeaders); err != nil {
+		return nil, err
+	}
+	return []domain.UpstreamAccountEndpointWrite{normalized}, nil
 }
 
 func normalizeEndpointWrite(write domain.UpstreamAccountEndpointWrite) (domain.UpstreamAccountEndpointWrite, error) {

@@ -2,11 +2,11 @@
 import { computed, onMounted, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, Delete, Edit, MoreFilled, Plus, VideoPlay } from '@element-plus/icons-vue'
+import { ArrowLeft, Delete, Edit, MoreFilled, VideoPlay } from '@element-plus/icons-vue'
 import { Database } from 'lucide-vue-next'
 
 import { aiAdminApi } from '@/api/aiAdmin'
-import type { AccountDTO, UpstreamAccountEndpointDTO, UpstreamAccountTestResult } from '@/api/types/ai'
+import type { AccountDTO, UpstreamAccountTestResult } from '@/api/types/ai'
 import { PortalContentCard, PortalPagePanel } from '@/platform'
 import { DsEmpty, DsTabs, DsTag } from '@/shared/ui'
 import { formatMultiplier } from '@/platform/ai/utils'
@@ -18,7 +18,7 @@ import UpstreamAccountEditorDialog from './components/UpstreamAccountEditorDialo
 import UpstreamAccountTestDialog from './components/UpstreamAccountTestDialog.vue'
 import UpstreamAccountStatusControl from './components/UpstreamAccountStatusControl.vue'
 import { upstreamAccountStatusLabel, upstreamAccountStatusTagType } from './components/status'
-import { upstreamAPIFormatLabel, upstreamAPIFormatOptions } from './constants'
+import { endpointAuthSchemeOptions, upstreamAPIFormatLabel } from './constants'
 import { availabilityLabels, availabilityTone, endpointSuccessRates, successRateLabel, successRateTitle } from './presentation'
 
 const route = useRoute()
@@ -31,13 +31,14 @@ const loadError = shallowRef('')
 const runtimeSnapshot = shallowRef<Stability | null>(null)
 const runtimeError = shallowRef('')
 const account = computed(() => accounts.value.find(item => item.id === accountId.value) || null)
+const endpoint = computed(() => account.value?.endpoints?.[0])
+const authSchemeLabel = computed(() => endpointAuthSchemeOptions.find(option => option.value === endpoint.value?.auth_scheme)?.label || '跟随 API 格式')
 const priceBookName = computed(() => priceBooks.value.find(book => book.id === account.value?.price_book_id)?.name || '—')
 const endpointRates = computed(() => runtimeError.value ? new Map<string, number>() : endpointSuccessRates(runtimeSnapshot.value))
 const activeTab = shallowRef('overview')
 const stabilityWindow = shallowRef<StabilityWindow>('24h')
 const tabs = [
   { key: 'overview', label: '账号概览' },
-  { key: 'endpoints', label: '请求端点' },
   { key: 'models', label: '模型绑定' },
   { key: 'runtime', label: '运行诊断' }
 ]
@@ -92,7 +93,6 @@ function runtimeLabel() {
   if (!runtimeSnapshot.value) return '状态未知'
   return availabilityLabels[runtimeSnapshot.value.availability] || '状态未知'
 }
-function accountAPIFormats(value: AccountDTO) { return (value.endpoints || []).map(endpoint => upstreamAPIFormatLabel(endpoint.api_format)).join('、') || '—' }
 
 const updatingStatus = shallowRef(false)
 async function changeStatus(status: 'active' | 'disabled') {
@@ -104,11 +104,7 @@ async function changeStatus(status: 'active' | 'disabled') {
 }
 
 const editorDialog = shallowRef(false)
-const addEndpointOnOpen = shallowRef(false)
-function openEditor(addEndpoint = false) {
-  addEndpointOnOpen.value = addEndpoint
-  editorDialog.value = true
-}
+function openEditor() { editorDialog.value = true }
 const testDialog = shallowRef(false)
 async function editorSaved() { await fetchData() }
 async function accountTested(result: UpstreamAccountTestResult) { if (result.ok || [401, 403].includes(result.http_status)) await fetchData() }
@@ -119,25 +115,6 @@ async function removeAccount() {
   catch (error) { ElMessage.error(error instanceof Error ? error.message : '删除失败') }
 }
 function handleMoreCommand(command: string | number | object) { if (command === 'delete') void removeAccount() }
-
-function openEndpointCreate() {
-  if (!account.value) return
-  const used = new Set((account.value.endpoints || []).map(endpoint => endpoint.api_format))
-  if (upstreamAPIFormatOptions.every(option => used.has(option.value))) {
-    ElMessage.info('该账号已配置全部 API 格式')
-    return
-  }
-  openEditor(true)
-}
-async function removeEndpoint(endpoint: UpstreamAccountEndpointDTO) {
-  if (!account.value) return
-  const endpoints = account.value.endpoints || []
-  if (endpoints.length <= 1) { ElMessage.warning('账号至少需要一个请求端点'); return }
-  if (account.value.status === 'active' && endpoint.status === 'active' && endpoints.filter(item => item.status === 'active').length <= 1) { ElMessage.warning('启用账号至少需要一个启用中的请求端点'); return }
-  try { await ElMessageBox.confirm(`删除请求端点「${upstreamAPIFormatLabel(endpoint.api_format)}」？`, '确认删除', { type: 'warning' }) } catch { return }
-  try { await aiAdminApi.deleteUpstreamAccountEndpoint(account.value.id, endpoint.id); ElMessage.success('请求端点已删除'); await fetchData() }
-  catch (error) { ElMessage.error(error instanceof Error ? error.message : '删除请求端点失败') }
-}
 
 onMounted(fetchData)
 </script>
@@ -180,7 +157,7 @@ onMounted(fetchData)
         <DsTabs v-model="activeTab" :tabs="tabs" />
 
         <div v-show="activeTab === 'overview'" class="detail-pane">
-          <PortalContentCard title="账号概览" description="账号对内连接、对外展示及结算配置。">
+          <PortalContentCard title="账号概览" description="一个账号对应一个端点；地址、协议与 API key 通过编辑连接统一维护。">
             <el-descriptions :column="2" size="small" border>
               <el-descriptions-item label="账号描述" :span="2"><span :class="{ muted: !account.description }">{{ account.description || '暂无描述' }}</span></el-descriptions-item>
               <el-descriptions-item label="展示名称">{{ account.tenant_display_name || account.name }}</el-descriptions-item>
@@ -188,24 +165,14 @@ onMounted(fetchData)
               <el-descriptions-item label="价格表">{{ priceBookName }}</el-descriptions-item>
               <el-descriptions-item label="租户倍率">{{ formatMultiplier(account.tenant_multiplier) }}</el-descriptions-item>
               <el-descriptions-item label="最大并发">{{ account.concurrency_limit ? `${account.concurrency_limit} 并发` : '不限制' }}</el-descriptions-item>
-              <el-descriptions-item label="请求端点">{{ account.endpoints?.length || 0 }} 个</el-descriptions-item>
-              <el-descriptions-item label="API 格式" :span="2">{{ accountAPIFormats(account) }}</el-descriptions-item>
+              <el-descriptions-item label="API 格式">{{ upstreamAPIFormatLabel(endpoint?.api_format) }}</el-descriptions-item>
+              <el-descriptions-item label="Base URL" :span="2"><span class="connection-address">{{ endpoint?.base_url || '—' }}</span></el-descriptions-item>
+              <el-descriptions-item label="路径覆盖">{{ endpoint?.path_override || '使用格式默认路径' }}</el-descriptions-item>
+              <el-descriptions-item label="认证方式">{{ authSchemeLabel }}{{ endpoint?.auth_header ? ` · ${endpoint.auth_header}` : '' }}</el-descriptions-item>
+              <el-descriptions-item label="端点状态"><DsTag :tone="endpoint?.status === 'active' ? (endpoint.health_status === 'unhealthy' ? 'danger' : 'positive') : 'info'">{{ endpoint?.status === 'active' ? (endpoint.health_status === 'unhealthy' ? '异常' : '启用') : '停用' }}</DsTag></el-descriptions-item>
+              <el-descriptions-item label="端点成功率"><span class="numeric">{{ successRateLabel(endpointRates.get(endpoint?.id || '')) }}</span></el-descriptions-item>
               <el-descriptions-item v-if="account.status === 'invalid'" label="失效原因" :span="2">{{ account.invalid_reason || '上游拒绝了账号凭据' }}</el-descriptions-item>
             </el-descriptions>
-          </PortalContentCard>
-        </div>
-
-        <div v-show="activeTab === 'endpoints'" class="detail-pane">
-          <PortalContentCard title="请求端点" description="配置完整上游地址、协议格式与认证方式；每种 API 格式只能配置一个端点。">
-            <template #actions><el-button type="primary" :icon="Plus" @click="openEndpointCreate">添加端点</el-button></template>
-            <el-table :data="account.endpoints || []" border stripe>
-              <el-table-column label="API 格式" min-width="180"><template #default="{ row }">{{ upstreamAPIFormatLabel(row.api_format) }}</template></el-table-column>
-              <el-table-column prop="base_url" label="Base URL" min-width="300" show-overflow-tooltip />
-              <el-table-column prop="path_override" label="路径覆盖" min-width="160"><template #default="{ row }">{{ row.path_override || '使用格式默认路径' }}</template></el-table-column>
-              <el-table-column label="成功率" width="110" align="right"><template #default="{ row }"><span class="numeric">{{ successRateLabel(endpointRates.get(row.id)) }}</span></template></el-table-column>
-              <el-table-column label="状态" width="105"><template #default="{ row }"><DsTag :tone="row.status === 'active' ? (row.health_status === 'unhealthy' ? 'danger' : 'positive') : 'info'">{{ row.status === 'active' ? (row.health_status === 'unhealthy' ? '异常' : '启用') : '停用' }}</DsTag></template></el-table-column>
-              <el-table-column label="操作" width="130" fixed="right"><template #default="{ row }"><el-button link type="primary" @click="openEditor()">编辑</el-button><el-button link type="danger" @click="removeEndpoint(row)">删除</el-button></template></el-table-column>
-            </el-table>
           </PortalContentCard>
         </div>
 
@@ -214,7 +181,7 @@ onMounted(fetchData)
       </div>
     </PortalPagePanel>
 
-    <UpstreamAccountEditorDialog v-model="editorDialog" :account="account" :price-books="priceBooks" :add-endpoint-on-open="addEndpointOnOpen" @saved="editorSaved" />
+    <UpstreamAccountEditorDialog v-model="editorDialog" :account="account" :price-books="priceBooks" @saved="editorSaved" />
     <UpstreamAccountTestDialog v-model="testDialog" :account="account" @tested="accountTested" />
   </div>
 </template>
@@ -233,6 +200,7 @@ onMounted(fetchData)
 .sample-hint { color: var(--ds-warning); font-size: 11px; }
 .muted, .hint { color: var(--ds-faint); }
 .hint { margin-left: 8px; font-size: 12px; }
+.connection-address { overflow-wrap: anywhere; }
 .numeric { font-variant-numeric: tabular-nums; }
 @media (max-width: 768px) { .detail-content { padding: 16px; } .detail-summary { align-items: flex-start; flex-direction: column; } .detail-summary__states { justify-content: flex-start; } }
 </style>

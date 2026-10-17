@@ -6,6 +6,7 @@ import { Download, Plus, Refresh, Upload, VideoPlay } from '@element-plus/icons-
 import { Database, Search } from 'lucide-vue-next'
 
 import { aiAdminApi } from '@/api/aiAdmin'
+import { upstreamAPIFormatLabel } from './constants'
 import type { AccountDTO, UpstreamAccountImportPreviewOutputBody, UpstreamAccountImportRequest, UpstreamAccountTransferAccountDTO, UpstreamAccountTestResult } from '@/api/types/ai'
 import { PortalPagePanel } from '@/platform'
 import { DsFilterBar, DsPagination, DsTable, DsTag, type DsTableColumn } from '@/shared/ui'
@@ -53,7 +54,7 @@ const columns: DsTableColumn[] = [
   { key: 'account', title: '账号', width: 300, wrap: true },
   { key: 'config', title: '配置状态', width: 132 },
   { key: 'runtime', title: '运行状态', width: 128 },
-  { key: 'endpoints', title: '端点', width: 80, align: 'right' },
+  { key: 'api_format', title: 'API 格式', width: 205 },
   { key: 'visibility', title: '租户可见性', width: 110 },
   { key: 'multiplier', title: '倍率', width: 90, align: 'right' },
   { key: 'actions', title: '操作', width: 190, align: 'right' }
@@ -205,7 +206,7 @@ onMounted(async () => {
 
 <template>
   <div class="page-container accounts-view">
-    <PortalPagePanel :icon="Database" :breadcrumbs="[{ label: '智能服务' }, { label: '网关配置' }, { label: '上游账号' }]" description="查找、比较和管理上游账号；进入详情可配置端点、模型及查看运行诊断。" fill>
+    <PortalPagePanel :icon="Database" :breadcrumbs="[{ label: '智能服务' }, { label: '网关配置' }, { label: '上游账号' }]" description="查找、比较和管理上游账号；每个账号对应一个端点，进入详情统一编辑连接、配置模型及查看运行诊断。" fill>
       <template #actions>
         <el-button :icon="Refresh" :loading="loading" @click="refreshWorkspace">刷新</el-button>
         <el-button :icon="Upload" @click="openImportDialog">导入</el-button>
@@ -226,7 +227,7 @@ onMounted(async () => {
           <template #cell-account="{ row }"><div class="account-cell"><div class="account-cell__title"><button type="button" @click="openDetail(row)">{{ row.name }}</button><DsTag v-if="!stability.error.value && stabilityById.get(row.id)?.success_rate != null" tone="neutral" :title="successRateTitle(stabilityById.get(row.id)!, stabilityWindow)">成功率 {{ successRateLabel(stabilityById.get(row.id)?.success_rate) }}</DsTag><span v-if="(stabilityById.get(row.id)?.samples || 0) > 0 && (stabilityById.get(row.id)?.samples || 0) < 20" class="sample-hint">样本较少</span></div><span class="account-cell__host" :title="accountEndpointHosts(row)">{{ accountEndpointHosts(row) || '尚未配置域名' }}</span></div></template>
           <template #cell-config="{ row }"><UpstreamAccountStatusControl :status="row.status" :invalid-reason="row.invalid_reason" :loading="updatingAccountStatusId === row.id" @change="changeAccountStatus(row, $event)" @verify="openTest(row)" /></template>
           <template #cell-runtime="{ row }"><DsTag :tone="runtimeTone(row)">{{ runtimeLabel(row) }}</DsTag></template>
-          <template #cell-endpoints="{ row }"><span class="numeric-cell">{{ row.endpoints?.length || 0 }}</span></template>
+          <template #cell-api_format="{ row }">{{ upstreamAPIFormatLabel(row.endpoints?.[0]?.api_format) }}</template>
           <template #cell-visibility="{ row }"><DsTag :tone="row.tenant_access_mode === 'restricted' ? 'warning' : 'positive'">{{ row.tenant_access_mode === 'restricted' ? '专属' : '公开' }}</DsTag></template>
           <template #cell-multiplier="{ row }"><span class="numeric-cell">{{ formatMultiplier(row.tenant_multiplier) }}</span></template>
           <template #cell-actions="{ row }"><div class="row-actions"><el-button link type="primary" @click="openDetail(row)">查看详情</el-button><el-button link type="success" :icon="VideoPlay" @click="openTest(row)">测试连通</el-button></div></template>

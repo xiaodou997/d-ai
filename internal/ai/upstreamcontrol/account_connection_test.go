@@ -23,17 +23,13 @@ func TestUpdateAccountSavesKeyAndEndpointsTogether(t *testing.T) {
 				APIFormat: domain.ProtocolOpenAIResponses, BaseURL: " https://new.example/v1/ ",
 				ExtraHeaders: []byte(`{"Authorization":"***REDACTED***","X-Trace":"new"}`),
 			}},
-			{UpstreamAccountEndpointWrite: domain.UpstreamAccountEndpointWrite{
-				APIFormat: domain.ProtocolAnthropicMessages, BaseURL: "https://claude.example",
-				ExtraHeaders: []byte(`{"X-API-Key":"new-header"}`),
-			}},
 		},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	got := repo.lastUpdate
-	if got.Ciphertext != "encrypted:new-key" || len(got.Endpoints) != 2 || got.Status != domain.UpstreamAccountStatusActive {
+	if got.Ciphertext != "encrypted:new-key" || len(got.Endpoints) != 1 || got.Status != domain.UpstreamAccountStatusActive {
 		t.Fatalf("combined update did not preserve key, endpoints and managed status")
 	}
 	if got.Endpoints[0].ID != "endpoint-1" || got.Endpoints[0].BaseURL != "https://new.example/v1" {
@@ -46,12 +42,6 @@ func TestUpdateAccountSavesKeyAndEndpointsTogether(t *testing.T) {
 	if headers["Authorization"] != "encrypted:header" || headers["X-Trace"] != "new" {
 		t.Fatal("masked header was not preserved")
 	}
-	if err := json.Unmarshal(got.Endpoints[1].ExtraHeaders, &headers); err != nil {
-		t.Fatal(err)
-	}
-	if headers["X-API-Key"] != "encrypted:new-header" {
-		t.Fatal("new sensitive header was not encrypted")
-	}
 }
 
 func TestUpdateAccountValidatesEndpointSetBeforeWriting(t *testing.T) {
@@ -62,6 +52,7 @@ func TestUpdateAccountValidatesEndpointSetBeforeWriting(t *testing.T) {
 	}{
 		{"empty", []AccountEndpointUpdate{}},
 		{"duplicate format", []AccountEndpointUpdate{{UpstreamAccountEndpointWrite: write}, {UpstreamAccountEndpointWrite: write}}},
+		{"different formats", []AccountEndpointUpdate{{UpstreamAccountEndpointWrite: write}, {UpstreamAccountEndpointWrite: domain.UpstreamAccountEndpointWrite{APIFormat: domain.ProtocolOpenAIChat, BaseURL: "https://chat.example"}}}},
 		{"foreign endpoint", []AccountEndpointUpdate{{ID: "foreign", UpstreamAccountEndpointWrite: write}}},
 		{"duplicate ID", []AccountEndpointUpdate{{ID: "endpoint-1", UpstreamAccountEndpointWrite: write}, {ID: "endpoint-1", UpstreamAccountEndpointWrite: domain.UpstreamAccountEndpointWrite{APIFormat: domain.ProtocolOpenAIChat, BaseURL: "https://api.example"}}}},
 		{"invalid URL", []AccountEndpointUpdate{{UpstreamAccountEndpointWrite: domain.UpstreamAccountEndpointWrite{APIFormat: domain.ProtocolOpenAIResponses, BaseURL: "file:///tmp/socket"}}}},

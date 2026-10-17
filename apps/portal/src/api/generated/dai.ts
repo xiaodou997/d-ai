@@ -4910,7 +4910,7 @@ export interface components {
              */
             created_at?: number;
             description?: string;
-            /** @description 账号支持的请求端点；同一 API 格式至多一个 */
+            /** @description 账号唯一的请求端点；保留数组结构兼容现有客户端 */
             endpoints: components["schemas"]["AccountEndpointDTO"][] | null;
             /** @description 上游账号 ID */
             id: string;
@@ -5921,7 +5921,7 @@ export interface components {
              */
             concurrency_limit?: number;
             description?: string;
-            /** @description 账号支持的请求端点；同一 API 格式至多一个 */
+            /** @description 账号唯一的请求端点，必须且只能配置一个 */
             endpoints: components["schemas"]["AccountEndpointWriteRequest"][] | null;
             /** @description 账号名称 */
             name: string;
@@ -10581,7 +10581,7 @@ export interface components {
              */
             concurrency_limit?: number;
             description?: string;
-            /** @description 与账号及 API Key 原子保存的完整端点列表；省略或 null 保留原配置，未列出的旧端点会被删除 */
+            /** @description 与账号及 API Key 原子保存的唯一端点；省略或 null 保留原配置 */
             endpoints?: components["schemas"]["AccountEndpointUpdateRequest"][] | null;
             /** @description 账号名称 */
             name: string;

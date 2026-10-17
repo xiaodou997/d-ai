@@ -111,7 +111,7 @@ func TestModelCatalogReaderTenantResourceProjection(t *testing.T) {
 	if len(items) != 1 || items[0].Kind != domain.UpstreamKindDirect || items[0].Description != "Catalog description" || items[0].TenantMultiplier != 1.75 || items[0].PriceBookID != catalogUpstreamBook {
 		t.Fatalf("resources = %+v", items)
 	}
-	if got := catalogModelCodes(items[0].Models); !slices.Equal(got, []string{"chat-model", "image-without-price"}) {
+	if got := catalogModelCodes(items[0].Models); !slices.Equal(got, []string{"chat-model", "unpriced-model"}) {
 		t.Fatalf("model codes = %v", got)
 	}
 	if items[0].Models[0].Price == nil || len(items[0].Models[0].Price.TokenPriceTiers) != 1 {
@@ -144,13 +144,12 @@ func seedModelCatalog(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 		  ) VALUES ($1::uuid, 'catalog-account', 'Catalog description', 'Catalog Account', 'public',
 			'x', $2::uuid, 1.25, 'active')`, []any{catalogAccountID, catalogUpstreamBook}},
 		{`INSERT INTO ai_upstream_account_endpoints (account_id, api_format, base_url, status)
-		  VALUES ($1::uuid, 'openai_chat', 'https://upstream.example', 'active'),
-		         ($1::uuid, 'openai_images', 'https://upstream.example', 'active')`, []any{catalogAccountID}},
+		  VALUES ($1::uuid, 'openai_chat', 'https://upstream.example', 'active')`, []any{catalogAccountID}},
 		{`INSERT INTO ai_upstream_models (
 			upstream_kind, upstream_id, model_code, capability_type, upstream_model_name, status
 		  ) VALUES
 			('direct_upstream', $1::uuid, 'chat-model', 'chat', 'vendor-chat', 'active'),
-			('direct_upstream', $1::uuid, 'image-without-price', 'image', 'vendor-image', 'active')`, []any{catalogAccountID}},
+			('direct_upstream', $1::uuid, 'unpriced-model', 'chat', 'vendor-unpriced', 'active')`, []any{catalogAccountID}},
 		{`INSERT INTO ai_groups (
 			id, tenant_id, name, retail_price_book_id, user_default_visible, status
 		  ) VALUES

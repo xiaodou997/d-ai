@@ -37,6 +37,9 @@ func pvJSONObjectOrDefault(b []byte) []byte {
 }
 
 func (r *AccountRepo) CreateAccount(ctx context.Context, e upstreamcontrol.AccountCreate) (domain.UpstreamAccount, error) {
+	if len(e.Endpoints) != 1 {
+		return domain.UpstreamAccount{}, domain.NewValidationError("endpoints", "each account requires exactly one endpoint")
+	}
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return domain.UpstreamAccount{}, err
@@ -223,8 +226,8 @@ func (r *AccountRepo) UpdateAccount(ctx context.Context, e upstreamcontrol.Accou
 // The account row is already locked by UpdateUpstreamAccount. Nested endpoint
 // writes use the same lock, so ownership checks and replacement are serialized.
 func replaceAccountEndpoints(ctx context.Context, q *dbgen.Queries, accountID pgtype.UUID, items []upstreamcontrol.AccountEndpointUpdate) error {
-	if len(items) == 0 {
-		return domain.NewValidationError("endpoints", "account must keep at least one endpoint")
+	if len(items) != 1 {
+		return domain.NewValidationError("endpoints", "each account requires exactly one endpoint")
 	}
 	current, err := q.ListUpstreamAccountEndpoints(ctx, accountID)
 	if err != nil {
@@ -377,6 +380,13 @@ func (r *AccountRepo) CreateEndpoint(ctx context.Context, accountID string, writ
 	defer tx.Rollback(ctx)
 	if _, err := lockDirectAccountStatus(ctx, tx, accountID); err != nil {
 		return domain.UpstreamAccountEndpoint{}, err
+	}
+	var existing int
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM ai_upstream_account_endpoints WHERE account_id = $1::uuid`, accountID).Scan(&existing); err != nil {
+		return domain.UpstreamAccountEndpoint{}, err
+	}
+	if existing != 0 {
+		return domain.UpstreamAccountEndpoint{}, domain.NewValidationError("endpoints", "each account supports only one endpoint; edit the existing connection")
 	}
 	row, err := queriesWithTx(tx).CreateUpstreamAccountEndpoint(ctx, endpointCreateParams(aid, write))
 	if err != nil {

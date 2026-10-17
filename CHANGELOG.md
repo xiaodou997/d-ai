@@ -2,6 +2,13 @@
 
 All notable changes to D-AI are documented in this file.
 
+## [0.3.27] - 2026-10-17
+
+### Changed
+- 一个 API-key 上游账号固定对应一个请求端点，地址、协议、认证和 API key 在连接编辑器中一次保存；账号概览展示连接配置，列表展示 API 格式。
+- 新建、更新、导入和旧端点接口统一限制为单端点，数据库 schema 47 增加账号唯一约束，防止并发写入第二个端点。
+- 升级脚本先检查每个账号恰好一个端点；异常旧数据会阻止升级，不自动删除连接。提供 schema 46 回退脚本，保留账号、端点 ID 和历史关联。
+
 ## [0.3.26] - 2026-10-17
 
 ### Upstream accounts and pools

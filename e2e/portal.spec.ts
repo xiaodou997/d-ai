@@ -369,6 +369,8 @@ test("upstream node URL and credential save through one editor", async ({ page }
   await page.getByRole("button", { name: "编辑连接", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "编辑上游连接" });
   await expect(dialog).toBeVisible();
+  await expect(dialog.getByPlaceholder("https://api.example.com")).toHaveCount(1);
+  await expect(dialog.getByRole("button", { name: "添加格式" })).toHaveCount(0);
   await dialog.getByPlaceholder("留空不改；密文存储").fill("replacement-test-key");
   await dialog.getByPlaceholder("https://api.example.com").fill("https://replacement.example");
   expect(state.requests.filter(request => request.method === "PATCH")).toHaveLength(0);

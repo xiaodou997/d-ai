@@ -272,17 +272,36 @@ func TestMarkAccountInvalidDelegatesToRepository(t *testing.T) {
 	}
 }
 
-func TestCreateAccountRejectsDuplicateEndpointFormats(t *testing.T) {
-	svc := New(&repoStub{}, func(plaintext string) (string, error) { return plaintext, nil })
-	_, err := svc.CreateAccount(t.Context(), CreateAccountInput{
-		Name: "account", APIKey: "secret",
-		Endpoints: []domain.UpstreamAccountEndpointWrite{
-			{APIFormat: domain.ProtocolOpenAIResponses, BaseURL: "https://one.example"},
-			{APIFormat: domain.ProtocolOpenAIResponses, BaseURL: "https://two.example"},
-		},
-	})
-	if err == nil {
-		t.Fatal("CreateAccount() accepted duplicate API formats")
+func TestCreateAccountRequiresExactlyOneEndpoint(t *testing.T) {
+	for _, formats := range [][]domain.UpstreamProtocol{
+		nil,
+		{domain.ProtocolOpenAIResponses, domain.ProtocolOpenAIResponses},
+		{domain.ProtocolOpenAIResponses, domain.ProtocolOpenAIChat},
+	} {
+		repo := &repoStub{}
+		svc := New(repo, func(plaintext string) (string, error) { return plaintext, nil })
+		var endpoints []domain.UpstreamAccountEndpointWrite
+		for _, format := range formats {
+			endpoints = append(endpoints, domain.UpstreamAccountEndpointWrite{APIFormat: format, BaseURL: "https://example.test"})
+		}
+		if _, err := svc.CreateAccount(t.Context(), CreateAccountInput{Name: "account", APIKey: "secret", Endpoints: endpoints}); err == nil {
+			t.Fatalf("CreateAccount accepted endpoint formats %v", formats)
+		}
+		if repo.lastCreate.Name != "" {
+			t.Fatal("invalid connection reached persistence")
+		}
+	}
+}
+
+func TestCreateEndpointRejectsSecondFormat(t *testing.T) {
+	repo := &repoStub{endpoints: []domain.UpstreamAccountEndpoint{{ID: "existing", APIFormat: domain.ProtocolOpenAIResponses}}}
+	if _, err := New(repo, nil).CreateEndpoint(t.Context(), "account", domain.UpstreamAccountEndpointWrite{
+		APIFormat: domain.ProtocolOpenAIChat, BaseURL: "https://second.example",
+	}); err == nil {
+		t.Fatal("accepted a second endpoint with a different format")
+	}
+	if repo.lastEndpointWrite.BaseURL != "" {
+		t.Fatal("second endpoint reached persistence")
 	}
 }
 
