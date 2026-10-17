@@ -39,7 +39,7 @@ const stabilityById = computed(() => new Map(stability.items.value.filter(item =
 const filteredAccounts = computed(() => {
   const keyword = search.value.trim().toLocaleLowerCase()
   return accounts.value.filter(account => {
-    if (keyword && !`${account.name} ${account.tenant_display_name || ''} ${accountEndpointHosts(account)}`.toLocaleLowerCase().includes(keyword)) return false
+    if (keyword && !`${account.name} ${account.tenant_display_name || ''} ${account.description || ''} ${accountEndpointHosts(account)}`.toLocaleLowerCase().includes(keyword)) return false
     if (configStatus.value !== 'all' && account.status !== configStatus.value) return false
     if (runtimeStatus.value !== 'all' && (stabilityById.value.get(account.id)?.availability || 'unknown') !== runtimeStatus.value) return false
     return true
@@ -51,11 +51,11 @@ const activePriceBookId = computed(() => firstActivePriceBookId(priceBooks.value
 const selectedExportAccounts = computed(() => selectedAccounts.value.filter(selected => accounts.value.some(account => account.id === selected.id)))
 const columns: DsTableColumn[] = [
   { key: 'account', title: '账号', width: 300, wrap: true },
+  { key: 'description', title: '描述', width: 220 },
   { key: 'config', title: '配置状态', width: 132 },
   { key: 'runtime', title: '运行状态', width: 128 },
-  { key: 'endpoints', title: '端点', width: 80, align: 'right' },
   { key: 'visibility', title: '租户可见性', width: 110 },
-  { key: 'multiplier', title: '倍率', width: 90, align: 'right' },
+  { key: 'multiplier', title: '倍率', width: 96 },
   { key: 'actions', title: '操作', width: 190, align: 'right' }
 ]
 
@@ -115,6 +115,14 @@ async function changeAccountStatus(account: AccountDTO, status: 'active' | 'disa
 }
 function runtimeLabel(account: AccountDTO) { return stability.error.value ? '读取失败' : availabilityLabels[stabilityById.value.get(account.id)?.availability || 'unknown'] || '状态未知' }
 function runtimeTone(account: AccountDTO) { return stability.error.value ? 'warning' as const : availabilityTone(stabilityById.value.get(account.id)?.availability) }
+function multiplierTone(value?: number | null): 'positive' | 'info' | 'neutral' {
+  if (value == null || !Number.isFinite(Number(value)) || Number(value) === 1) return 'neutral'
+  return Number(value) < 1 ? 'positive' : 'info'
+}
+function multiplierLabel(value?: number | null) {
+  const formatted = formatMultiplier(value)
+  return formatted === '-' ? '—' : `${formatted}×`
+}
 const scrollKeyPrefix = 'dai:upstream-accounts:scroll:'
 function openDetail(account: AccountDTO) {
   sessionStorage.setItem(`${scrollKeyPrefix}${route.fullPath}`, String(window.scrollY || document.documentElement.scrollTop || 0))
@@ -214,7 +222,7 @@ onMounted(async () => {
       </template>
       <template #filters>
         <DsFilterBar>
-          <label class="filter-field filter-field--search"><span>账号或域名</span><el-input v-model="search" clearable placeholder="搜索名称、展示名称或域名"><template #prefix><Search :size="14" /></template></el-input></label>
+          <label class="filter-field filter-field--search"><span>账号、描述或域名</span><el-input v-model="search" clearable placeholder="搜索名称、描述、展示名称或域名"><template #prefix><Search :size="14" /></template></el-input></label>
           <label class="filter-field"><span>配置状态</span><el-select v-model="configStatus"><el-option label="全部" value="all" /><el-option label="已启用" value="active" /><el-option label="已停用" value="disabled" /><el-option label="凭据失效" value="invalid" /></el-select></label>
           <label class="filter-field"><span>运行状态</span><el-select v-model="runtimeStatus"><el-option label="全部" value="all" /><el-option label="全部可用" value="available" /><el-option label="部分受限" value="partial" /><el-option label="全部受限" value="unavailable" /><el-option label="状态未知" value="unknown" /></el-select></label>
           <label class="filter-field"><span>成功率统计</span><el-select v-model="stabilityWindow"><el-option v-for="(label, value) in stabilityWindowLabels" :key="value" :label="label" :value="value" /></el-select></label>
@@ -224,11 +232,11 @@ onMounted(async () => {
       <div class="accounts-table-shell">
         <DsTable :columns="columns" :rows="pageRows" row-key="id" :loading="loading" selectable :selection="selectedAccounts" :frame="false" aria-label="上游账号列表" empty-title="没有符合条件的上游账号" empty-description="调整筛选条件，或新增一个上游账号。" @update:selection="updateSelection">
           <template #cell-account="{ row }"><div class="account-cell"><div class="account-cell__title"><button type="button" @click="openDetail(row)">{{ row.name }}</button><DsTag v-if="!stability.error.value && stabilityById.get(row.id)?.success_rate != null" tone="neutral" :title="successRateTitle(stabilityById.get(row.id)!, stabilityWindow)">成功率 {{ successRateLabel(stabilityById.get(row.id)?.success_rate) }}</DsTag><span v-if="(stabilityById.get(row.id)?.samples || 0) > 0 && (stabilityById.get(row.id)?.samples || 0) < 20" class="sample-hint">样本较少</span></div><span class="account-cell__host" :title="accountEndpointHosts(row)">{{ accountEndpointHosts(row) || '尚未配置域名' }}</span></div></template>
+          <template #cell-description="{ row }"><span class="description-cell" :title="row.description || undefined">{{ row.description || '—' }}</span></template>
           <template #cell-config="{ row }"><UpstreamAccountStatusControl :status="row.status" :invalid-reason="row.invalid_reason" :loading="updatingAccountStatusId === row.id" @change="changeAccountStatus(row, $event)" @verify="openTest(row)" /></template>
           <template #cell-runtime="{ row }"><DsTag :tone="runtimeTone(row)">{{ runtimeLabel(row) }}</DsTag></template>
-          <template #cell-endpoints="{ row }"><span class="numeric-cell">{{ row.endpoints?.length || 0 }}</span></template>
           <template #cell-visibility="{ row }"><DsTag :tone="row.tenant_access_mode === 'restricted' ? 'warning' : 'positive'">{{ row.tenant_access_mode === 'restricted' ? '专属' : '公开' }}</DsTag></template>
-          <template #cell-multiplier="{ row }"><span class="numeric-cell">{{ formatMultiplier(row.tenant_multiplier) }}</span></template>
+          <template #cell-multiplier="{ row }"><DsTag :tone="multiplierTone(row.tenant_multiplier)" class="multiplier-tag">{{ multiplierLabel(row.tenant_multiplier) }}</DsTag></template>
           <template #cell-actions="{ row }"><div class="row-actions"><el-button link type="primary" @click="openDetail(row)">查看详情</el-button><el-button link type="success" :icon="VideoPlay" @click="openTest(row)">测试连通</el-button></div></template>
         </DsTable>
       </div>
@@ -263,6 +271,8 @@ onMounted(async () => {
 .account-cell__title { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 6px; }
 .account-cell__title button { overflow: hidden; max-width: 190px; padding: 0; border: 0; background: transparent; color: var(--ds-accent); font: inherit; font-weight: 650; text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
 .account-cell__host { overflow: hidden; color: var(--ds-faint); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.description-cell { display: block; overflow: hidden; max-width: 100%; color: var(--ds-ink-soft); text-overflow: ellipsis; white-space: nowrap; }
+.multiplier-tag { font-variant-numeric: tabular-nums; }
 .sample-hint { color: var(--ds-warning); font-size: 11px; white-space: nowrap; }
 .numeric-cell { color: var(--ds-ink-soft); font-variant-numeric: tabular-nums; }
 .row-actions { display: flex; justify-content: flex-end; white-space: nowrap; }
