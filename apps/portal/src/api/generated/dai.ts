@@ -1046,7 +1046,7 @@ export interface paths {
         post?: never;
         /**
          * 删除 OAuth 凭证池
-         * @description 删除凭证池会级联删除池内 OAuth credential；若存在上游部署引用，数据库会拒绝删除。
+         * @description 仅允许删除无账号且无分组引用的凭证池；池内显式模型绑定会一并删除。
          */
         delete: operations["ai-delete-credential-pool"];
         options?: never;
@@ -1067,7 +1067,7 @@ export interface paths {
         };
         /**
          * OAuth 凭证池可用模型
-         * @description 优先通过版本化客户端 Profile 在线发现模型，并以缓存、最后成功快照或内置目录降级。
+         * @description 分别识别各启用账号的模型并汇总去重。支持主动刷新，以账号缓存、最后成功快照或内置目录降级；内置目录不代表账号权限。
          */
         get: operations["ai-get-pool-available-models"];
         put?: never;
@@ -1093,7 +1093,7 @@ export interface paths {
         put?: never;
         /**
          * 导入 OAuth 凭证
-         * @description 向指定凭证池导入 OAuth credential。响应只返回非敏感展示字段，不返回 access token、refresh token 或密文。
+         * @description 向指定凭证池导入 OAuth credential；同一账号重复导入返回冲突，请通过编辑更新原账号。不同工作区分别保留。响应不返回 token 或密文。
          */
         post: operations["ai-import-pool-credential"];
         delete?: never;
@@ -1120,8 +1120,8 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * 更新 OAuth 凭证状态/权重
-         * @description 管理侧只允许在 active/disabled 间切换状态；invalid 由运行时失败路径维护。
+         * 编辑 OAuth 账号
+         * @description 原子更新账号信息、权重和状态，并可替换 OAuth 令牌。空令牌字段保留原值；账号 ID 和历史记录保持不变。
          */
         patch: operations["ai-update-pool-credential"];
         trace?: never;
@@ -3832,7 +3832,7 @@ export interface paths {
         head?: never;
         /**
          * 更新上游账号
-         * @description 更新上游账号元数据或 API Key；请求端点通过独立 Endpoint API 管理。
+         * @description 在同一事务内更新账号资料、API Key 和完整请求端点配置；省略 endpoints 时保留原端点。
          */
         patch: operations["ai-update-upstream-account"];
         trace?: never;
@@ -4998,6 +4998,21 @@ export interface components {
              */
             updated_at?: number;
         };
+        AccountEndpointUpdateRequest: {
+            /** @enum {string} */
+            api_format: "openai_chat" | "openai_responses" | "openai_embeddings" | "openai_images" | "anthropic_messages" | "gemini_generate" | "gemini_embeddings";
+            auth_header?: string;
+            /** @enum {string} */
+            auth_scheme?: "format_default" | "bearer" | "anthropic_api_key" | "gemini_api_key" | "custom_header";
+            base_url: string;
+            /** @description 端点附加请求头；编辑时敏感字段值为 ***REDACTED*** 表示保留原值，删除字段表示删除请求头 */
+            extra_headers?: unknown;
+            /** @description 已有端点 ID；为空创建端点 */
+            id?: string;
+            path_override?: string;
+            /** @enum {string} */
+            status?: "active" | "disabled";
+        };
         AccountEndpointWriteRequest: {
             /**
              * Format: uri
@@ -6089,6 +6104,22 @@ export interface components {
             paymentRef?: string;
             tenantId: string;
         };
+        CredentialModelCatalog: {
+            credential_id: string;
+            models: string[] | null;
+            /**
+             * Format: int64
+             * @description 观测时间，Unix 毫秒
+             */
+            observed_at?: number;
+            /** @enum {string} */
+            source: "live" | "cache" | "stale" | "unknown";
+            /**
+             * Format: int64
+             * @description 有效截止时间，Unix 毫秒
+             */
+            valid_until?: number;
+        };
         CredentialPoolDTO: {
             /**
              * Format: uri
@@ -6180,6 +6211,36 @@ export interface components {
             items: components["schemas"]["CredentialPoolDTO"][] | null;
             /** Format: int64 */
             total: number;
+        };
+        CredentialQuota: {
+            credits_available?: boolean;
+            model?: string;
+            /** Format: int64 */
+            observed_at: number;
+            source: string;
+            windows: components["schemas"]["CredentialQuotaWindow"][] | null;
+        };
+        CredentialQuotaInspection: {
+            /**
+             * Format: int64
+             * @description 上次主动查询时间，Unix 毫秒
+             */
+            observed_at?: number;
+            /** @enum {string} */
+            state: "live" | "cache" | "unknown" | "failed" | "unsupported";
+        };
+        CredentialQuotaWindow: {
+            key: string;
+            /** Format: double */
+            limit?: number;
+            /** Format: double */
+            remaining?: number;
+            /** Format: int64 */
+            reset_at?: number;
+            /** Format: double */
+            used_percent?: number;
+            /** Format: int64 */
+            window_minutes?: number;
         };
         CustomerPortalBrandOutputBody: {
             /**
@@ -8121,6 +8182,8 @@ export interface components {
              * @example https://example.com/schemas/PoolAvailableModelsDTO.json
              */
             readonly $schema?: string;
+            /** @description 逐账号的独立模型目录；池目录取已观测模型的并集 */
+            accounts: components["schemas"]["CredentialModelCatalog"][] | null;
             /**
              * @description 固定供应商类型
              * @enum {string}
@@ -8200,6 +8263,8 @@ export interface components {
              * @description 最后使用时间，Unix 毫秒
              */
             last_used_at?: number;
+            /** @description 该账号的模型观测；未知、过期或内置目录不限制调度 */
+            model_catalog?: components["schemas"]["CredentialModelCatalog"];
             /** @description 凭证名称 */
             name: string;
             /** @description 凭证池 ID */
@@ -8209,6 +8274,10 @@ export interface components {
              * @enum {string}
              */
             provider_type: "codex" | "claude_oauth" | "gemini_cli" | "antigravity";
+            /** @description 主动配额查询状态，与认证状态和配额数值独立 */
+            quota_inspection?: components["schemas"]["CredentialQuotaInspection"];
+            /** @description 最近一次上游响应头或主动查询报告的配额；没有数据表示未知 */
+            quotas?: components["schemas"]["CredentialQuota"][] | null;
             /** @description 授权范围 */
             scope: string;
             /**
@@ -8241,11 +8310,30 @@ export interface components {
              * @example https://example.com/schemas/PoolCredentialPatchRequest.json
              */
             readonly $schema?: string;
+            /** @description 新的 access token；空值保留原值，只写不读 */
+            access_token?: string;
+            /** @description 合并更新账户身份信息 */
+            auth_metadata?: {
+                [key: string]: unknown;
+            };
+            /** @description 账号邮箱 */
+            email?: string;
+            /**
+             * Format: int64
+             * @description 新 token 到期时间，Unix 秒
+             */
+            expires_at?: number;
+            /** @description 账号显示名称 */
+            name?: string;
+            /** @description 新的 refresh token；空值保留原值，只写不读 */
+            refresh_token?: string;
+            scope?: string;
             /**
              * @description 凭证管理状态；仅允许 active/disabled
              * @enum {string}
              */
             status?: "active" | "disabled";
+            token_type?: string;
             /**
              * Format: int64
              * @description 权重；0 表示保留为 0
@@ -8295,7 +8383,7 @@ export interface components {
             user_id?: string;
             /**
              * Format: int64
-             * @description 权重；为空或 0 时默认 100
+             * @description 权重；为空时默认 100，0 不接收新的加权会话
              */
             weight?: number;
         };
@@ -10493,6 +10581,8 @@ export interface components {
              */
             concurrency_limit?: number;
             description?: string;
+            /** @description 与账号及 API Key 原子保存的完整端点列表；省略或 null 保留原配置，未列出的旧端点会被删除 */
+            endpoints?: components["schemas"]["AccountEndpointUpdateRequest"][] | null;
             /** @description 账号名称 */
             name: string;
             /** @description 租户结算价格表 ID；为空不绑定 */
@@ -14325,7 +14415,10 @@ export interface operations {
     };
     "ai-get-pool-available-models": {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description 主动重新识别启用账号的模型，忽略缓存有效期 */
+                refresh?: boolean;
+            };
             header?: never;
             path: {
                 /** @description 凭证池 ID */
@@ -14357,7 +14450,10 @@ export interface operations {
     };
     "ai-list-pool-credentials": {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description 主动查询各账号的上游配额；失败时保留已有观测 */
+                refresh_quota?: boolean;
+            };
             header?: never;
             path: {
                 /** @description 凭证池 ID */

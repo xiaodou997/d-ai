@@ -183,6 +183,47 @@ components:
         - status
         - health_status
       type: object
+    AccountEndpointUpdateRequest:
+      additionalProperties: false
+      properties:
+        api_format:
+          enum:
+            - openai_chat
+            - openai_responses
+            - openai_embeddings
+            - openai_images
+            - anthropic_messages
+            - gemini_generate
+            - gemini_embeddings
+          type: string
+        auth_header:
+          type: string
+        auth_scheme:
+          enum:
+            - format_default
+            - bearer
+            - anthropic_api_key
+            - gemini_api_key
+            - custom_header
+          type: string
+        base_url:
+          type: string
+        extra_headers:
+          description: 端点附加请求头；编辑时敏感字段值为 ***REDACTED*** 表示保留原值，删除字段表示删除请求头
+        id:
+          description: 已有端点 ID；为空创建端点
+          type: string
+        path_override:
+          type: string
+        status:
+          enum:
+            - active
+            - disabled
+          type: string
+      required:
+        - api_format
+        - base_url
+      type: object
     AccountEndpointWriteRequest:
       additionalProperties: false
       properties:
@@ -2251,6 +2292,37 @@ components:
         - tenantId
         - amountMicroUsd
       type: object
+    CredentialModelCatalog:
+      additionalProperties: false
+      properties:
+        credential_id:
+          type: string
+        models:
+          items:
+            type: string
+          type:
+            - array
+            - "null"
+        observed_at:
+          description: 观测时间，Unix 毫秒
+          format: int64
+          type: integer
+        source:
+          enum:
+            - live
+            - cache
+            - stale
+            - unknown
+          type: string
+        valid_until:
+          description: 有效截止时间，Unix 毫秒
+          format: int64
+          type: integer
+      required:
+        - credential_id
+        - models
+        - source
+      type: object
     CredentialPoolDTO:
       additionalProperties: false
       properties:
@@ -2391,6 +2463,70 @@ components:
       required:
         - items
         - total
+      type: object
+    CredentialQuota:
+      additionalProperties: false
+      properties:
+        credits_available:
+          type: boolean
+        model:
+          type: string
+        observed_at:
+          format: int64
+          type: integer
+        source:
+          type: string
+        windows:
+          items:
+            $ref: "#/components/schemas/CredentialQuotaWindow"
+          type:
+            - array
+            - "null"
+      required:
+        - source
+        - observed_at
+        - windows
+      type: object
+    CredentialQuotaInspection:
+      additionalProperties: false
+      properties:
+        observed_at:
+          description: 上次主动查询时间，Unix 毫秒
+          format: int64
+          type: integer
+        state:
+          enum:
+            - live
+            - cache
+            - unknown
+            - failed
+            - unsupported
+          type: string
+      required:
+        - state
+      type: object
+    CredentialQuotaWindow:
+      additionalProperties: false
+      properties:
+        key:
+          type: string
+        limit:
+          format: double
+          type: number
+        remaining:
+          format: double
+          type: number
+        reset_at:
+          format: int64
+          type: integer
+        used_percent:
+          format: double
+          type: number
+        window_minutes:
+          format: int64
+          type: integer
+      required:
+        - key
       type: object
     CustomerPortalBrandOutputBody:
       additionalProperties: false
@@ -6133,6 +6269,13 @@ components:
           format: uri
           readOnly: true
           type: string
+        accounts:
+          description: 逐账号的独立模型目录；池目录取已观测模型的并集
+          items:
+            $ref: "#/components/schemas/CredentialModelCatalog"
+          type:
+            - array
+            - "null"
         fixed_provider_type:
           description: 固定供应商类型
           enum:
@@ -6173,6 +6316,7 @@ components:
         - source
         - profile_revision
         - observed_at
+        - accounts
       type: object
     PoolCredentialDTO:
       additionalProperties: false
@@ -6229,6 +6373,9 @@ components:
           description: 最后使用时间，Unix 毫秒
           format: int64
           type: integer
+        model_catalog:
+          $ref: "#/components/schemas/CredentialModelCatalog"
+          description: 该账号的模型观测；未知、过期或内置目录不限制调度
         name:
           description: 凭证名称
           type: string
@@ -6243,6 +6390,16 @@ components:
             - gemini_cli
             - antigravity
           type: string
+        quota_inspection:
+          $ref: "#/components/schemas/CredentialQuotaInspection"
+          description: 主动配额查询状态，与认证状态和配额数值独立
+        quotas:
+          description: 最近一次上游响应头或主动查询报告的配额；没有数据表示未知
+          items:
+            $ref: "#/components/schemas/CredentialQuota"
+          type:
+            - array
+            - "null"
         scope:
           description: 授权范围
           type: string
@@ -6292,11 +6449,35 @@ components:
           format: uri
           readOnly: true
           type: string
+        access_token:
+          description: 新的 access token；空值保留原值，只写不读
+          type: string
+        auth_metadata:
+          additionalProperties: {}
+          description: 合并更新账户身份信息
+          type: object
+        email:
+          description: 账号邮箱
+          type: string
+        expires_at:
+          description: 新 token 到期时间，Unix 秒
+          format: int64
+          type: integer
+        name:
+          description: 账号显示名称
+          type: string
+        refresh_token:
+          description: 新的 refresh token；空值保留原值，只写不读
+          type: string
+        scope:
+          type: string
         status:
           description: 凭证管理状态；仅允许 active/disabled
           enum:
             - active
             - disabled
+          type: string
+        token_type:
           type: string
         weight:
           description: 权重；0 表示保留为 0
@@ -6361,7 +6542,7 @@ components:
           description: Codex 导出 user_id，会合并到 auth_metadata
           type: string
         weight:
-          description: 权重；为空或 0 时默认 100
+          description: 权重；为空时默认 100，0 不接收新的加权会话
           format: int64
           minimum: 0
           type: integer
@@ -10656,6 +10837,14 @@ components:
           type: integer
         description:
           type: string
+        endpoints:
+          description: 与账号及 API Key 原子保存的完整端点列表；省略或 null 保留原配置，未列出的旧端点会被删除
+          items:
+            $ref: "#/components/schemas/AccountEndpointUpdateRequest"
+          minItems: 1
+          type:
+            - array
+            - "null"
         name:
           description: 账号名称
           type: string
@@ -15306,7 +15495,7 @@ paths:
         - credential-pools
   /api/v1/credential-pools/{poolID}:
     delete:
-      description: 删除凭证池会级联删除池内 OAuth credential；若存在上游部署引用，数据库会拒绝删除。
+      description: 仅允许删除无账号且无分组引用的凭证池；池内显式模型绑定会一并删除。
       operationId: ai-delete-credential-pool
       parameters:
         - description: 凭证池 ID
@@ -15367,7 +15556,7 @@ paths:
         - credential-pools
   /api/v1/credential-pools/{poolID}/available-models:
     get:
-      description: 优先通过版本化客户端 Profile 在线发现模型，并以缓存、最后成功快照或内置目录降级。
+      description: 分别识别各启用账号的模型并汇总去重。支持主动刷新，以账号缓存、最后成功快照或内置目录降级；内置目录不代表账号权限。
       operationId: ai-get-pool-available-models
       parameters:
         - description: 凭证池 ID
@@ -15377,6 +15566,13 @@ paths:
           schema:
             description: 凭证池 ID
             type: string
+        - description: 主动重新识别启用账号的模型，忽略缓存有效期
+          explode: false
+          in: query
+          name: refresh
+          schema:
+            description: 主动重新识别启用账号的模型，忽略缓存有效期
+            type: boolean
       responses:
         "200":
           content:
@@ -15405,6 +15601,13 @@ paths:
           schema:
             description: 凭证池 ID
             type: string
+        - description: 主动查询各账号的上游配额；失败时保留已有观测
+          explode: false
+          in: query
+          name: refresh_quota
+          schema:
+            description: 主动查询各账号的上游配额；失败时保留已有观测
+            type: boolean
       responses:
         "200":
           content:
@@ -15422,7 +15625,7 @@ paths:
       tags:
         - credential-pools
     post:
-      description: 向指定凭证池导入 OAuth credential。响应只返回非敏感展示字段，不返回 access token、refresh token 或密文。
+      description: 向指定凭证池导入 OAuth credential；同一账号重复导入返回冲突，请通过编辑更新原账号。不同工作区分别保留。响应不返回 token 或密文。
       operationId: ai-import-pool-credential
       parameters:
         - description: 凭证池 ID
@@ -15490,7 +15693,7 @@ paths:
       tags:
         - credential-pools
     patch:
-      description: 管理侧只允许在 active/disabled 间切换状态；invalid 由运行时失败路径维护。
+      description: 原子更新账号信息、权重和状态，并可替换 OAuth 令牌。空令牌字段保留原值；账号 ID 和历史记录保持不变。
       operationId: ai-update-pool-credential
       parameters:
         - description: 凭证池 ID
@@ -15526,7 +15729,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/AppError"
           description: Error
-      summary: 更新 OAuth 凭证状态/权重
+      summary: 编辑 OAuth 账号
       tags:
         - credential-pools
   /api/v1/credential-pools/{poolID}/credentials/{credID}/refresh:
@@ -21510,7 +21713,7 @@ paths:
       tags:
         - upstream-accounts
     patch:
-      description: 更新上游账号元数据或 API Key；请求端点通过独立 Endpoint API 管理。
+      description: 在同一事务内更新账号资料、API Key 和完整请求端点配置；省略 endpoints 时保留原端点。
       operationId: ai-update-upstream-account
       parameters:
         - description: 上游账号 ID

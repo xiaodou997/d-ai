@@ -60,7 +60,8 @@ describe("AI admin upstream account generated operation facade", () => {
     };
 
     await expect(aiAdminApi.createUpstreamAccount(body)).resolves.toMatchObject({ id: "account-1" });
-    await expect(aiAdminApi.updateUpstreamAccount("account/1", body)).resolves.toMatchObject({ id: "account-1" });
+    const updateBody = { ...body, endpoints: body.endpoints.map(endpoint => ({ ...endpoint, id: "endpoint-1" })) };
+    await expect(aiAdminApi.updateUpstreamAccount("account/1", updateBody)).resolves.toMatchObject({ id: "account-1" });
     await expect(aiAdminApi.updateUpstreamAccountStatus("account/1", "disabled")).resolves.toMatchObject({ id: "account-1" });
     await expect(aiAdminApi.deleteUpstreamAccount("account/1")).resolves.toEqual({ deleted: true });
 
@@ -70,7 +71,7 @@ describe("AI admin upstream account generated operation facade", () => {
     expect(mocks.request.mock.calls[1]?.[0]).toMatchObject({
       path: "/api/v1/upstream-accounts/account%2F1",
       pathParams: { accountID: "account/1" },
-      body: { description: "Primary upstream account", api_key: "secret" }
+      body: { description: "Primary upstream account", api_key: "secret", endpoints: updateBody.endpoints }
     });
     expect(mocks.request.mock.calls[2]?.[0]).toMatchObject({
       pathParams: { accountID: "account/1" },

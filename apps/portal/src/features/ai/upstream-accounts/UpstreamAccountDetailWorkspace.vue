@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, shallowRef, watch } from 'vue'
+import { computed, onMounted, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Delete, Edit, MoreFilled, Plus, VideoPlay } from '@element-plus/icons-vue'
 import { Database } from 'lucide-vue-next'
 
 import { aiAdminApi } from '@/api/aiAdmin'
-import type { AccountDTO, UpstreamAccountEndpointDTO, UpstreamAccountEndpointWriteRequest, UpstreamAccountTestResult } from '@/api/types/ai'
+import type { AccountDTO, UpstreamAccountEndpointDTO, UpstreamAccountTestResult } from '@/api/types/ai'
 import { PortalContentCard, PortalPagePanel } from '@/platform'
 import { DsEmpty, DsTabs, DsTag } from '@/shared/ui'
 import { formatMultiplier } from '@/platform/ai/utils'
@@ -17,9 +17,8 @@ import type { Stability, StabilityWindow } from '@/features/ai/upstream-stabilit
 import UpstreamAccountEditorDialog from './components/UpstreamAccountEditorDialog.vue'
 import UpstreamAccountTestDialog from './components/UpstreamAccountTestDialog.vue'
 import UpstreamAccountStatusControl from './components/UpstreamAccountStatusControl.vue'
-import KeyValueEditor from './components/KeyValueEditor.vue'
 import { upstreamAccountStatusLabel, upstreamAccountStatusTagType } from './components/status'
-import { endpointAuthSchemeOptions, upstreamAPIFormatLabel, upstreamAPIFormatOptions } from './constants'
+import { upstreamAPIFormatLabel, upstreamAPIFormatOptions } from './constants'
 import { availabilityLabels, availabilityTone, endpointSuccessRates, successRateLabel, successRateTitle } from './presentation'
 
 const route = useRoute()
@@ -105,6 +104,11 @@ async function changeStatus(status: 'active' | 'disabled') {
 }
 
 const editorDialog = shallowRef(false)
+const addEndpointOnOpen = shallowRef(false)
+function openEditor(addEndpoint = false) {
+  addEndpointOnOpen.value = addEndpoint
+  editorDialog.value = true
+}
 const testDialog = shallowRef(false)
 async function editorSaved() { await fetchData() }
 async function accountTested(result: UpstreamAccountTestResult) { if (result.ok || [401, 403].includes(result.http_status)) await fetchData() }
@@ -116,45 +120,14 @@ async function removeAccount() {
 }
 function handleMoreCommand(command: string | number | object) { if (command === 'delete') void removeAccount() }
 
-type EndpointDraft = Omit<UpstreamAccountEndpointWriteRequest, 'extra_headers'> & { id?: string; extra_headers?: Record<string, unknown> }
-function blankEndpoint(): EndpointDraft {
-  return { api_format: 'openai_responses', base_url: '', path_override: '', auth_scheme: 'format_default', auth_header: '', extra_headers: {}, status: 'active' }
-}
-const endpointDialog = shallowRef(false)
-const editingEndpointId = shallowRef('')
-const submittingEndpoint = shallowRef(false)
-const endpointForm = reactive<EndpointDraft>(blankEndpoint())
-const isEditingEndpoint = computed(() => Boolean(editingEndpointId.value))
 function openEndpointCreate() {
   if (!account.value) return
   const used = new Set((account.value.endpoints || []).map(endpoint => endpoint.api_format))
-  const next = upstreamAPIFormatOptions.find(option => !used.has(option.value))
-  if (!next) { ElMessage.info('该账号已配置全部 API 格式'); return }
-  editingEndpointId.value = ''; Object.assign(endpointForm, blankEndpoint(), { api_format: next.value }); endpointDialog.value = true
-}
-function openEndpointEdit(endpoint: UpstreamAccountEndpointDTO) {
-  editingEndpointId.value = endpoint.id
-  Object.assign(endpointForm, blankEndpoint(), { ...endpoint, extra_headers: endpoint.extra_headers && typeof endpoint.extra_headers === 'object' ? { ...endpoint.extra_headers as object } : {} })
-  endpointDialog.value = true
-}
-function endpointFormatDisabled(format: string) { return (account.value?.endpoints || []).some(endpoint => endpoint.api_format === format && endpoint.id !== editingEndpointId.value) }
-function endpointPayload(): UpstreamAccountEndpointWriteRequest {
-  return { api_format: endpointForm.api_format, base_url: endpointForm.base_url.trim(), path_override: endpointForm.path_override?.trim() || undefined, auth_scheme: endpointForm.auth_scheme || 'format_default', auth_header: endpointForm.auth_scheme === 'custom_header' ? endpointForm.auth_header?.trim() : undefined, extra_headers: endpointForm.extra_headers && Object.keys(endpointForm.extra_headers).length ? endpointForm.extra_headers : undefined, status: endpointForm.status || 'active' }
-}
-function validateEndpoint() {
-  if (!endpointForm.base_url.trim()) { ElMessage.warning('请填写 Base URL'); return false }
-  if (endpointForm.auth_scheme === 'custom_header' && !endpointForm.auth_header?.trim()) { ElMessage.warning('自定义认证方式必须填写请求头名称'); return false }
-  return true
-}
-async function submitEndpoint() {
-  if (!account.value || !validateEndpoint()) return
-  submittingEndpoint.value = true
-  try {
-    if (isEditingEndpoint.value) await aiAdminApi.updateUpstreamAccountEndpoint(account.value.id, editingEndpointId.value, endpointPayload())
-    else await aiAdminApi.createUpstreamAccountEndpoint(account.value.id, endpointPayload())
-    endpointDialog.value = false; ElMessage.success(isEditingEndpoint.value ? '请求端点已更新' : '请求端点已添加'); await fetchData()
-  } catch (error) { ElMessage.error(error instanceof Error ? error.message : '保存请求端点失败') }
-  finally { submittingEndpoint.value = false }
+  if (upstreamAPIFormatOptions.every(option => used.has(option.value))) {
+    ElMessage.info('该账号已配置全部 API 格式')
+    return
+  }
+  openEditor(true)
 }
 async function removeEndpoint(endpoint: UpstreamAccountEndpointDTO) {
   if (!account.value) return
@@ -181,7 +154,7 @@ onMounted(fetchData)
         <el-button :icon="ArrowLeft" @click="backToList">返回列表</el-button>
         <template v-if="account">
           <el-button type="success" plain :icon="VideoPlay" @click="testDialog = true">测试连通</el-button>
-          <el-button :icon="Edit" @click="editorDialog = true">编辑账号</el-button>
+          <el-button :icon="Edit" @click="openEditor()">编辑连接</el-button>
           <el-dropdown trigger="click" @command="handleMoreCommand">
             <el-button :icon="MoreFilled">更多</el-button>
             <template #dropdown><el-dropdown-menu><el-dropdown-item command="delete" :icon="Delete">删除账号</el-dropdown-item></el-dropdown-menu></template>
@@ -231,7 +204,7 @@ onMounted(fetchData)
               <el-table-column prop="path_override" label="路径覆盖" min-width="160"><template #default="{ row }">{{ row.path_override || '使用格式默认路径' }}</template></el-table-column>
               <el-table-column label="成功率" width="110" align="right"><template #default="{ row }"><span class="numeric">{{ successRateLabel(endpointRates.get(row.id)) }}</span></template></el-table-column>
               <el-table-column label="状态" width="105"><template #default="{ row }"><DsTag :tone="row.status === 'active' ? (row.health_status === 'unhealthy' ? 'danger' : 'positive') : 'info'">{{ row.status === 'active' ? (row.health_status === 'unhealthy' ? '异常' : '启用') : '停用' }}</DsTag></template></el-table-column>
-              <el-table-column label="操作" width="130" fixed="right"><template #default="{ row }"><el-button link type="primary" @click="openEndpointEdit(row)">编辑</el-button><el-button link type="danger" @click="removeEndpoint(row)">删除</el-button></template></el-table-column>
+              <el-table-column label="操作" width="130" fixed="right"><template #default="{ row }"><el-button link type="primary" @click="openEditor()">编辑</el-button><el-button link type="danger" @click="removeEndpoint(row)">删除</el-button></template></el-table-column>
             </el-table>
           </PortalContentCard>
         </div>
@@ -241,20 +214,8 @@ onMounted(fetchData)
       </div>
     </PortalPagePanel>
 
-    <UpstreamAccountEditorDialog v-model="editorDialog" :account="account" :price-books="priceBooks" @saved="editorSaved" />
+    <UpstreamAccountEditorDialog v-model="editorDialog" :account="account" :price-books="priceBooks" :add-endpoint-on-open="addEndpointOnOpen" @saved="editorSaved" />
     <UpstreamAccountTestDialog v-model="testDialog" :account="account" @tested="accountTested" />
-    <el-dialog v-model="endpointDialog" :title="isEditingEndpoint ? '编辑请求端点' : '添加请求端点'" width="640px">
-      <el-form label-width="120px">
-        <el-form-item label="API 格式" required><el-select v-model="endpointForm.api_format" class="w-full"><el-option v-for="option in upstreamAPIFormatOptions" :key="option.value" :label="option.label" :value="option.value" :disabled="endpointFormatDisabled(option.value)" /></el-select></el-form-item>
-        <el-form-item label="Base URL" required><el-input v-model="endpointForm.base_url" placeholder="https://api.example.com" /></el-form-item>
-        <el-form-item label="路径覆盖"><el-input v-model="endpointForm.path_override" placeholder="留空使用该 API 格式的默认路径" /></el-form-item>
-        <el-form-item label="认证方式"><el-select v-model="endpointForm.auth_scheme" class="w-full"><el-option v-for="option in endpointAuthSchemeOptions" :key="option.value" :label="option.label" :value="option.value" /></el-select></el-form-item>
-        <el-form-item v-if="endpointForm.auth_scheme === 'custom_header'" label="认证请求头" required><el-input v-model="endpointForm.auth_header" placeholder="如 X-API-Key" /></el-form-item>
-        <el-form-item label="状态"><el-radio-group v-model="endpointForm.status"><el-radio value="active">启用</el-radio><el-radio value="disabled">停用</el-radio></el-radio-group></el-form-item>
-        <el-form-item label="附加请求头"><KeyValueEditor v-model="endpointForm.extra_headers" /><span class="hint">敏感值显示为 ***REDACTED***；保持该值会保留原配置。</span></el-form-item>
-      </el-form>
-      <template #footer><el-button @click="endpointDialog = false">取消</el-button><el-button type="primary" :loading="submittingEndpoint" @click="submitEndpoint">保存</el-button></template>
-    </el-dialog>
   </div>
 </template>
 

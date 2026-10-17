@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"go.uber.org/zap"
 	"io"
 	"net/http"
 	"net/url"
@@ -17,6 +16,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"go.uber.org/zap"
+	"golang.org/x/sync/singleflight"
 
 	pgadapter "xiaodou/dai/internal/ai/adapters/postgres"
 	"xiaodou/dai/internal/ai/domain"
@@ -137,6 +139,10 @@ type Refresher struct {
 	stopped         bool
 	cancel          context.CancelFunc
 	wg              sync.WaitGroup
+	flights         singleflight.Group
+	ownerCtx        context.Context
+	active          map[uint64]context.CancelFunc
+	nextRefresh     uint64
 }
 
 var _ lifecycle.Component = (*Refresher)(nil)
@@ -144,6 +150,9 @@ var _ lifecycle.Component = (*Refresher)(nil)
 // New creates a Refresher that checks every interval and refreshes credentials
 // expiring within window.
 func New(store *pgadapter.OAuthCredentialStore, logger *zap.Logger) *Refresher {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
 	return &Refresher{
 		store:           store,
 		client:          &http.Client{Timeout: 30 * time.Second},
@@ -170,6 +179,7 @@ func (r *Refresher) Start(ctx context.Context) {
 	r.started = true
 	workerCtx, cancel := context.WithCancel(ctx)
 	r.cancel = cancel
+	r.ownerCtx = workerCtx
 	r.wg.Add(1)
 	r.lifecycleMu.Unlock()
 	go func() { defer r.wg.Done(); r.run(workerCtx) }()
@@ -185,21 +195,14 @@ func (r *Refresher) Stop(ctx context.Context) error {
 		ctx = context.Background()
 	}
 	r.lifecycleMu.Lock()
-	if r.stopped {
-		started := r.started
-		r.lifecycleMu.Unlock()
-		if started {
-			return r.wait(ctx)
-		}
-		return nil
-	}
 	r.stopped = true
-	started, cancel := r.started, r.cancel
-	r.lifecycleMu.Unlock()
-	if !started {
-		return nil
+	if r.cancel != nil {
+		r.cancel()
 	}
-	cancel()
+	for _, cancel := range r.active {
+		cancel()
+	}
+	r.lifecycleMu.Unlock()
 	return r.wait(ctx)
 }
 
@@ -262,64 +265,106 @@ func (r *Refresher) runOnce(ctx context.Context) {
 }
 
 func (r *Refresher) refreshOne(ctx context.Context, row pgadapter.OAuthCredentialRow) {
-	cfg, ok := r.providerConfigs[domain.FixedProviderType(row.ProviderType)]
-	if !ok {
-		r.logger.Warn("tokenrefresh: unknown provider type, skipping",
-			zap.String("cred_id", row.ID), zap.String("provider_type", row.ProviderType))
-		return
+	if err := r.refresh(ctx, row.ID, row.TokenVersion); err != nil && ctx.Err() == nil {
+		r.logger.Warn("tokenrefresh: refresh failed", zap.String("cred_id", row.ID), zap.Error(err))
 	}
+}
 
-	cred, err := r.store.GetDecryptedByID(ctx, row.ID)
-	if err != nil {
-		r.logger.Error("tokenrefresh: get credential failed", zap.String("cred_id", row.ID), zap.Error(err))
-		return
+// beginRefresh owns shared work independently of any one waiting HTTP caller.
+func (r *Refresher) beginRefresh(ctx context.Context) (context.Context, func(), error) {
+	r.lifecycleMu.Lock()
+	defer r.lifecycleMu.Unlock()
+	if r.stopped {
+		return nil, nil, errors.New("token refresher is stopped")
 	}
-
-	refreshToken := cred.RefreshToken
-	if refreshToken == "" {
-		r.logger.Warn("tokenrefresh: no refresh token, skipping", zap.String("cred_id", row.ID))
-		return
+	shared, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+	stopOwner := func() bool { return false }
+	if r.ownerCtx != nil {
+		stopOwner = context.AfterFunc(r.ownerCtx, cancel)
 	}
+	if r.active == nil {
+		r.active = make(map[uint64]context.CancelFunc)
+	}
+	r.nextRefresh++
+	id := r.nextRefresh
+	r.active[id] = cancel
+	r.wg.Add(1)
+	return shared, func() {
+		stopOwner()
+		cancel()
+		r.lifecycleMu.Lock()
+		delete(r.active, id)
+		r.lifecycleMu.Unlock()
+		r.wg.Done()
+	}, nil
+}
 
-	refreshCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	tok, err := r.callTokenEndpoint(refreshCtx, cfg, refreshToken)
-	cancel()
-	if err != nil {
-		r.logger.Error("tokenrefresh: token refresh failed",
-			zap.String("cred_id", row.ID), zap.String("provider", row.ProviderType), zap.Error(err))
-		if isPermanentTokenError(err) {
-			if markErr := r.store.MarkInvalid(ctx, row.ID, fmt.Sprintf("refresh failed: %v", err)); markErr != nil {
-				r.logger.Error("tokenrefresh: mark invalid failed", zap.String("cred_id", row.ID), zap.Error(markErr))
+func (r *Refresher) refresh(ctx context.Context, credID string, expectedVersion int64) error {
+	ch := r.flights.DoChan(credID, func() (any, error) {
+		shared, release, err := r.beginRefresh(ctx)
+		if err != nil {
+			return nil, err
+		}
+		defer release()
+		var refreshErr error
+		err = r.store.WithRefreshLock(shared, credID, func(store *pgadapter.OAuthCredentialStore) error {
+			cred, err := store.GetDecryptedByID(shared, credID)
+			if err != nil {
+				return err
 			}
+			if cred.Status != domain.OAuthCredentialActive {
+				return domain.ErrConflict
+			}
+			// Another entry point/process already refreshed this snapshot while we waited.
+			if cred.TokenVersion != expectedVersion {
+				return nil
+			}
+			cfg, ok := r.providerConfigs[cred.ProviderType]
+			if !ok {
+				return fmt.Errorf("unsupported provider type %q", cred.ProviderType)
+			}
+			if cred.RefreshToken == "" {
+				return errors.New("credential has no refresh token")
+			}
+			tok, err := r.callTokenEndpoint(shared, cfg, cred.RefreshToken)
+			if err != nil {
+				refreshErr = fmt.Errorf("token endpoint: %w", err)
+				if isPermanentTokenError(err) {
+					err = store.MarkInvalid(shared, credID, fmt.Sprintf("refresh failed: %v", err), cred.TokenVersion)
+					if errors.Is(err, domain.ErrConflict) {
+						refreshErr = nil
+						return nil
+					}
+					return err
+				}
+				return nil
+			}
+			var expiresAt *time.Time
+			if tok.ExpiresIn > 0 {
+				t := time.Now().Add(time.Duration(tok.ExpiresIn) * time.Second)
+				expiresAt = &t
+			}
+			refreshToken := tok.RefreshToken
+			if refreshToken == "" {
+				refreshToken = cred.RefreshToken
+			}
+			_, err = store.UpdateTokens(shared, credID, tok.AccessToken, refreshToken, expiresAt, cred.TokenVersion)
+			if errors.Is(err, domain.ErrConflict) {
+				return nil
+			}
+			return err
+		})
+		if err != nil {
+			return nil, err
 		}
-		return
+		return nil, refreshErr
+	})
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case result := <-ch:
+		return result.Err
 	}
-
-	// Compute new expiry
-	var expiresAt *time.Time
-	if tok.ExpiresIn > 0 {
-		t := time.Now().Add(time.Duration(tok.ExpiresIn) * time.Second)
-		expiresAt = &t
-	}
-
-	newRefresh := tok.RefreshToken
-	if newRefresh == "" {
-		newRefresh = refreshToken // keep the old one if not rotated
-	}
-
-	if _, err := r.store.UpdateTokens(ctx, row.ID, tok.AccessToken, newRefresh, expiresAt, cred.TokenVersion); err != nil {
-		if errors.Is(err, domain.ErrConflict) {
-			r.logger.Info("tokenrefresh: skipped stale refresh result",
-				zap.String("cred_id", row.ID), zap.String("provider", row.ProviderType))
-			return
-		}
-		r.logger.Error("tokenrefresh: update tokens failed", zap.String("cred_id", row.ID), zap.Error(err))
-		return
-	}
-
-	r.logger.Info("tokenrefresh: refreshed successfully",
-		zap.String("cred_id", row.ID), zap.String("provider", row.ProviderType),
-		zap.Int("expires_in_s", tok.ExpiresIn))
 }
 
 // callTokenEndpoint sends a refresh_token grant request to the provider's token URL.
@@ -402,42 +447,12 @@ func (r *Refresher) callTokenEndpoint(ctx context.Context, cfg providerConfig, r
 // Only an explicit invalid_grant/invalid_token response invalidates the
 // credential. Network errors and provider 5xx responses remain retryable.
 func (r *Refresher) RefreshByID(ctx context.Context, credID string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	row, err := r.store.GetByID(ctx, credID)
 	if err != nil {
 		return fmt.Errorf("get credential: %w", err)
 	}
-	cfg, ok := r.providerConfigs[domain.FixedProviderType(row.ProviderType)]
-	if !ok {
-		return fmt.Errorf("unsupported provider type %q", row.ProviderType)
-	}
-	cred, err := r.store.GetDecryptedByID(ctx, credID)
-	if err != nil {
-		return fmt.Errorf("decrypt credential: %w", err)
-	}
-	if cred.RefreshToken == "" {
-		return fmt.Errorf("credential has no refresh token")
-	}
-	tok, err := r.callTokenEndpoint(ctx, cfg, cred.RefreshToken)
-	if err != nil {
-		if isPermanentTokenError(err) {
-			_ = r.store.MarkInvalid(ctx, credID, fmt.Sprintf("manual refresh failed: %v", err))
-		}
-		return fmt.Errorf("token endpoint: %w", err)
-	}
-	var expiresAt *time.Time
-	if tok.ExpiresIn > 0 {
-		t := time.Now().Add(time.Duration(tok.ExpiresIn) * time.Second)
-		expiresAt = &t
-	}
-	newRefresh := tok.RefreshToken
-	if newRefresh == "" {
-		newRefresh = cred.RefreshToken
-	}
-	if _, err := r.store.UpdateTokens(ctx, credID, tok.AccessToken, newRefresh, expiresAt, cred.TokenVersion); err != nil {
-		if errors.Is(err, domain.ErrConflict) {
-			return nil
-		}
-		return fmt.Errorf("update tokens: %w", err)
-	}
-	return nil
+	return r.refresh(ctx, credID, row.TokenVersion)
 }

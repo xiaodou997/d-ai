@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	CodexProfileRevision = "codex-cli@0.144.1+dai.1"
+	CodexProfileRevision = "codex-cli@0.144.1+dai.2"
 	codexBaseURL         = "https://chatgpt.com/backend-api/codex"
 	codexUserAgent       = "codex_cli_rs/0.144.1 (Ubuntu 22.4.0; x86_64) xterm-256color"
 	codexOriginator      = "codex_cli_rs"
@@ -50,7 +50,10 @@ func (codexProfileV01441) prepare(in Invocation) (*WireRequest, error) {
 	if in.Protocol != domain.ProtocolOpenAIResponses {
 		return nil, fmt.Errorf("codex profile requires %q, got %q", domain.ProtocolOpenAIResponses, in.Protocol)
 	}
-	body, err := applyCodexResponsesContract(in.Body, in.Model, in.Stream, in.Operation)
+	// The ChatGPT Codex endpoint requires SSE even when the downstream API
+	// caller requests a single JSON response. Serving owns that aggregation.
+	wireStream := in.Operation != OperationCompact
+	body, err := applyCodexResponsesContract(in.Body, in.Model, wireStream, in.Operation)
 	if err != nil {
 		return nil, err
 	}
@@ -71,7 +74,7 @@ func (codexProfileV01441) prepare(in Invocation) (*WireRequest, error) {
 		"originator":    codexOriginator,
 		"version":       codexClientVersion,
 	}
-	if in.Stream && in.Operation != OperationCompact {
+	if wireStream {
 		headers["Accept"] = "text/event-stream"
 	} else {
 		headers["Accept"] = "application/json"

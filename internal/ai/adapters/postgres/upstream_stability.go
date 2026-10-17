@@ -72,8 +72,8 @@ func (s *RequestStore) ListUpstreamStability(ctx context.Context, kind, window s
  ), counts AS (
  SELECT upstream_kind,upstream_resource_id,
  COUNT(*) FILTER(WHERE completed_at>=now()-make_interval(hours=>$2) AND outcome='success') successes,
- COUNT(*) FILTER(WHERE completed_at>=now()-make_interval(hours=>$2) AND outcome IN ('server_error','timeout','network_error','unauthorized','rate_limited','model_error')) failures,
- COUNT(*) FILTER(WHERE completed_at>=now()-make_interval(hours=>$2) AND outcome NOT IN ('success','server_error','timeout','network_error','unauthorized','rate_limited','model_error')) excluded,
+ COUNT(*) FILTER(WHERE completed_at>=now()-make_interval(hours=>$2) AND outcome IN ('server_error','timeout','network_error','unauthorized','rate_limited','quota_exhausted','capacity_exhausted','model_error')) failures,
+ COUNT(*) FILTER(WHERE completed_at>=now()-make_interval(hours=>$2) AND outcome NOT IN ('success','server_error','timeout','network_error','unauthorized','rate_limited','quota_exhausted','capacity_exhausted','model_error')) excluded,
  COUNT(*) FILTER(WHERE completed_at>=now()-interval '1 hour' AND cooldown_entered) cooldowns
  FROM ai_request_attempts WHERE completed_at>=now()-make_interval(hours=>$2) AND upstream_kind IS NOT NULL
  GROUP BY upstream_kind,upstream_resource_id)

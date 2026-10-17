@@ -9,7 +9,7 @@
        注：listCredentialPools/listPoolCredentials 接口本身不支持分页，本页不渲染 DsPagination。
 -->
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, shallowRef, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, Plus, Refresh, Setting } from '@element-plus/icons-vue'
 import { Boxes } from 'lucide-vue-next'
@@ -17,6 +17,11 @@ import { PortalContentCard, PortalPagePanel } from '@/platform'
 import { DsEmpty, DsNumberInput, DsTable, DsTag, type DsTableColumn } from '@/shared/ui'
 import { formatMultiplier } from '@/platform/ai/utils'
 import { aiAdminApi } from '@/api/aiAdmin'
+import type { PoolCredentialDTO } from '@/api/types/ai'
+import type { Stability } from '@/features/ai/upstream-stability/api'
+import PoolAccountEditorDialog from './PoolAccountEditorDialog.vue'
+import { markCredentialDuplicates, normalizeCredential, parseCredentialFile, pendingCredentialImports, type CredentialImportEntry } from './credentialImport'
+import { credentialQuotaLines, credentialRuntime } from './credentialRuntime'
 import UpstreamModelBindingsPanel from '@/features/ai/upstream-model-bindings/UpstreamModelBindingsPanel.vue'
 
 import StabilityBadge from '@/features/ai/upstream-stability/StabilityBadge.vue'
@@ -40,12 +45,15 @@ const PROVIDER_TABS = [
 const statusTone = (s: string) => (({ active: 'positive', disabled: 'info', invalid: 'danger' } as any)[s] || 'info')
 
 const credColumns: DsTableColumn[] = [
-  { key: 'name', title: '名称' },
-  { key: 'email', title: '邮箱' },
-  { key: 'status', title: '状态', width: 100 },
+  { key: 'name', title: '账号', width: 180 },
+  { key: 'models', title: '账号模型', width: 210 },
+  { key: 'status', title: '启停', width: 100 },
+  { key: 'runtime', title: '运行状态', width: 200 },
+  { key: 'weight', title: '权重', width: 70 },
+  { key: 'quota', title: '上游配额', width: 220 },
   { key: 'expires', title: 'Token 到期', width: 120 },
   { key: 'invalid_reason', title: '最近认证异常' },
-  { key: 'actions', title: '操作', width: 140 }
+  { key: 'actions', title: '操作', width: 190 }
 ]
 
 // ============================================================================
@@ -60,7 +68,30 @@ const priceBooks    = shallowRef<any[]>([])
 const updatingPoolStatusId = shallowRef('')
 
 const credLoading   = shallowRef(false)
-const credentials   = shallowRef<any[]>([])
+const credentials   = shallowRef<PoolCredentialDTO[]>([])
+const selectedSnapshot = shallowRef<Stability | null>(null)
+const editingAccount = shallowRef<PoolCredentialDTO | null>(null)
+const editorPoolId = shallowRef('')
+const modelsLoading = shallowRef(false)
+const quotaLoading = shallowRef(false)
+let credentialRequest = 0
+let modelRequest = 0
+let quotaRequest = 0
+let importSession = 0
+onBeforeUnmount(() => { ++credentialRequest; ++modelRequest; ++quotaRequest; ++importSession })
+const runtimeSnapshot = computed(() => selectedSnapshot.value?.resource_id === selectedPool.value?.id ? selectedSnapshot.value : stabilityById.value.get(selectedPool.value?.id))
+const accountRuntime = (account: PoolCredentialDTO) => credentialRuntime(account, runtimeSnapshot.value)
+const accountModels = (account: PoolCredentialDTO) => {
+  const catalog = account.model_catalog
+  const confirmed = catalog && ['live', 'cache'].includes(catalog.source) && (catalog.valid_until ?? 0) > Date.now()
+  return {
+    confirmed,
+    label: confirmed ? `已确认 ${catalog.models.length} 个模型` : catalog?.models.length ? '模型目录待更新' : '模型权限未知',
+    detail: catalog?.models.join('、') || '未知账号仍可尝试请求',
+    preview: catalog?.models.slice(0, 2).join('、') || '',
+    observedAt: catalog?.observed_at
+  }
+}
 
 // Pool dialog
 const poolDialogVisible = shallowRef(false)
@@ -78,10 +109,11 @@ const credDialogVisible = shallowRef(false)
 const credDialogLoading = shallowRef(false)
 const importMode        = ref('file')   // 'file' | 'manual'
 const fileInputRef      = ref<HTMLInputElement | null>(null)
-const parsedFiles       = ref<any[]>([])       // [{ name, data, error, importStatus, importError }]
+const parsedFiles = ref<CredentialImportEntry[]>([])
+const pendingImports = computed(() => pendingCredentialImports(parsedFiles.value))
 const credForm = reactive<any>({
   name: '', email: '', access_token: '', refresh_token: '',
-  expires_at: null, weight: 100
+  expires_at: null, weight: 100, account_id: '', user_id: ''
 })
 
 // ============================================================================
@@ -96,8 +128,8 @@ const currentTab = computed(() =>
   PROVIDER_TABS.find((t) => t.key === activeTab.value)
 )
 
-const activeCredCount  = computed(() => credentials.value.filter((c: any) => c.status === 'active').length)
-const invalidCredCount = computed(() => credentials.value.filter((c: any) => c.status === 'invalid').length)
+const activeCredCount = computed(() => credentials.value.filter(account => ['available', 'partial', 'recovering'].includes(accountRuntime(account).state)).length)
+const coolingCredCount = computed(() => credentials.value.filter(account => ['cooling', 'expired'].includes(accountRuntime(account).state)).length)
 
 // ============================================================================
 // Data loading
@@ -120,22 +152,83 @@ const fetchPools = async () => {
   }
 }
 
-const fetchCredentials = async () => {
-  if (!selectedPool.value) { credentials.value = []; return }
+const fetchCredentials = async (poolId = selectedPool.value?.id) => {
+  if (!poolId || selectedPool.value?.id !== poolId) return
+  const request = ++credentialRequest
+  ++modelRequest; modelsLoading.value = false
+  ++quotaRequest; quotaLoading.value = false
   credLoading.value = true
   try {
-    const res = await aiAdminApi.listPoolCredentials(selectedPool.value.id)
+    const res = await aiAdminApi.listPoolCredentials(poolId)
+    if (request !== credentialRequest || selectedPool.value?.id !== poolId) return
     credentials.value = res.items || []
-  } catch (e: any) {
-    ElMessage.error(e?.message || '加载凭据失败')
+  } catch (error) {
+    if (request === credentialRequest && selectedPool.value?.id === poolId) ElMessage.error(error instanceof Error ? error.message : '加载凭据失败')
   } finally {
-    credLoading.value = false
+    if (request === credentialRequest) credLoading.value = false
   }
 }
 
-watch(selectedPool, () => { fetchCredentials() })
+const inspectModels = async () => {
+  const poolId = selectedPool.value?.id
+  if (!poolId) return
+  const request = ++modelRequest
+  modelsLoading.value = true
+  try {
+    const result = await aiAdminApi.getPoolAvailableModels(poolId, true)
+    if (request !== modelRequest || selectedPool.value?.id !== poolId) return
+    const catalogs = new Map(result.accounts.map(catalog => [catalog.credential_id, catalog]))
+    credentials.value = credentials.value.map(account => ({ ...account, model_catalog: catalogs.get(account.id) }))
+    const confirmed = result.accounts.filter(catalog => ['live', 'cache'].includes(catalog.source) && (catalog.valid_until ?? 0) > Date.now()).length
+    if (confirmed > 0) ElMessage.success(`已确认 ${confirmed} 个账号的模型；未确认账号保留正常调度`)
+    else ElMessage.info('暂未确认账号模型；未知账号保留正常调度')
+  } catch (error) {
+    if (request === modelRequest && selectedPool.value?.id === poolId) ElMessage.error(error instanceof Error ? error.message : '识别账号模型失败')
+  } finally {
+    if (request === modelRequest) modelsLoading.value = false
+  }
+}
 
+const inspectQuotas = async () => {
+  const poolId = selectedPool.value?.id
+  if (!poolId) return
+  const request = ++quotaRequest
+  const generation = ++credentialRequest
+  quotaLoading.value = true
+  try {
+    const result = await aiAdminApi.listPoolCredentials(poolId, true)
+    if (request !== quotaRequest || generation !== credentialRequest || selectedPool.value?.id !== poolId) return
+    credentials.value = result.items
+    const confirmed = result.items.filter(account => ['live', 'cache'].includes(account.quota_inspection?.state ?? '')).length
+    const failed = result.items.filter(account => account.quota_inspection?.state === 'failed').length
+    if (confirmed > 0) ElMessage.success(`已更新 ${confirmed} 个账号的配额${failed ? `；${failed} 个查询失败，保留已有观测` : ''}`)
+    else ElMessage.info(failed ? '配额查询暂未成功，保留已有观测' : '上游暂未提供可用配额，继续显示未知')
+  } catch (error) {
+    if (request === quotaRequest && selectedPool.value?.id === poolId) ElMessage.error(error instanceof Error ? error.message : '更新配额失败')
+  } finally {
+    if (request === quotaRequest) quotaLoading.value = false
+  }
+}
+
+watch(() => selectedPool.value?.id, () => {
+  ++credentialRequest
+  ++modelRequest; modelsLoading.value = false
+  ++quotaRequest; quotaLoading.value = false
+  credentials.value = []; selectedSnapshot.value = null; credLoading.value = false
+  editingAccount.value = null
+  void fetchCredentials()
+})
 watch(activeTab, () => { selectedPool.value = null })
+watch(credDialogVisible, (open) => {
+  if (!open) {
+    ++importSession; parsedFiles.value = []
+    credForm.access_token = ''; credForm.refresh_token = ''
+  }
+})
+const openAccountEditor = (account: PoolCredentialDTO) => {
+  editorPoolId.value = selectedPool.value.id
+  editingAccount.value = account
+}
 
 onMounted(async () => {
   const [books] = await Promise.allSettled([aiAdminApi.listPriceBooks(), fetchPools()])
@@ -198,7 +291,7 @@ const submitPool = async () => {
 }
 
 const handleDeletePool = async (pool: any) => {
-  await ElMessageBox.confirm(`确认删除账号池「${pool.name}」？所有凭据将一并删除。`, '危险操作', {
+  await ElMessageBox.confirm(`确认删除账号池「${pool.name}」？请先移除池内账号和分组引用，池内模型绑定将一并删除。`, '危险操作', {
     type: 'error', confirmButtonText: '确认删除', cancelButtonText: '取消',
     confirmButtonClass: 'el-button--danger'
   })
@@ -232,128 +325,96 @@ const changePoolStatus = async (pool: any, enabled: boolean) => {
 // ============================================================================
 
 const openCredDialog = () => {
-  importMode.value = 'file'
-  parsedFiles.value = []
-  Object.assign(credForm, { name: '', email: '', access_token: '', refresh_token: '', expires_at: null, weight: 100 })
+  ++importSession
+  importMode.value = 'file'; parsedFiles.value = []
+  Object.assign(credForm, { name: '', email: '', access_token: '', refresh_token: '', expires_at: null, weight: 100, account_id: '', user_id: '' })
   credDialogVisible.value = true
 }
 
-const onFilesSelected = (event: any) => {
-  const files = Array.from(event.target.files || []) as File[]
-  if (!files.length) return
-  parsedFiles.value = []
-  files.forEach((file) => {
-    const entry: any = { name: file.name, data: null, error: null, importStatus: null, importError: '' }
-    const reader = new FileReader()
-    reader.onload = (e: any) => {
-      try {
-        entry.data = JSON.parse(e.target.result)
-      } catch {
-        entry.error = 'JSON 格式错误'
-      }
-      parsedFiles.value = [...parsedFiles.value]
-    }
-    reader.onerror = () => {
-      entry.error = '文件读取失败'
-      parsedFiles.value = [...parsedFiles.value]
-    }
-    parsedFiles.value.push(entry)
-    reader.readAsText(file)
-  })
-  event.target.value = ''
-}
-
-// 仅提取后端接受的字段，丢弃 provider 特定的未知键（如 organizations / exported_at），避免 DisallowUnknownFields 拒绝。
-const extractCredentialPayload = (raw: any) => {
-  const KNOWN = ['name', 'provider_type', 'email', 'access_token', 'refresh_token',
-    'token_type', 'scope', 'expires_at', 'weight', 'auth_metadata',
-    'account_id', 'plan_type', 'user_id', 'account_user_id']
-  const payload: any = {}
-  for (const key of KNOWN) {
-    if (raw[key] !== undefined) payload[key] = raw[key]
-  }
-  if (!payload.access_token) return { error: 'access_token 字段缺失' }
-  return { payload }
+const onFilesSelected = async (event: Event) => {
+  const input = event.target as HTMLInputElement
+  const files = Array.from(input.files || [])
+  input.value = ''
+  if (!files.length || !selectedPool.value || credDialogLoading.value) return
+  const session = ++importSession
+  const provider = selectedPool.value.fixed_provider_type
+  const results = await Promise.all(files.map(async file => {
+    try { return parseCredentialFile(JSON.parse(await file.text()), file.name, provider) }
+    catch { return [{ name: file.name, error: 'JSON 格式错误或文件读取失败' }] as CredentialImportEntry[] }
+  }))
+  if (session !== importSession || !credDialogVisible.value) return
+  const entries = results.flat()
+  markCredentialDuplicates(entries, credentials.value)
+  parsedFiles.value = entries
 }
 
 const submitCredential = async () => {
-  if (!selectedPool.value) return
-  if (importMode.value === 'file') {
-    const toImport = parsedFiles.value.filter((f: any) => f.data && !f.error)
-    if (!toImport.length) { ElMessage.error('没有可导入的有效凭据'); return }
-    credDialogLoading.value = true
-    let successCount = 0
-    for (const entry of toImport) {
-      entry.importStatus = 'pending'
-      const { payload, error } = extractCredentialPayload(entry.data)
-      if (error) {
-        entry.importStatus = 'failed'
-        entry.importError = error
+  if (!selectedPool.value || credDialogLoading.value) return
+  const poolId = selectedPool.value.id
+  const provider = selectedPool.value.fixed_provider_type
+  credDialogLoading.value = true
+  try {
+    if (importMode.value === 'file') {
+      const toImport = pendingCredentialImports(parsedFiles.value)
+      if (!toImport.length) { ElMessage.error('没有待导入的有效账号'); return }
+      let successCount = 0
+      for (const entry of toImport) {
+        entry.importStatus = 'pending'; entry.importError = ''
+        try {
+          await aiAdminApi.createPoolCredential(poolId, entry.data!)
+          entry.importStatus = 'success'; successCount++
+        } catch (error) {
+          entry.importStatus = 'failed'; entry.importError = error instanceof Error ? error.message : '导入失败'
+        }
         parsedFiles.value = [...parsedFiles.value]
-        continue
       }
-      try {
-        await aiAdminApi.createPoolCredential(selectedPool.value.id, payload)
-        entry.importStatus = 'success'
-        successCount++
-      } catch (err: any) {
-        entry.importStatus = 'failed'
-        entry.importError = err?.message || '导入失败'
-      }
-      parsedFiles.value = [...parsedFiles.value]
+      if (successCount) { ElMessage.success(`成功导入 ${successCount} 条账号`); await fetchCredentials(poolId) }
+      if (!pendingCredentialImports(parsedFiles.value).length) credDialogVisible.value = false
+    } else {
+      const payload = normalizeCredential(credForm, provider)
+      await aiAdminApi.createPoolCredential(poolId, payload)
+      ElMessage.success('账号已导入'); credDialogVisible.value = false
+      await fetchCredentials(poolId)
     }
-    credDialogLoading.value = false
-    if (successCount > 0) {
-      ElMessage.success(`成功导入 ${successCount} 条凭据`)
-      await fetchCredentials()
-    }
-    const failCount = toImport.length - successCount
-    if (failCount === 0) credDialogVisible.value = false
-  } else {
-    if (!credForm.access_token.trim()) { ElMessage.error('access_token 不能为空'); return }
-    credDialogLoading.value = true
-    try {
-      await aiAdminApi.createPoolCredential(selectedPool.value.id, { ...credForm })
-      ElMessage.success('凭据已导入')
-      credDialogVisible.value = false
-      await fetchCredentials()
-    } catch (e: any) {
-      ElMessage.error(e?.message || '导入失败')
-    } finally {
-      credDialogLoading.value = false
-    }
-  }
+  } catch (error) { ElMessage.error(error instanceof Error ? error.message : '导入失败') }
+  finally { credDialogLoading.value = false }
 }
 
 const toggleCredStatus = async (cred: any) => {
+  const poolId = selectedPool.value?.id
+  if (!poolId) return
   const next = cred.status === 'active' ? 'disabled' : 'active'
   try {
-    await aiAdminApi.patchPoolCredential(selectedPool.value.id, cred.id, { status: next })
+    await aiAdminApi.patchPoolCredential(poolId, cred.id, { status: next })
     ElMessage.success('状态已更新')
-    await fetchCredentials()
+    await fetchCredentials(poolId)
   } catch (e: any) {
     ElMessage.error(e?.message || '更新失败')
   }
 }
 
 const handleRefreshCred = async (cred: any) => {
+  const poolId = selectedPool.value?.id
+  if (!poolId) return
   try {
-    await aiAdminApi.refreshPoolCredential(selectedPool.value.id, cred.id)
+    await aiAdminApi.refreshPoolCredential(poolId, cred.id)
     ElMessage.success(`凭据「${cred.name}」刷新成功`)
-    await fetchCredentials()
+    await fetchCredentials(poolId)
   } catch (err: any) {
     ElMessage.error('刷新失败: ' + (err?.message || '未知错误'))
   }
 }
 
 const handleDeleteCred = async (cred: any) => {
+  const poolId = selectedPool.value?.id
+  if (!poolId) return
   await ElMessageBox.confirm(`确认删除凭据「${cred.name}」？`, '删除凭据', {
     type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消'
   })
   try {
-    await aiAdminApi.deletePoolCredential(selectedPool.value.id, cred.id)
+    await aiAdminApi.deletePoolCredential(poolId, cred.id)
     ElMessage.success('凭据已删除')
-    await fetchCredentials()
+    await fetchCredentials(poolId)
   } catch (e: any) {
     ElMessage.error(e?.message || '删除失败')
   }
@@ -426,7 +487,7 @@ const expiryTone = (ms: any) => {
                     {{ pool.tenant_access_mode === 'restricted' ? '专属' : '公开' }}
                   </DsTag>
                 </div>
-                <p class="pool-meta">遵循分组调度策略</p>
+                <p class="pool-meta">{{ pool.oauth_strategy === 'weighted' ? '池内按权重分配' : '池内轮询分配' }}</p>
                 <p v-if="pool.notes" class="pool-notes">{{ pool.notes }}</p>
               </div>
               <StabilityBadge :value="stabilityById.get(pool.id)" />
@@ -460,7 +521,7 @@ const expiryTone = (ms: any) => {
 
         <!-- Right: Credentials workspace -->
         <main v-if="selectedPool" class="pools-workspace">
-          <UpstreamStabilityPanel kind="oauth_pool" :resource-id="selectedPool.id" />
+          <UpstreamStabilityPanel kind="oauth_pool" :resource-id="selectedPool.id" @snapshot="selectedSnapshot = $event" />
           <!-- Pool header -->
           <section class="workspace-hero">
             <div class="hero-left">
@@ -468,7 +529,7 @@ const expiryTone = (ms: any) => {
               <div class="hero-title-row">
                 <h2>{{ selectedPool.name }}</h2>
                 <DsTag :tone="statusTone(selectedPool.status)">{{ selectedPool.status }}</DsTag>
-                <DsTag tone="info">按分组策略选路</DsTag>
+                <DsTag tone="info">{{ selectedPool.oauth_strategy === 'weighted' ? '池内加权调度' : '池内轮询调度' }}</DsTag>
               </div>
               <p v-if="selectedPool.notes" class="pool-hero-notes">{{ selectedPool.notes }}</p>
               <p class="pool-hero-type">
@@ -483,11 +544,11 @@ const expiryTone = (ms: any) => {
               </div>
               <div class="metric-cell">
                 <strong class="text-green">{{ activeCredCount }}</strong>
-                <span>Active</span>
+                <span>可调度</span>
               </div>
               <div class="metric-cell">
-                <strong :class="invalidCredCount > 0 ? 'text-red' : ''">{{ invalidCredCount }}</strong>
-                <span>Invalid</span>
+                <strong :class="coolingCredCount > 0 ? 'text-red' : ''">{{ coolingCredCount }}</strong>
+                <span>冷却 / 过期</span>
               </div>
               <div class="metric-cell"><strong>{{ formatMultiplier(selectedPool.tenant_multiplier ?? 1) }}</strong><span>租户扣费倍率</span></div>
             </div>
@@ -497,17 +558,19 @@ const expiryTone = (ms: any) => {
             target-kind="pool"
             :target-id="selectedPool.id"
             title="凭证池显式模型绑定"
-            description="模型在凭证池下只维护一次；API 格式由固定供应商运行时决定。"
-            empty-text="当前凭证池暂无显式模型绑定。可从预设模型导入后再手工细调。"
-            import-button-label="导入预设模型"
-            import-dialog-title="导入预设模型"
-            import-alert-title="按固定供应商预设创建凭证池的显式上游模型绑定。"
+            description="模型绑定在池内统一维护，调度时按各账号已确认的模型权限选择。"
+            empty-text="当前凭证池暂无显式模型绑定。可从发现的模型中导入后再细调。"
+            import-button-label="导入可用模型"
+            import-dialog-title="导入可用模型"
+            import-alert-title="优先使用各账号发现的模型；无法识别时提供内置目录建议，不代表账号已获授权。"
           />
 
           <!-- Credentials table -->
-          <PortalContentCard title="凭据列表" description="管理该账号池的 OAuth Token，支持导入、刷新、启停和删除" body-padding="none">
+          <PortalContentCard title="凭据列表" description="集中管理账号信息、凭据和权重，查看实际运行状态" body-padding="none">
             <template #actions>
-              <el-button :icon="Refresh" :loading="credLoading" @click="fetchCredentials">刷新</el-button>
+              <el-button :loading="modelsLoading" :disabled="credLoading || quotaLoading || credentials.length === 0" @click="inspectModels">识别账号模型</el-button>
+              <el-button :loading="quotaLoading" :disabled="credLoading || modelsLoading || credentials.length === 0" @click="inspectQuotas">更新上游配额</el-button>
+              <el-button :icon="Refresh" :loading="credLoading" @click="fetchCredentials()">刷新</el-button>
               <el-button type="primary" :icon="Plus" @click="openCredDialog">导入凭据</el-button>
             </template>
 
@@ -526,29 +589,39 @@ const expiryTone = (ms: any) => {
                 </DsEmpty>
               </template>
               <template #cell-status="{ row }">
-                <el-tooltip
-                  v-if="row.status === 'invalid'"
-                  :content="row.invalid_reason || '凭据已失效，请点击刷新尝试恢复'"
-                  placement="top"
-                >
-                  <el-switch
-                    :model-value="row.status === 'active'"
-                    disabled
-                    inline-prompt
-                    active-text="启用"
-                    inactive-text="停用"
-                    size="small"
-                  />
-                </el-tooltip>
-                <el-switch
-                  v-else
-                  :model-value="row.status === 'active'"
-                  inline-prompt
-                  active-text="启用"
-                  inactive-text="停用"
-                  size="small"
-                  @change="toggleCredStatus(row)"
-                />
+                <el-switch :model-value="row.status === 'active'" inline-prompt active-text="启用" inactive-text="停用" size="small" @change="toggleCredStatus(row)" />
+              </template>
+              <template #cell-name="{ row }">
+                <div class="runtime-cell">
+                  <strong>{{ row.name }}</strong>
+                  <span class="runtime-detail">{{ row.email || '未提供邮箱' }}</span>
+                </div>
+              </template>
+              <template #cell-runtime="{ row }">
+                <div class="runtime-cell">
+                  <DsTag :tone="accountRuntime(row).tone">{{ accountRuntime(row).label }}</DsTag>
+                  <span v-if="accountRuntime(row).reason" class="runtime-detail">{{ accountRuntime(row).reason }}</span>
+                  <span v-if="accountRuntime(row).retryAt" class="runtime-detail">{{ new Date(accountRuntime(row).retryAt!).toLocaleString() }} 可重试</span>
+                </div>
+              </template>
+              <template #cell-quota="{ row }">
+                <div v-if="credentialQuotaLines(row).length" class="runtime-cell">
+                  <div v-for="line in credentialQuotaLines(row)" :key="line.key" :title="`观测于 ${new Date(line.observedAt).toLocaleString()}`">
+                    <span class="runtime-detail">{{ line.label }}</span>
+                    <div>{{ line.value }}</div>
+                    <span v-if="line.resetAt" class="runtime-detail">{{ new Date(line.resetAt).toLocaleString() }} 重置</span>
+                  </div>
+                </div>
+                <span v-else class="text-muted">未知 · 等待上游报告</span>
+                <span v-if="row.quota_inspection?.state === 'failed'" class="runtime-detail">查询失败 · 保留已有观测</span>
+                <span v-else-if="row.quota_inspection?.state === 'unknown'" class="runtime-detail">上游暂未提供可用配额</span>
+              </template>
+              <template #cell-models="{ row }">
+                <div class="runtime-cell" :title="accountModels(row).detail">
+                  <DsTag :tone="accountModels(row).confirmed ? 'positive' : 'info'">{{ accountModels(row).label }}</DsTag>
+                  <span class="runtime-detail">{{ accountModels(row).preview || accountModels(row).detail }}</span>
+                  <span v-if="accountModels(row).observedAt" class="runtime-detail">{{ new Date(accountModels(row).observedAt!).toLocaleString() }} 观测</span>
+                </div>
               </template>
               <template #cell-expires="{ row }">
                 <DsTag v-if="row.expires_at" :tone="expiryTone(row.expires_at)">
@@ -561,6 +634,7 @@ const expiryTone = (ms: any) => {
                 <span v-else class="text-muted">—</span>
               </template>
               <template #cell-actions="{ row }">
+                <el-button link type="primary" size="small" @click="openAccountEditor(row)">编辑</el-button>
                 <el-button link type="primary" size="small" @click="handleRefreshCred(row)">刷新</el-button>
                 <el-button link type="danger" size="small" @click="handleDeleteCred(row)">删除</el-button>
               </template>
@@ -616,6 +690,12 @@ const expiryTone = (ms: any) => {
         <DsNumberInput v-model="poolForm.tenant_multiplier" :min="0" :step="0.1" :precision="4" class="w-full" />
       </el-form-item>
       <p class="form-hint form-hint-block">显式模型绑定请在工作区通过「导入预设模型 / 新增绑定」维护，本表单只编辑池元数据。</p>
+      <el-form-item label="池内调度">
+        <el-select v-model="poolForm.oauth_strategy">
+          <el-option label="轮询：优先使用最近较少选中的账号" value="round_robin" />
+          <el-option label="加权：按账号权重分配新会话" value="weighted" />
+        </el-select>
+      </el-form-item>
       <el-form-item label="备注">
         <el-input v-model="poolForm.notes" type="textarea" :rows="2" placeholder="可选" />
       </el-form-item>
@@ -629,11 +709,11 @@ const expiryTone = (ms: any) => {
   </el-dialog>
 
     <!-- Credential import dialog -->
-    <el-dialog v-model="credDialogVisible" title="导入 OAuth 凭据" width="640px">
+    <el-dialog v-model="credDialogVisible" title="导入 OAuth 凭据" width="min(640px, 94vw)" :close-on-click-modal="!credDialogLoading" :close-on-press-escape="!credDialogLoading" :show-close="!credDialogLoading">
     <el-tabs v-model="importMode">
       <el-tab-pane label="选择 JSON 文件" name="file">
         <div class="file-import-area">
-          <p class="import-hint">选择 Provider 工具导出的 JSON 文件，支持多选，系统将自动解析并批量导入</p>
+          <p class="import-hint">支持单账号 JSON、Codex auth.json 和账号数组。已有账号请通过编辑更新凭据。</p>
           <input
             ref="fileInputRef"
             type="file"
@@ -642,7 +722,7 @@ const expiryTone = (ms: any) => {
             style="display:none"
             @change="onFilesSelected"
           />
-          <el-button :icon="Plus" @click="fileInputRef?.click()">选择 JSON 文件</el-button>
+          <el-button :icon="Plus" :disabled="credDialogLoading" @click="fileInputRef?.click()">选择 JSON 文件</el-button>
 
           <div v-if="parsedFiles.length" class="parsed-file-list">
             <div
@@ -658,9 +738,9 @@ const expiryTone = (ms: any) => {
             >
               <div class="pf-name">{{ f.name }}</div>
               <div class="pf-meta">
-                <template v-if="f.error">
-                  <el-tag type="danger" size="small">解析失败</el-tag>
-                  <span class="pf-err-msg">{{ f.error }}</span>
+                <template v-if="f.error || f.duplicate">
+                  <el-tag type="danger" size="small">{{ f.duplicate ? '重复账号' : '解析失败' }}</el-tag>
+                  <span class="pf-err-msg">{{ f.error || f.duplicate }}</span>
                 </template>
                 <template v-else-if="f.importStatus === 'success'">
                   <el-tag type="success" size="small">导入成功</el-tag>
@@ -691,6 +771,8 @@ const expiryTone = (ms: any) => {
           <el-form-item label="邮箱">
             <el-input v-model="credForm.email" />
           </el-form-item>
+          <el-form-item label="账号 / 工作区 ID"><el-input v-model="credForm.account_id" /></el-form-item>
+          <el-form-item label="用户 ID"><el-input v-model="credForm.user_id" /></el-form-item>
           <el-form-item label="Access Token" required>
             <el-input v-model="credForm.access_token" type="textarea" :rows="3" />
           </el-form-item>
@@ -711,21 +793,26 @@ const expiryTone = (ms: any) => {
     </el-tabs>
 
     <template #footer>
-      <el-button @click="credDialogVisible = false">取消</el-button>
+      <el-button :disabled="credDialogLoading" @click="credDialogVisible = false">取消</el-button>
       <el-button type="primary" :loading="credDialogLoading" @click="submitCredential">
         {{ importMode === 'file'
-          ? `导入 ${parsedFiles.filter((f: any) => !f.error).length} 条凭据`
+          ? `导入 ${pendingImports.length} 条凭据`
           : '导入' }}
       </el-button>
     </template>
     </el-dialog>
+    <PoolAccountEditorDialog :open="Boolean(editingAccount)" :pool-id="editorPoolId" :account="editingAccount" @close="editingAccount = null" @saved="fetchCredentials" />
   </div>
 
 </template>
 
 <style scoped>
+.runtime-cell { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.runtime-detail { font-size: 12px; color: var(--ds-muted); overflow-wrap: anywhere; }
+
 .pools-page {
   flex: 1;
+  min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -1067,7 +1154,18 @@ const expiryTone = (ms: any) => {
 .w-full      { width: 100%; }
 .form-hint   { display: block; margin-top: 4px; font-size: 12px; color: var(--ds-faint); line-height: 1.4; }
 .form-hint-block { margin: 0 0 12px; }
-@media (max-width: 1200px) {
-  .pools-body { min-height: 0; }
+@media (max-width: 1280px) {
+  .pools-body { min-height: 0; flex-direction: column; }
+  .pools-rail { width: auto; }
+  .provider-tabs { flex-direction: row; flex-wrap: wrap; }
+  .provider-tab { flex: 1; }
+  .pool-list { max-height: 240px; }
+}
+@media (max-width: 768px) {
+  .pools-body { padding: 12px; }
+  .provider-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .workspace-hero { padding: 16px; }
+  .hero-metrics { flex-wrap: wrap; gap: 12px; }
+  .pool-hero-type { flex-wrap: wrap; }
 }
 </style>

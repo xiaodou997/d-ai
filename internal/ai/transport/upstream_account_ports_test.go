@@ -132,11 +132,15 @@ func TestUpstreamAccountRoutesUseSeparatedPorts(t *testing.T) {
 
 	updateRecorder := performUpstreamAccountRequest(router, http.MethodPatch, "/api/v1/upstream-accounts/account-update", `{
 		"name":"Updated","description":"Updated description","tenant_display_name":"Tenant updated","tenant_access_mode":"restricted",
+		"endpoints":[{"id":"endpoint-update","api_format":"openai_responses","base_url":"https://updated.example","extra_headers":{"Authorization":"***REDACTED***"}}],
 		"api_key":"update-secret","concurrency_limit":6,"price_book_id":"price-2","tenant_multiplier":1.5
 	}`)
 	requireUpstreamAccountStatus(t, updateRecorder, http.StatusOK)
 	if stub.updateInput.ID != "account-update" || stub.updateInput.Name != "Updated" || stub.updateInput.Description == nil || *stub.updateInput.Description != "Updated description" || stub.updateInput.APIKey != "update-secret" || stub.updateInput.ConcurrencyLimit == nil || *stub.updateInput.ConcurrencyLimit != 6 {
 		t.Fatalf("update input = %#v", stub.updateInput)
+	}
+	if len(stub.updateInput.Endpoints) != 1 || stub.updateInput.Endpoints[0].ID != "endpoint-update" || stub.updateInput.Endpoints[0].BaseURL != "https://updated.example" {
+		t.Fatalf("combined endpoint update input = %#v", stub.updateInput.Endpoints)
 	}
 
 	statusRecorder := performUpstreamAccountRequest(router, http.MethodPatch, "/api/v1/upstream-accounts/account-status/status", `{"status":"active"}`)

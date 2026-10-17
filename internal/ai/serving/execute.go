@@ -9,6 +9,7 @@ import (
 	"go.uber.org/zap"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -94,6 +95,7 @@ type ExecuteStep struct {
 	CompletionRecorder UsageLogger
 	Transport          Transporter
 	ClientRuntime      clientruntime.Invoker      // fixed OAuth providers; nil keeps the legacy path
+	CredentialModels   CredentialModelReader      // optional; fresh account manifests constrain selection
 	UpstreamLimiter    UpstreamConcurrencyLimiter // optional unless a direct account caps concurrency
 	Bridge             ProtocolBridge             // required for cross-surface request/response conversion
 	Availability       routing.Availability
@@ -179,15 +181,23 @@ func (s *ExecuteStep) Execute(ctx context.Context, req *Request) error {
 	// model name, so it must track the actually-selected route — including the
 	// very first attempt, whose pick may differ from candidates[0].
 	var (
-		prepared     corebridge.PreparedRequest
-		bodyBuiltFor string
-		lastErr      error
+		prepared       corebridge.PreparedRequest
+		bodyBuiltFor   string
+		lastErr        error
+		retryCandidate *domain.RouteCandidate
 	)
 	for len(req.Attempts) < budget.MaxAttempts {
 		if err := requestContextError(ctx, executionCtx, req); err != nil {
 			return err
 		}
-		cand, score := s.pickCandidate(executionCtx, req)
+		var cand *domain.RouteCandidate
+		var score float64
+		if retryCandidate != nil {
+			cand = retryCandidate
+			retryCandidate = nil
+		} else {
+			cand, score = s.pickCandidate(executionCtx, req)
+		}
 		if req.SelectionError != nil {
 			return apiErrorWithCause(503, "availability_state_unavailable", "upstream availability cannot be verified", req.SelectionError)
 		}
@@ -298,6 +308,8 @@ func (s *ExecuteStep) Execute(ctx context.Context, req *Request) error {
 		// Non-terminal outcomes — record and loop.
 		lastErr = result.finalErr
 		switch result.decision {
+		case DecisionRetrySameCred:
+			retryCandidate = cand
 		case DecisionRetryNewCred:
 			// Same route, fresh credential next iteration.
 			req.SelectedCredential = nil
@@ -376,6 +388,10 @@ func (s *ExecuteStep) relay(dc *deadlineController, req *Request, upResp *Upstre
 		return s.executeImageRelay(dc, req, upResp, req.Envelope.W, startTime)
 	}
 	convert := req.Candidate != nil && req.ClientProtocol != req.Candidate.Protocol
+	if !req.IsStream && req.Candidate != nil && req.Candidate.FixedProviderType == domain.FixedProviderCodex &&
+		req.Candidate.Protocol == domain.ProtocolOpenAIResponses && strings.Contains(strings.ToLower(upResp.Headers.Get("Content-Type")), "text/event-stream") {
+		return s.executeCodexSyncStream(dc, req, upResp, convert)
+	}
 	if req.IsStream {
 		if convert {
 			return s.executeStreamConvert(dc, req, upResp, req.Envelope.W, startTime)
@@ -402,12 +418,12 @@ func (req *Request) recordSkippedCandidate(cand *domain.RouteCandidate, reason s
 		targetID = cand.PoolID
 	}
 	status := ResultCircuitOpen
-	if reason == "no_credential" || reason == "local_request_error" || reason == "upstream_capacity_exhausted" {
+	if reason == "no_credential" || reason == "local_request_error" || reason == "upstream_capacity_exhausted" || reason == "credential_model_unsupported" {
 		status = ResultRejected
 	}
 	skipped := AttemptRecord{
 		Sequence:    len(req.Attempts) + len(req.SkippedAttempts) + 1,
-		CandidateID: cand.Key(), AccountID: cand.EffectiveAccountID(), ModelCode: cand.ModelCode, Operation: cand.OperationKey(), Stream: req.IsStream, CompletedAt: time.Now(),
+		CandidateID: cand.Key(), AccountID: cand.EffectiveAccountID(), CredentialID: cand.CredentialID, ModelCode: cand.ModelCode, Operation: cand.OperationKey(), Stream: req.IsStream, CompletedAt: time.Now(),
 		RouteID:         cand.RouteID,
 		GroupID:         cand.GroupID,
 		RoutePolicy:     cand.RoutePolicy,

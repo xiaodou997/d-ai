@@ -208,7 +208,7 @@ function toCreateAccountBody(value: AccountWriteRequest): OperationBody<"ai-crea
 }
 
 function toUpdateAccountBody(value: AccountWriteRequest): OperationBody<"ai-update-upstream-account"> {
-  return { ...toAccountBodyFields(value), api_key: value.api_key };
+  return { ...toAccountBodyFields(value), api_key: value.api_key, endpoints: value.endpoints };
 }
 
 function toAccount(value: AccountTransport): AccountDTO {
@@ -489,7 +489,10 @@ function toPoolAvailableModels(value: PoolAvailableModelsTransport): PoolAvailab
     pool_id: value.pool_id,
     fixed_provider_type: value.fixed_provider_type,
     models: value.models ?? [],
-    source: value.source
+    source: value.source,
+    profile_revision: value.profile_revision,
+    observed_at: value.observed_at,
+    accounts: value.accounts?.map(account => ({ ...account, models: account.models ?? [] })) ?? []
   };
 }
 
@@ -678,6 +681,10 @@ function toPoolCredential(value: PoolCredentialTransport): PoolCredentialDTO {
     weight: value.weight,
     status: value.status,
     invalid_reason: value.invalid_reason,
+    cooldown_until: value.cooldown_until,
+    quotas: value.quotas?.map(quota => ({ ...quota, windows: quota.windows ?? [] })),
+    quota_inspection: value.quota_inspection,
+    model_catalog: value.model_catalog ? { ...value.model_catalog, models: value.model_catalog.models ?? [] } : undefined,
     last_used_at: value.last_used_at,
     last_refreshed_at: value.last_refreshed_at,
     last_failed_at: value.last_failed_at,
@@ -717,7 +724,12 @@ function toPoolCredentialPatchBody(value: PoolCredentialPatchRequest): PoolCrede
   if (value.weight !== undefined && !Number.isFinite(value.weight)) {
     throw new Error("OAuth credential weight must be a finite number");
   }
-  return { status: value.status === undefined ? undefined : toPoolStatus(value.status) as PoolCredentialPatchStatus, weight: value.weight };
+  return {
+    ...value,
+    status: value.status === undefined ? undefined : toPoolStatus(value.status) as PoolCredentialPatchStatus,
+    access_token: value.access_token?.trim() || undefined,
+    refresh_token: value.refresh_token?.trim() || undefined
+  };
 }
 
 function toOAuthPoolHealth(value: OAuthPoolHealthTransport): OAuthPoolHealthDTO {
@@ -1441,11 +1453,12 @@ export const aiAdminApi = {
       baseUrl: apiBaseUrl
     }).then((value) => ({ deleted: value.deleted }));
   },
-  listPoolCredentials(poolId: string) {
+  listPoolCredentials(poolId: string, refreshQuota = false) {
     return typedRequest<"ai-list-pool-credentials">({
       method: "GET",
       path: `/api/v1/credential-pools/${encodeURIComponent(poolId)}/credentials`,
       pathParams: { poolID: poolId },
+      query: refreshQuota ? { refresh_quota: true } : undefined,
       headers: apiHeaders,
       baseUrl: apiBaseUrl
     }).then(toPoolCredentials);
@@ -1488,11 +1501,12 @@ export const aiAdminApi = {
       baseUrl: apiBaseUrl
     }).then(toPoolCredential);
   },
-  getPoolAvailableModels(poolId: string) {
+  getPoolAvailableModels(poolId: string, refresh = false) {
     return typedRequest<"ai-get-pool-available-models">({
       method: "GET",
       path: `/api/v1/credential-pools/${encodeURIComponent(poolId)}/available-models`,
       pathParams: { poolID: poolId },
+      query: refresh ? { refresh: true } : undefined,
       headers: apiHeaders,
       baseUrl: apiBaseUrl
     }).then(toPoolAvailableModels);

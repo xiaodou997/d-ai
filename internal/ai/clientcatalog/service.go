@@ -2,14 +2,11 @@ package clientcatalog
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"sort"
 	"sync"
 	"time"
 
 	"go.uber.org/zap"
-	"golang.org/x/sync/singleflight"
 
 	"xiaodou/dai/internal/ai/clientruntime"
 	"xiaodou/dai/internal/ai/domain"
@@ -20,11 +17,12 @@ const (
 	DefaultCacheTTL       = 10 * time.Minute
 	DefaultFailureBackoff = time.Minute
 	DefaultFetchTimeout   = 15 * time.Second
-	FallbackRevision      = "builtin-model-catalog@2026-07-28"
+	FallbackRevision      = "builtin-model-catalog@2026-10-17"
 )
 
-type CredentialSelector interface {
-	SelectCredentialFromPool(ctx context.Context, poolID, strategy string) (*domain.OAuthCredential, error)
+type CredentialReader interface {
+	ListModelCredentials(context.Context, string) ([]domain.CredentialModelIdentity, error)
+	GetDecryptedByID(context.Context, string) (*domain.OAuthCredential, error)
 }
 
 type Result struct {
@@ -32,21 +30,21 @@ type Result struct {
 	Source          string
 	ProfileRevision string
 	ObservedAt      time.Time
+	Accounts        []domain.CredentialModelCatalog
 }
 
 type cacheEntry struct {
+	identity    domain.CredentialModelIdentity
 	result      Result
 	etag        string
 	expiresAt   time.Time
 	nextAttempt time.Time
 }
 
-var errServiceStopped = errors.New("client catalog service is stopped")
-
 // Service owns live fixed-provider model discovery, cache revalidation,
 // stale-if-error behavior, and versioned built-in fallbacks.
 type Service struct {
-	selector  CredentialSelector
+	reader    CredentialReader
 	inspector clientruntime.Inspector
 	logger    *zap.Logger
 
@@ -57,7 +55,8 @@ type Service struct {
 
 	mu      sync.Mutex
 	entries map[string]cacheEntry
-	flights singleflight.Group
+	pending map[domain.CredentialModelIdentity]*accountLoad
+	slots   chan struct{}
 
 	lifecycleMu sync.Mutex
 	started     bool
@@ -70,12 +69,12 @@ type Service struct {
 
 var _ lifecycle.Component = (*Service)(nil)
 
-func New(selector CredentialSelector, inspector clientruntime.Inspector, logger *zap.Logger) *Service {
+func New(reader CredentialReader, inspector clientruntime.Inspector, logger *zap.Logger) *Service {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
 	return &Service{
-		selector:       selector,
+		reader:         reader,
 		inspector:      inspector,
 		logger:         logger,
 		cacheTTL:       DefaultCacheTTL,
@@ -83,6 +82,8 @@ func New(selector CredentialSelector, inspector clientruntime.Inspector, logger 
 		fetchTimeout:   DefaultFetchTimeout,
 		now:            time.Now,
 		entries:        make(map[string]cacheEntry),
+		pending:        make(map[domain.CredentialModelIdentity]*accountLoad),
+		slots:          make(chan struct{}, 4),
 		activeLoads:    make(map[uint64]context.CancelFunc),
 	}
 }
@@ -108,7 +109,7 @@ func (s *Service) Start(ctx context.Context) {
 }
 
 // Stop cancels every in-flight provider discovery and waits for the
-// singleflight leader to leave the selector/inspector path. It is safe to call
+// account workers to leave the credential reader/inspector path. It is safe to call
 // again with a longer context after an earlier wait timed out.
 func (s *Service) Stop(ctx context.Context) error {
 	if s == nil {
@@ -150,52 +151,6 @@ func (s *Service) Health() lifecycle.HealthSnapshot {
 	started, stopped := s.started, s.stopped
 	s.lifecycleMu.Unlock()
 	return lifecycle.HealthSnapshot{Started: started, Stopped: stopped}
-}
-
-func (s *Service) Resolve(ctx context.Context, pool domain.CredentialPool) Result {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	if s == nil || s.selector == nil || s.inspector == nil ||
-		!s.inspector.SupportsInspection(pool.FixedProviderType, clientruntime.InspectModels) {
-		if s != nil && s.now != nil {
-			return fallbackResult(pool.FixedProviderType, s.now())
-		}
-		return fallbackResult(pool.FixedProviderType, time.Now())
-	}
-
-	if cached, ok := s.cachedResult(pool.ID); ok {
-		return cached
-	}
-
-	ch := s.flights.DoChan(pool.ID, func() (any, error) {
-		if cached, ok := s.cachedResult(pool.ID); ok {
-			return cached, nil
-		}
-		fetchCtx, release, ok := s.beginLoad(ctx)
-		if !ok {
-			return Result{}, errServiceStopped
-		}
-		defer release()
-		return s.refresh(fetchCtx, pool)
-	})
-	select {
-	case <-ctx.Done():
-		return s.staleOrFallback(pool)
-	case outcome := <-ch:
-		if outcome.Err == nil {
-			return cloneResult(outcome.Val.(Result))
-		}
-		if errors.Is(outcome.Err, errServiceStopped) {
-			return s.staleOrFallback(pool)
-		}
-		s.logger.Warn("fixed-provider model discovery failed",
-			zap.String("pool_id", pool.ID),
-			zap.String("fixed_provider_type", string(pool.FixedProviderType)),
-			zap.Error(outcome.Err),
-		)
-		return s.staleOrFallback(pool)
-	}
 }
 
 func (s *Service) beginLoad(callerCtx context.Context) (context.Context, func(), bool) {
@@ -240,122 +195,18 @@ func (s *Service) beginLoad(callerCtx context.Context) (context.Context, func(),
 	return fetchCtx, release, true
 }
 
-func (s *Service) cachedResult(poolID string) (Result, bool) {
-	now := s.now()
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	entry, ok := s.entries[poolID]
-	if !ok {
-		return Result{}, false
-	}
-	if !now.Before(entry.expiresAt) {
-		if now.Before(entry.nextAttempt) && len(entry.result.Models) > 0 {
-			result := cloneResult(entry.result)
-			result.Source = "stale"
-			return result, true
-		}
-		return Result{}, false
-	}
-	result := cloneResult(entry.result)
-	result.Source = "cache"
-	return result, true
-}
-
-func (s *Service) refresh(ctx context.Context, pool domain.CredentialPool) (Result, error) {
-	now := s.now()
-	s.mu.Lock()
-	entry := s.entries[pool.ID]
-	if now.Before(entry.nextAttempt) {
-		s.mu.Unlock()
-		return Result{}, fmt.Errorf("model discovery retry is cooling down")
-	}
-	etag := entry.etag
-	s.mu.Unlock()
-
-	credential, err := s.selector.SelectCredentialFromPool(ctx, pool.ID, pool.OAuthStrategy)
-	if err != nil {
-		s.recordFailure(pool.ID, now)
-		return Result{}, fmt.Errorf("select inspection credential: %w", err)
-	}
-	snapshot, err := s.inspector.Inspect(ctx, clientruntime.Inspection{
-		Provider:    pool.FixedProviderType,
-		Credential:  clientruntime.SnapshotCredential(credential),
-		Want:        clientruntime.InspectModels,
-		IfNoneMatch: etag,
-	})
-	if err != nil {
-		s.recordFailure(pool.ID, now)
-		return Result{}, fmt.Errorf("inspect provider models: %w", err)
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if snapshot.NotModified {
-		entry = s.entries[pool.ID]
-		if len(entry.result.Models) == 0 {
-			entry.nextAttempt = now.Add(s.failureBackoff)
-			s.entries[pool.ID] = entry
-			return Result{}, fmt.Errorf("provider returned not-modified without a cached manifest")
-		}
-		entry.expiresAt = now.Add(s.cacheTTL)
-		entry.nextAttempt = time.Time{}
-		entry.result.ObservedAt = snapshot.ObservedAt
-		s.entries[pool.ID] = entry
-		result := cloneResult(entry.result)
-		result.Source = "cache"
-		return result, nil
-	}
-	if len(snapshot.Models) == 0 {
-		entry.nextAttempt = now.Add(s.failureBackoff)
-		s.entries[pool.ID] = entry
-		return Result{}, fmt.Errorf("provider returned an empty model manifest")
-	}
-	result := Result{
-		Models:          cloneModels(snapshot.Models),
-		Source:          "live",
-		ProfileRevision: snapshot.ProfileRevision,
-		ObservedAt:      snapshot.ObservedAt,
-	}
-	s.entries[pool.ID] = cacheEntry{
-		result:    cloneResult(result),
-		etag:      snapshot.ETag,
-		expiresAt: now.Add(s.cacheTTL),
-	}
-	return result, nil
-}
-
-func (s *Service) recordFailure(poolID string, now time.Time) {
-	s.mu.Lock()
-	entry := s.entries[poolID]
-	entry.nextAttempt = now.Add(s.failureBackoff)
-	s.entries[poolID] = entry
-	s.mu.Unlock()
-}
-
-func (s *Service) staleOrFallback(pool domain.CredentialPool) Result {
-	s.mu.Lock()
-	entry := s.entries[pool.ID]
-	s.mu.Unlock()
-	if len(entry.result.Models) > 0 {
-		result := cloneResult(entry.result)
-		result.Source = "stale"
-		return result
-	}
-	return fallbackResult(pool.FixedProviderType, s.now())
-}
-
 func FallbackModels(provider domain.FixedProviderType) []clientruntime.ModelCard {
 	var ids []string
 	switch provider {
 	case domain.FixedProviderCodex:
 		ids = []string{
+			"gpt-6-astra",
+			"gpt-6.1-sol",
+			"gpt-6-sol",
+			"gpt-6-luna",
 			"gpt-5.6-sol",
 			"gpt-5.6-terra",
 			"gpt-5.6-luna",
-			"gpt-5.5",
-			"gpt-5.4",
-			"gpt-5.4-mini",
-			"gpt-5.2",
 		}
 	case domain.FixedProviderClaudeOAuth:
 		ids = []string{

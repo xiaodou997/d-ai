@@ -44,10 +44,17 @@ type AccountUpdate struct {
 	TenantDisplayName string
 	TenantAccessMode  string
 	Ciphertext        string
-	ConcurrencyLimit  *int
-	PriceBookID       string
-	TenantMultiplier  *float64
-	Status            string
+	// Nil preserves endpoints. A non-nil set replaces them in the same transaction.
+	Endpoints        []AccountEndpointUpdate
+	ConcurrencyLimit *int
+	PriceBookID      string
+	TenantMultiplier *float64
+	Status           string
+}
+
+type AccountEndpointUpdate struct {
+	ID string
+	domain.UpstreamAccountEndpointWrite
 }
 
 type AccountSecret struct {

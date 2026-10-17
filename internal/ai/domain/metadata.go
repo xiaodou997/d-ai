@@ -10,6 +10,9 @@ var credentialSummaryMetadataKeys = [...]string{
 	"plan_type",
 	"user_id",
 	"account_user_id",
+	"workspace_id",
+	"organization_id",
+	"project_id",
 }
 
 // CredentialSummaryMetadata returns the small, non-secret account identity

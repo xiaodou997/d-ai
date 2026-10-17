@@ -27,6 +27,10 @@ type CredentialCandidateLister interface {
 	ListCredentialCandidates(context.Context, string) ([]string, int64, error)
 }
 
+type CredentialModelReader interface {
+	ReadCredentialModels(context.Context, string) (map[string]domain.CredentialModelCatalog, error)
+}
+
 // Expand credential identities without decrypting secrets or occupying leases.
 // Their pricing remains the immutable group/pool snapshot prepared earlier.
 func (s *ExecuteStep) expandCredentialCandidates(ctx context.Context, req *Request) error {
@@ -125,6 +129,41 @@ func (s *ExecuteStep) candidateAvailability(ctx context.Context, req *Request, c
 // never claims a recovery slot and never calls a model endpoint.
 func (s *ExecuteStep) prepareEligible(ctx context.Context, req *Request) ([]*domain.RouteCandidate, map[string]bool, error) {
 	eligible := make([]*domain.RouteCandidate, 0, len(req.Candidates))
+	models := map[string]map[string]domain.CredentialModelCatalog{}
+	if s.CredentialModels != nil {
+		for _, c := range req.Candidates {
+			if c == nil || !c.IsPoolRoute() || req.UsedCandidates[c.Key()] {
+				continue
+			}
+			if _, read := models[c.PoolID]; !read {
+				// Discovery is advisory. A failed read must not turn an unknown
+				// account capability into an unavailable gateway.
+				catalog, err := s.CredentialModels.ReadCredentialModels(ctx, c.PoolID)
+				if err != nil {
+					zap.L().Warn("account model capabilities unavailable", zap.String("pool_id", c.PoolID), zap.Error(err))
+				}
+				models[c.PoolID] = catalog
+			}
+		}
+	}
+	quotas := map[string][]domain.CredentialQuota{}
+	if reader, ok := s.OAuthPool.(interface {
+		ReadCredentialQuotas(context.Context, []string) (map[string][]domain.CredentialQuota, error)
+	}); ok {
+		ids := []string{}
+		seen := map[string]bool{}
+		for _, c := range req.Candidates {
+			if c.CredentialID != "" && !seen[c.CredentialID] {
+				ids = append(ids, c.CredentialID)
+				seen[c.CredentialID] = true
+			}
+		}
+		var err error
+		quotas, err = reader.ReadCredentialQuotas(ctx, ids)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
 	recovery := map[string]bool{}
 	if req.PreparedCredentials == nil {
 		req.PreparedCredentials = map[string]*domain.OAuthCredential{}
@@ -187,6 +226,28 @@ func (s *ExecuteStep) prepareEligible(ctx context.Context, req *Request) ([]*dom
 			}
 			req.PreparedCredentials[c.Key()] = cred
 		}
+		if cred != nil {
+			if models[c.PoolID][cred.ID].Excludes(c.EffectiveUpstreamModel(), time.Now().UnixMilli()) {
+				req.recordSkippedCandidate(c, "credential_model_unsupported")
+				req.UsedCandidates[c.Key()] = true
+				continue
+			}
+			var until int64
+			for _, q := range quotas[cred.ID] {
+				if q.Model == "" || q.Model == c.EffectiveUpstreamModel() {
+					until = max(until, q.BlockedUntil(time.Now().UnixMilli()))
+				}
+			}
+			if until > 0 {
+				req.recordSkippedCandidate(c, "quota_exhausted")
+				req.UsedCandidates[c.Key()] = true
+				if req.AvailabilityRetryAt == 0 || until < req.AvailabilityRetryAt {
+					req.AvailabilityRetryAt = until
+				}
+				continue
+			}
+		}
+
 		ok, trial, err := s.candidateAvailability(ctx, req, c, cred)
 		if err != nil {
 			return nil, nil, err
@@ -260,7 +321,7 @@ func availabilityVerdict(req *Request, c *domain.RouteCandidate, out Outcome) ro
 	case ResultUnauthorized:
 		v.FailureScope = scopeOfKind(scopes, "authentication")
 		v.Authentication = true
-	case ResultRateLimited:
+	case ResultRateLimited, ResultQuotaExhausted:
 		v.FailureScope = scopeOfKind(scopes, "rate_limit")
 		v.CooldownUntil = out.RetryAt
 	case ResultModelError:
@@ -311,9 +372,12 @@ func (s *ExecuteStep) recordCompletedAttempt(ctx context.Context, req *Request, 
 		a.AvailabilityOutcome = a.Outcome.String()
 	}
 	success := a.Outcome == ResultSuccess && req.RequestStatus == domain.RequestSuccess
-	failure := a.Outcome == ResultNetwork || a.Outcome == ResultTimeout || a.Outcome == ResultServerError || a.Outcome == ResultUnauthorized || a.Outcome == ResultRateLimited || a.Outcome == ResultModelError
+	failure := a.Outcome == ResultNetwork || a.Outcome == ResultTimeout || a.Outcome == ResultServerError || a.Outcome == ResultUnauthorized || a.Outcome == ResultRateLimited || a.Outcome == ResultQuotaExhausted || a.Outcome == ResultCapacityExhausted || a.Outcome == ResultModelError
 	if stats, ok := s.Stats.(routing.OutcomeStats); ok {
 		stats.Observe(context.WithoutCancel(ctx), candidateStatsKey(c, req.IsStream), success, failure, a.FirstOutputMs, a.TotalMs)
+		if c.IsPoolRoute() && c.CredentialID != "" {
+			stats.Observe(context.WithoutCancel(ctx), candidateStatsKey(poolTarget(c), req.IsStream), success, failure, a.FirstOutputMs, a.TotalMs)
+		}
 	}
 	if recorder, ok := s.CompletionRecorder.(AttemptRecorder); ok {
 		recordCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)

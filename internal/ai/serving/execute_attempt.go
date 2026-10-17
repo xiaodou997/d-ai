@@ -19,6 +19,7 @@ import (
 	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/internal/ai/routing"
 	"xiaodou/dai/internal/ai/upstreamcompat"
+	"xiaodou/dai/internal/ai/upstreamquota"
 )
 
 func (s *ExecuteStep) usesClientRuntime(candidate *domain.RouteCandidate) bool {
@@ -187,14 +188,20 @@ func (s *ExecuteStep) runAttempt(parentCtx context.Context, req *Request, cand *
 	req.FirstTokenMs = 0
 	req.MarkFirstAttemptStarted(attemptStartedAt)
 
-	// P3: track inflight count; always decrement even on error.
-	if stats, ok := s.Stats.(routing.InflightLeaseStats); ok {
-		token := uuid.NewString()
-		stats.BeginInflight(parentCtx, cand.CapacityKey(), token, candidateProbeLease(cand))
-		defer stats.EndInflight(parentCtx, cand.CapacityKey(), token)
-	} else if s.Stats != nil {
-		s.Stats.IncrInflight(parentCtx, cand.CapacityKey())
-		defer s.Stats.DecrInflight(parentCtx, cand.CapacityKey())
+	// Track both concrete-account load and pool load for group-level scoring.
+	capacityKeys := []string{cand.CapacityKey()}
+	if cand.IsPoolRoute() && cand.CredentialID != "" {
+		capacityKeys = append(capacityKeys, poolTarget(cand).CapacityKey())
+	}
+	for _, key := range capacityKeys {
+		if stats, ok := s.Stats.(routing.InflightLeaseStats); ok {
+			token := uuid.NewString()
+			stats.BeginInflight(parentCtx, key, token, candidateProbeLease(cand))
+			defer stats.EndInflight(context.WithoutCancel(parentCtx), key, token)
+		} else if s.Stats != nil {
+			s.Stats.IncrInflight(parentCtx, key)
+			defer s.Stats.DecrInflight(context.WithoutCancel(parentCtx), key)
+		}
 	}
 
 	upstreamURL := cand.BaseURL
@@ -271,6 +278,17 @@ func (s *ExecuteStep) runAttempt(parentCtx context.Context, req *Request, cand *
 	status := 0
 	if upResp != nil {
 		status = upResp.StatusCode
+	}
+	if req.SelectedCredential != nil && upResp != nil && callErr == nil {
+		if quota := upstreamquota.FromHeaders(cand.FixedProviderType, cand.EffectiveUpstreamModel(), upResp.Headers, time.Now()); quota != nil {
+			if observer, ok := s.OAuthPool.(interface {
+				ObserveCredentialQuota(context.Context, string, int64, domain.CredentialQuota) error
+			}); ok {
+				if err := observer.ObserveCredentialQuota(parentCtx, req.SelectedCredential.ID, req.SelectedCredential.TokenVersion, *quota); err != nil {
+					zap.L().Warn("quota observation failed", zap.Error(err))
+				}
+			}
+		}
 	}
 	outcome := ClassifyResponse(status, upstreamHeaders(upResp), "", callErr)
 	if callErr != nil && phaseCause == nil && parentCtx.Err() != nil {
@@ -369,10 +387,33 @@ func (s *ExecuteStep) runAttempt(parentCtx context.Context, req *Request, cand *
 
 	decision := outcome.Decision(req.SelectedCredential != nil)
 
-	if runtimeTrace != nil &&
+	if runtimeTrace != nil && outcome.Status != ResultCapacityExhausted &&
 		(runtimeTrace.CredentialEffect == clientruntime.CredentialEffectCooldown || runtimeTrace.CredentialEffect == clientruntime.CredentialEffectRefreshed) &&
 		req.SelectedCredential != nil {
 		decision = DecisionRetryNewCred
+	}
+	if outcome.Status == ResultCapacityExhausted {
+		alreadyRetried := false
+		for _, attempt := range req.Attempts[:attemptIndex] {
+			if attempt.CandidateID == cand.Key() && attempt.Outcome == ResultCapacityExhausted {
+				alreadyRetried = true
+			}
+		}
+		delay := time.Second
+		if outcome.RetryAt > 0 {
+			delay = max(0, time.Until(time.UnixMilli(outcome.RetryAt)))
+		}
+		if !alreadyRetried && delay >= 0 && delay <= 2*time.Second {
+			drainAndClose(upResp)
+			s.releaseAvailability(req)
+			timer := time.NewTimer(delay)
+			defer timer.Stop()
+			select {
+			case <-parentCtx.Done():
+			case <-timer.C:
+			}
+			return attemptResult{decision: DecisionRetrySameCred, finalErr: apiError(http.StatusServiceUnavailable, "upstream_capacity_exhausted", "upstream shared capacity is temporarily exhausted")}
+		}
 	}
 	switch decision {
 	case DecisionAccept:

@@ -269,3 +269,36 @@ func TestGetPoolCredentialScopedRejectsWrongPool(t *testing.T) {
 		t.Fatalf("getPoolCredentialScoped() error = %v, want domain.ErrNotFound", err)
 	}
 }
+
+type credentialEditorStub struct {
+	input domain.OAuthCredentialUpdate
+	calls int
+}
+
+func (s *credentialEditorStub) UpdateCredential(_ context.Context, _ string, input domain.OAuthCredentialUpdate) error {
+	s.input = input
+	s.calls++
+	return nil
+}
+func (*credentialEditorStub) Delete(context.Context, string) error { return nil }
+func TestAccountEditorSavesOneCommandAndReturnsNoSecrets(t *testing.T) {
+	writer := &credentialEditorStub{}
+	reader := credentialReaderStub{summary: &domain.OAuthCredentialSummary{ID: "cred-1", PoolID: "pool-1", Name: "Saved", ProviderType: "codex", Status: "active"}}
+	router, api := server.New(server.Options{Title: "test", Version: "test"})
+	registerOAuthPools(api, OAuthManagementHTTPDeps{CredentialWriter: writer, CredentialReader: reader})
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/credential-pools/pool-1/credentials/cred-1", strings.NewReader(`{"name":"Saved","weight":0,"access_token":"new-access-secret","auth_metadata":{"account_id":"workspace"}}`))
+	req.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, req)
+	if response.Code != 200 || writer.calls != 1 || writer.input.AccessToken != "new-access-secret" || writer.input.RefreshToken != "" || writer.input.Weight == nil || *writer.input.Weight != 0 {
+		t.Fatalf("editor command failed: code=%d calls=%d", response.Code, writer.calls)
+	}
+	if strings.Contains(response.Body.String(), "secret") || strings.Contains(response.Body.String(), "access_token") || strings.Contains(response.Body.String(), "refresh_token") {
+		t.Fatal("editor response exposed tokens")
+	}
+	zero := 0
+	create, err := poolCredentialCreateInput("codex", poolCredentialWriteRequest{AccessToken: "access", Weight: &zero})
+	if err != nil || create.Weight != 0 || !create.WeightSpecified {
+		t.Fatal("explicit zero import weight was replaced by the default")
+	}
+}

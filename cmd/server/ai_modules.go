@@ -23,6 +23,7 @@ import (
 	"xiaodou/dai/internal/ai/asynctask"
 	"xiaodou/dai/internal/ai/billingcontrol"
 	"xiaodou/dai/internal/ai/clientcatalog"
+	"xiaodou/dai/internal/ai/clientquota"
 	"xiaodou/dai/internal/ai/clientruntime"
 	"xiaodou/dai/internal/ai/commercial"
 	"xiaodou/dai/internal/ai/console"
@@ -71,6 +72,7 @@ type aiModules struct {
 	priceBookSvc       *billingcontrol.Service
 	clientRuntime      *clientruntime.Runtime
 	clientCatalog      *clientcatalog.Service
+	clientQuota        *clientquota.Service
 	runtimeBinder      *coreruntime.CachedBindingResolver
 	subscriptionSvc    *subscription.Service
 	riskControlWorker  *riskcontrol.Worker
@@ -254,6 +256,7 @@ func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisCl
 		clientcredentials.New(oauthCreds, refresher),
 	)
 	poolModelCatalog := clientcatalog.New(oauthCreds, fixedClientRuntime, appLogger)
+	poolQuotaInspector := clientquota.New(oauthCreds, fixedClientRuntime)
 	managementHTTPClient := &http.Client{}
 	diagnosticsHTTPClient := upstreamHTTPTransport.DiagnosticClient()
 	modelCapabilities := externalmodels.New(redisClient, diagnosticsHTTPClient)
@@ -262,6 +265,7 @@ func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisCl
 		CompletionRecorder: usageLogger,
 		Transport:          upstreamHTTPTransport,
 		ClientRuntime:      fixedClientRuntime,
+		CredentialModels:   poolModelCatalog,
 		UpstreamLimiter:    upstreamConcurrencyLimiter,
 		Bridge:             bridgeRuntime,
 		Availability:       availabilityService,
@@ -433,6 +437,7 @@ func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisCl
 				PoolHealthReader:  oauthCreds,
 				TokenRefresher:    refresher,
 				ClientCatalog:     poolModelCatalog,
+				QuotaInspector:    poolQuotaInspector,
 				ModelBindings:     modelBindings,
 				BanChecker:        banChecker,
 			},
@@ -547,6 +552,7 @@ func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisCl
 		priceBookSvc:       priceBookSvc,
 		clientRuntime:      fixedClientRuntime,
 		clientCatalog:      poolModelCatalog,
+		clientQuota:        poolQuotaInspector,
 		runtimeBinder:      runtimeBinder,
 		subscriptionSvc:    subsSvc,
 		riskControlWorker:  riskControlWorker,
@@ -638,6 +644,9 @@ func (m *aiModules) Start(ctx context.Context) {
 		if m.clientCatalog != nil {
 			m.clientCatalog.Start(workerCtx)
 		}
+		if m.clientQuota != nil {
+			m.clientQuota.Start(workerCtx)
+		}
 		if m.runtimeBinder != nil {
 			m.runtimeBinder.Start(workerCtx)
 		}
@@ -688,6 +697,11 @@ func (m *aiModules) Stop(ctx context.Context) error {
 	var errs []error
 	if workerCancel != nil {
 		workerCancel()
+	}
+	if m.clientQuota != nil {
+		if err := m.clientQuota.Stop(ctx); err != nil {
+			errs = append(errs, fmt.Errorf("stop oauth quota inspection: %w", err))
+		}
 	}
 	if m.clientCatalog != nil {
 		if err := m.clientCatalog.Stop(ctx); err != nil {

@@ -334,6 +334,143 @@ async function loginAs(page: Page, role: PortalRole, redirect = "/overview", opt
   return state;
 }
 
+test("upstream node URL and credential save through one editor", async ({ page }, testInfo) => {
+  test.skip(!useMockApi, "Uses isolated upstream fixtures");
+  const errors = watchBrowserErrors(page);
+  const state = await installMockApi(page, roles[0]);
+  const account = {
+    id: "connection-1", name: "Primary upstream", tenant_display_name: "Primary upstream",
+    tenant_access_mode: "public", status: "active", tenant_multiplier: 1,
+    endpoints: [{
+      id: "endpoint-1", account_id: "connection-1", api_format: "openai_responses",
+      base_url: "https://original.example", auth_scheme: "format_default",
+      extra_headers: { "X-Token": "***REDACTED***" }, status: "active", health_status: "unknown"
+    }]
+  };
+  await page.route(url => url.pathname.startsWith("/api/v1/upstream-accounts"), async route => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    if (path === "/api/v1/upstream-accounts" && request.method() === "GET") {
+      await fulfillJson(route, { items: [account], total: 1 });
+    } else if (path === "/api/v1/upstream-accounts/connection-1" && request.method() === "PATCH") {
+      const body = readPostData(request);
+      state.requests.push({ method: request.method(), path, body });
+      const update = body as { endpoints: { base_url: string }[] };
+      account.endpoints[0].base_url = update.endpoints[0].base_url;
+      await fulfillJson(route, account);
+    } else {
+      await route.fallback();
+    }
+  });
+  await page.goto("/login?redirect=%2Fadmin%2Fai%2Fupstreams%2Faccounts%2Fconnection-1");
+  await page.locator('input[name="username"]').fill(roles[0].username);
+  await page.locator('input[name="password"]').fill(credentialsFor(roles[0]).password);
+  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await page.getByRole("button", { name: "编辑连接", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "编辑上游连接" });
+  await expect(dialog).toBeVisible();
+  await dialog.getByPlaceholder("留空不改；密文存储").fill("replacement-test-key");
+  await dialog.getByPlaceholder("https://api.example.com").fill("https://replacement.example");
+  expect(state.requests.filter(request => request.method === "PATCH")).toHaveLength(0);
+  await page.screenshot({ path: testInfo.outputPath("upstream-connection-editor.png"), animations: "disabled" });
+  await dialog.getByRole("button", { name: "保存", exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+  const writes = state.requests.filter(request => request.method === "PATCH");
+  expect(writes).toHaveLength(1);
+  expect(writes[0].body).toMatchObject({
+    api_key: "replacement-test-key",
+    endpoints: [{ id: "endpoint-1", base_url: "https://replacement.example", extra_headers: { "X-Token": "***REDACTED***" } }]
+  });
+  await page.getByRole("button", { name: "编辑连接", exact: true }).click();
+  await expect(dialog.getByPlaceholder("https://api.example.com")).toHaveValue("https://replacement.example");
+  await expect(dialog.getByPlaceholder("留空不改；密文存储")).toHaveValue("");
+  expect(errors).toEqual([]);
+});
+
+test("pool account edits preserve identity and show independent model and quota observations", async ({ page }, testInfo) => {
+  test.skip(!useMockApi, "Uses isolated credential fixtures");
+  const errors = watchBrowserErrors(page);
+  await installMockApi(page, roles[0]);
+  const account = {
+    id: "pool-account-1", pool_id: "review-pool", name: "Primary subscription", provider_type: "codex",
+    email: "account@example.com", token_type: "bearer", scope: "openid", status: "active", weight: 100,
+    auth_metadata: { account_id: "workspace-one", user_id: "user-one" }, expires_at: Date.now() + 3600000,
+    consecutive_fail_count: 0, success_count: 8, fail_count: 0,
+    quotas: [{ source: "response_headers", observed_at: Date.now(), windows: [{ key: "primary", used_percent: 45, window_minutes: 10080, reset_at: Date.now() + 86400000 }, { key: "secondary", used_percent: 20, window_minutes: 300, reset_at: Date.now() + 3600000 }] }],
+    model_catalog: { credential_id: "pool-account-1", models: [] as string[], source: "unknown", observed_at: 0, valid_until: 0 }
+  };
+  const limited = { ...account, id: "pool-account-2", name: "Limited subscription", quotas: [], model_catalog: { ...account.model_catalog, credential_id: "pool-account-2", models: [] as string[] } };
+  let modelDiscoveries = 0;
+  let quotaDiscoveries = 0;
+  const writes: unknown[] = [];
+  await page.route(url => url.pathname.startsWith("/api/v1/credential-pools"), async route => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/v1/credential-pools") await fulfillJson(route, { items: [{ id: "review-pool", name: "Codex review pool", tenant_display_name: "Codex", tenant_access_mode: "public", fixed_provider_type: "codex", oauth_strategy: "weighted", status: "active", tenant_multiplier: 1 }], total: 1 });
+    else if (path.endsWith("/credentials/pool-account-1") && route.request().method() === "PATCH") {
+      const update = readPostData(route.request()) as { name: string; weight: number };
+      writes.push(update); account.name = update.name; account.weight = update.weight;
+      await fulfillJson(route, account);
+    } else if (path.endsWith("/credentials")) {
+      const refreshed = new URL(route.request().url()).searchParams.get('refresh_quota') === 'true';
+      if (refreshed) {
+        quotaDiscoveries++;
+        account.quotas[0].source = 'quota_api';
+        account.quotas[0].windows[0].used_percent = 60;
+      }
+      await fulfillJson(route, { items: [{ ...account, quota_inspection: refreshed ? { state: 'live' } : undefined }, { ...limited, quota_inspection: refreshed ? { state: 'failed' } : undefined }], total: 2 });
+    }
+    else if (path.endsWith("/available-models")) {
+      expect(new URL(route.request().url()).searchParams.get("refresh")).toBe("true");
+      modelDiscoveries++;
+      Object.assign(account.model_catalog, { models: ["premium-model"], source: "live", observed_at: Date.now(), valid_until: Date.now() + 600000 });
+      Object.assign(limited.model_catalog, { models: ["basic-model", "basic-mini"], source: "live", observed_at: Date.now(), valid_until: Date.now() + 600000 });
+      await fulfillJson(route, { pool_id: "review-pool", fixed_provider_type: "codex", models: ["premium-model", "basic-model", "basic-mini"], source: "live", accounts: [account.model_catalog, limited.model_catalog] });
+    }
+    else if (path.endsWith("/model-bindings")) await fulfillJson(route, { items: [], total: 0 });
+    else await route.fallback();
+  });
+  const stability = { resource_kind: "oauth_pool", resource_id: "review-pool", config_status: "active", window: "24h", samples: 8, successes: 8, failures: 0, excluded: 0, cooldowns_last_hour: 0, endpoint_count: 0, credential_count: 1, model_count: 1, coverage_started_at: Date.now(), availability: "available", states: [], models: [], paths: [{ credential_id: account.id, model: "gpt-model", operation: "openai_responses" }] };
+  await page.route(url => url.pathname.startsWith("/api/v1/upstream-stability"), route => fulfillJson(route, new URL(route.request().url()).pathname === "/api/v1/upstream-stability" ? { items: [stability] } : stability));
+  await page.goto("/login?redirect=%2Fadmin%2Fai%2Fupstreams%2Fpools");
+  await page.locator('input[name="username"]').fill(roles[0].username);
+  await page.locator('input[name="password"]').fill(credentialsFor(roles[0]).password);
+  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await page.locator(".pool-item").filter({ hasText: "Codex review pool" }).click();
+  await expect(page.getByText("7 天窗口", { exact: true })).toBeVisible();
+  await expect(page.getByText("5 小时窗口", { exact: true })).toBeVisible();
+  await expect(page.getByText("模型权限未知", { exact: true }).first()).toBeVisible();
+  await page.getByRole("button", { name: "识别账号模型", exact: true }).click();
+  await expect(page.getByText("已确认 1 个模型", { exact: true })).toBeVisible();
+  await expect(page.getByText("已确认 2 个模型", { exact: true })).toBeVisible();
+  await expect(page.getByText("premium-model", { exact: true })).toBeVisible();
+  await expect(page.getByText("basic-model、basic-mini", { exact: true })).toBeVisible();
+  expect(modelDiscoveries).toBe(1);
+  await page.getByRole('button', { name: '更新上游配额', exact: true }).click();
+  await expect(page.getByText('剩余 40.0%', { exact: true })).toBeVisible();
+  expect(quotaDiscoveries).toBe(1);
+  await expect(page.getByText('查询失败 · 保留已有观测', { exact: true })).toBeVisible();
+  await expect(page.getByText("已确认 1 个模型", { exact: true })).toBeInViewport();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath("pool-account-models.png"), animations: "disabled" });
+  await page.locator(".pools-workspace").getByRole("button", { name: "编辑", exact: true }).first().click();
+  const dialog = page.getByRole("dialog", { name: "编辑池内账号" });
+  await expect(dialog).toBeVisible();
+  await dialog.getByLabel("账号名称", { exact: true }).fill("Updated subscription");
+  await dialog.getByLabel("调度权重", { exact: true }).fill("0");
+  await dialog.getByLabel("调度权重", { exact: true }).blur();
+  await dialog.getByLabel("Access Token", { exact: true }).fill("replacement-access");
+  await page.screenshot({ path: testInfo.outputPath("pool-account-editor.png"), animations: "disabled" });
+  await dialog.getByRole("button", { name: "保存账号", exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+  expect(writes).toHaveLength(1);
+  expect(writes[0]).toMatchObject({ name: "Updated subscription", weight: 0, access_token: "replacement-access", auth_metadata: { account_id: "workspace-one", user_id: "user-one" } });
+  expect(writes[0]).not.toHaveProperty("refresh_token");
+  await page.locator(".pools-workspace").getByRole("button", { name: "编辑", exact: true }).first().click();
+  await expect(dialog.getByLabel("Access Token", { exact: true })).toHaveValue("");
+  await expect(dialog.getByLabel("账号名称", { exact: true })).toHaveValue("Updated subscription");
+  expect(errors).toEqual([]);
+});
+
 test("tenant group priority edits persist after reload", async ({ page }, testInfo) => {
   test.skip(!useMockApi, "Uses isolated group fixtures");
   const errors = watchBrowserErrors(page);

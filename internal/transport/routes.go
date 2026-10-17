@@ -84,6 +84,7 @@ type AIUsageHTTPDeps struct {
 // AIOAuthManagementHTTPDeps contains the collaborators owned by the
 // independently registered OAuth pool and credential management module.
 type AIOAuthManagementHTTPDeps struct {
+	QuotaInspector    aitransport.OAuthQuotaInspector
 	CredentialCreator aitransport.OAuthCredentialCreator
 	CredentialReader  aitransport.OAuthCredentialReader
 	CredentialWriter  aitransport.OAuthCredentialWriter
@@ -777,6 +778,7 @@ func buildUsageHTTPDeps(platform aiPlatformDeps, d AIUsageHTTPDeps, identity aiI
 
 func buildOAuthManagementHTTPDeps(platform aiPlatformDeps, d AIOAuthManagementHTTPDeps) aitransport.OAuthManagementHTTPDeps {
 	return aitransport.OAuthManagementHTTPDeps{
+		QuotaInspector:    d.QuotaInspector,
 		Auth:              buildAIHTTPAuthDeps(platform, d.BanChecker),
 		CredentialCreator: d.CredentialCreator,
 		CredentialReader:  d.CredentialReader,

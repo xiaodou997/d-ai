@@ -70,6 +70,10 @@ type OAuthTokenRefresher interface {
 	RefreshByID(ctx context.Context, credID string) error
 }
 
+type OAuthQuotaInspector interface {
+	RefreshPool(context.Context, string, bool) (map[string]domain.CredentialQuotaInspection, error)
+}
+
 // OAuthPoolReader is the non-secret pool query port used by management,
 // model-binding and credential import routes.
 type OAuthPoolReader interface {
@@ -97,8 +101,7 @@ type OAuthCredentialReader interface {
 // OAuthCredentialWriter contains the management mutations for an existing
 // credential. Import and serving lifecycle operations are separate concerns.
 type OAuthCredentialWriter interface {
-	UpdateStatus(ctx context.Context, credID string, status string) error
-	UpdateWeight(ctx context.Context, credID string, weight int) error
+	UpdateCredential(ctx context.Context, credID string, in domain.OAuthCredentialUpdate) error
 	Delete(ctx context.Context, credID string) error
 }
 

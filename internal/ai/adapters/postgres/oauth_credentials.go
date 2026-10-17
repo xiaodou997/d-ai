@@ -12,16 +12,22 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	dbgen "xiaodou/dai/internal/ai/db/gen"
 	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/internal/ai/routing"
 	"xiaodou/dai/internal/ai/secret"
 	"xiaodou/dai/internal/clientsecret"
 )
 
+type oauthCredentialDB interface {
+	dbgen.DBTX
+	Begin(context.Context) (pgx.Tx, error)
+}
+
 // OAuthCredentialStore handles credential pool operations.
 type OAuthCredentialStore struct {
 	availability *routing.RedisAvailability
-	pool         *translatingPool
+	pool         oauthCredentialDB
 	masterKey    string
 }
 
@@ -465,19 +471,56 @@ func (s *OAuthCredentialStore) RecordSuccess(ctx context.Context, credID string)
 		WHERE id = $1`, credID)
 }
 
-func (s *OAuthCredentialStore) MarkInvalid(ctx context.Context, credID string, reason string) error {
-	_, err := s.pool.Exec(ctx, `
-		UPDATE ai_provider_oauth_credentials
-		SET invalid_reason = $2, cooldown_until=now()+interval '30 minutes', last_failed_at=now(), updated_at = now()
-		WHERE id = $1 AND status<>'disabled'`, credID, reason)
-	if err == nil && s.availability != nil {
-		var poolID string
-		if e := s.pool.QueryRow(ctx, `SELECT pool_id::text FROM ai_provider_oauth_credentials WHERE id=$1 AND status<>'disabled'`, credID).Scan(&poolID); e == nil {
-			scope := routing.NewFaultScope("authentication", "oauth_pool", poolID, "", credID, "", "")
-			err = s.availability.Suspend(ctx, scope, time.Now().Add(30*time.Minute), "unauthorized")
+// WithRefreshLock serializes all refresh entry points, including other gateway
+// processes. Reads and writes inside the callback share the locking transaction.
+func (s *OAuthCredentialStore) WithRefreshLock(ctx context.Context, credID string, run func(*OAuthCredentialStore) error) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(context.Background())
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('dai:oauth-refresh:' || $1, 0))`, credID); err != nil {
+		return err
+	}
+	locked := *s
+	locked.pool = tx
+	if err = run(&locked); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+// MarkInvalid fences stale failures in the same way UpdateTokens fences stale
+// successes. Callers without a snapshot may omit expectedVersion.
+func (s *OAuthCredentialStore) MarkInvalid(ctx context.Context, credID string, reason string, expectedVersion ...int64) error {
+	var version any
+	if len(expectedVersion) > 0 {
+		version = expectedVersion[0]
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(context.Background())
+	var poolID string
+	err = tx.QueryRow(ctx, `
+  UPDATE ai_provider_oauth_credentials
+  SET invalid_reason = $2, cooldown_until=now()+interval '30 minutes', last_failed_at=now(), updated_at = now()
+  WHERE id = $1 AND status='active' AND ($3::bigint IS NULL OR token_version=$3)
+  RETURNING pool_id::text`, credID, reason, version).Scan(&poolID)
+	if errors.Is(err, domain.ErrNotFound) || errors.Is(err, pgx.ErrNoRows) {
+		return domain.ErrConflict
+	}
+	if err != nil {
+		return err
+	}
+	if s.availability != nil {
+		scope := routing.NewFaultScope("authentication", "oauth_pool", poolID, "", credID, "", "")
+		if err = s.availability.Suspend(ctx, scope, time.Now().Add(30*time.Minute), "unauthorized"); err != nil {
+			return err
 		}
 	}
-	return err
+	return tx.Commit(ctx)
 }
 
 func (s *OAuthCredentialStore) MarkCooldown(ctx context.Context, credID string, until time.Time) error {
@@ -636,6 +679,25 @@ func (s *OAuthCredentialStore) GetPoolHealthSummary(ctx context.Context) ([]doma
 
 // Create inserts a new credential into the pool.
 func (s *OAuthCredentialStore) Create(ctx context.Context, poolID string, in domain.OAuthCredentialCreate) (string, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback(context.Background())
+	scoped := *s
+	scoped.pool = tx
+	var provider string
+	// Serialize identity changes/imports within a pool; concurrent retries cannot
+	// both pass duplicate detection. Existing duplicates are left for explicit review.
+	if err = tx.QueryRow(ctx, `SELECT fixed_provider_type FROM ai_credential_pools WHERE id=$1 FOR UPDATE`, poolID).Scan(&provider); err != nil {
+		return "", err
+	}
+	if provider != string(in.ProviderType) {
+		return "", domain.NewValidationError("provider_type", "provider_type must match the credential pool")
+	}
+	if err = scoped.rejectDuplicate(ctx, poolID, "", in); err != nil {
+		return "", err
+	}
 	atCipher, err := secret.EncryptProviderKey(s.masterKey, in.AccessToken)
 	if err != nil {
 		return "", fmt.Errorf("encrypt access token: %w", err)
@@ -658,7 +720,10 @@ func (s *OAuthCredentialStore) Create(ctx context.Context, poolID string, in dom
 	}
 
 	weight := in.Weight
-	if weight <= 0 {
+	if weight < 0 {
+		return "", domain.NewValidationError("weight", "weight must be nonnegative")
+	}
+	if weight == 0 && !in.WeightSpecified {
 		weight = 100
 	}
 	tokenType := in.TokenType
@@ -667,7 +732,7 @@ func (s *OAuthCredentialStore) Create(ctx context.Context, poolID string, in dom
 	}
 
 	var id string
-	err = s.pool.QueryRow(ctx, `
+	err = tx.QueryRow(ctx, `
 		INSERT INTO ai_provider_oauth_credentials (
 			pool_id, name, provider_type, email,
 			access_token_ciphertext, refresh_token_ciphertext,
@@ -680,6 +745,9 @@ func (s *OAuthCredentialStore) Create(ctx context.Context, poolID string, in dom
 	).Scan(&id)
 	if err != nil {
 		return "", fmt.Errorf("insert oauth credential: %w", translatePersistenceError(err))
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return "", err
 	}
 	return id, nil
 }
@@ -695,6 +763,18 @@ func (s *OAuthCredentialStore) ListForPool(ctx context.Context, poolID string) (
 	out := make([]domain.OAuthCredentialSummary, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, oauthCredentialSummary(row))
+	}
+	if s.availability != nil {
+		ids := make([]string, len(out))
+		for i := range out {
+			ids[i] = out[i].ID
+		}
+		quotas, err := s.availability.CredentialQuotas(ctx, ids)
+		if err == nil {
+			for i := range out {
+				out[i].Quotas = quotas[out[i].ID]
+			}
+		}
 	}
 	return out, nil
 }
@@ -819,6 +899,11 @@ func (s *OAuthCredentialStore) GetSummaryByID(ctx context.Context, credID string
 		return nil, err
 	}
 	summary := oauthCredentialSummary(*row)
+	if s.availability != nil {
+		if quotas, err := s.availability.CredentialQuotas(ctx, []string{credID}); err == nil {
+			summary.Quotas = quotas[credID]
+		}
+	}
 	return &summary, nil
 }
 
@@ -1062,4 +1147,28 @@ func (s *OAuthCredentialStore) ListCredentialCandidates(ctx context.Context, poo
 		ids = append(ids, row.ID)
 	}
 	return ids, earliest, nil
+}
+
+// SelectEligibleCredential atomically applies the configured policy inside the
+// executor's eligible set. A zero weight excludes an account from weighted
+// selection; an existing sticky session can still use its pinned identity.
+func (s *OAuthCredentialStore) SelectEligibleCredential(ctx context.Context, poolID, strategy string, eligible []string) (string, error) {
+	var id string
+	err := s.pool.QueryRow(ctx, `
+  UPDATE ai_provider_oauth_credentials SET last_used_at=clock_timestamp(),updated_at=now()
+  WHERE id=(
+   SELECT c.id FROM ai_provider_oauth_credentials c
+   JOIN ai_credential_pools p ON p.id=c.pool_id AND p.status='active'
+   WHERE c.pool_id=$1 AND c.id::text=ANY($2::text[]) AND c.status='active'
+    AND ($3 <> 'weighted' OR c.weight>0)
+    AND ($4 OR c.cooldown_until IS NULL OR c.cooldown_until<=now())
+   ORDER BY
+    CASE WHEN $3='weighted' THEN -ln(GREATEST(random(),1e-15))/GREATEST(c.weight,1) END ASC,
+    c.last_used_at ASC NULLS FIRST,c.id
+   LIMIT 1 FOR UPDATE OF c SKIP LOCKED
+  ) RETURNING id::text`, poolID, eligible, strategy, s.availability != nil).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) || errors.Is(err, domain.ErrNotFound) {
+		return "", domain.ErrNotFound
+	}
+	return id, err
 }

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"sort"
 	"strings"
+	"time"
 )
 
 // OpenAI Responses（/v1/responses）流式两侧：Provider 把上游事件流（response.created
@@ -547,6 +548,7 @@ type responsesEmitterToolResultState struct {
 }
 
 type responsesEmitter struct {
+	createdAt       int64
 	seenID          string
 	seenModel       string
 	messageItemID   string
@@ -640,7 +642,8 @@ func (e *responsesEmitter) event(eventType string, payload map[string]any) []byt
 func (e *responsesEmitter) inProgressResponse() map[string]any {
 	return map[string]any{
 		"id": e.responseID(), "object": "response", "model": e.model(),
-		"status": "in_progress", "output": []any{}}
+		"created_at": e.createdAt,
+		"status":     "in_progress", "output": []any{}}
 }
 
 func (e *responsesEmitter) ensureStarted() []byte {
@@ -648,6 +651,7 @@ func (e *responsesEmitter) ensureStarted() []byte {
 		return nil
 	}
 	e.started = true
+	e.createdAt = time.Now().Unix()
 	out := e.event("response.created", map[string]any{
 		"type": "response.created", "response": e.inProgressResponse()})
 	out = append(out, e.event("response.in_progress", map[string]any{
@@ -1022,7 +1026,8 @@ func (e *responsesEmitter) completedResponse(usage *Usage) map[string]any {
 	}
 	return map[string]any{
 		"id": e.responseID(), "object": "response", "status": "completed",
-		"model": e.model(), "output": output, "usage": usagePayload}
+		"created_at": e.createdAt,
+		"model":      e.model(), "output": output, "usage": usagePayload}
 }
 
 func (e *responsesEmitter) Finish() ([]byte, error) {

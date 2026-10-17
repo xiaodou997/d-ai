@@ -79,7 +79,8 @@ type deleteCredentialPoolOutput struct {
 }
 
 type poolCredentialsInput struct {
-	PoolID string `path:"poolID" doc:"凭证池 ID"`
+	PoolID       string `path:"poolID" doc:"凭证池 ID"`
+	RefreshQuota bool   `query:"refresh_quota" doc:"主动查询各账号的上游配额；失败时保留已有观测"`
 }
 
 type createPoolCredentialInput struct {
@@ -104,27 +105,30 @@ type refreshPoolCredentialInput struct {
 }
 
 type poolCredentialDTO struct {
-	ID                   string         `json:"id" doc:"凭证 ID"`
-	PoolID               string         `json:"pool_id" doc:"凭证池 ID"`
-	Name                 string         `json:"name" doc:"凭证名称"`
-	ProviderType         string         `json:"provider_type" enum:"codex,claude_oauth,gemini_cli,antigravity" doc:"供应商类型"`
-	Email                string         `json:"email" doc:"账号邮箱"`
-	TokenType            string         `json:"token_type" doc:"Token 类型"`
-	Scope                string         `json:"scope" doc:"授权范围"`
-	ExpiresAt            *int64         `json:"expires_at,omitempty" doc:"过期时间，Unix 毫秒"`
-	AuthMetadata         map[string]any `json:"auth_metadata,omitempty" doc:"允许公开的账户身份元数据；仅包含已知 ID 和套餐字段"`
-	Weight               int            `json:"weight" doc:"权重"`
-	Status               string         `json:"status" enum:"active,invalid,disabled" doc:"状态"`
-	InvalidReason        *string        `json:"invalid_reason,omitempty" doc:"失效原因"`
-	CooldownUntil        *int64         `json:"cooldown_until,omitempty" doc:"临时冷却截止时间，Unix 毫秒"`
-	LastUsedAt           *int64         `json:"last_used_at,omitempty" doc:"最后使用时间，Unix 毫秒"`
-	LastRefreshedAt      *int64         `json:"last_refreshed_at,omitempty" doc:"最后刷新时间，Unix 毫秒"`
-	LastFailedAt         *int64         `json:"last_failed_at,omitempty" doc:"最后失败时间，Unix 毫秒"`
-	ConsecutiveFailCount int            `json:"consecutive_fail_count" doc:"连续失败次数"`
-	SuccessCount         int64          `json:"success_count" doc:"成功次数"`
-	FailCount            int64          `json:"fail_count" doc:"失败次数"`
-	CreatedAt            *int64         `json:"created_at,omitempty" doc:"创建时间，Unix 毫秒"`
-	UpdatedAt            *int64         `json:"updated_at,omitempty" doc:"更新时间，Unix 毫秒"`
+	QuotaInspection      *domain.CredentialQuotaInspection `json:"quota_inspection,omitempty" doc:"主动配额查询状态，与认证状态和配额数值独立"`
+	ModelCatalog         *domain.CredentialModelCatalog    `json:"model_catalog,omitempty" doc:"该账号的模型观测；未知、过期或内置目录不限制调度"`
+	Quotas               []domain.CredentialQuota          `json:"quotas,omitempty" doc:"最近一次上游响应头或主动查询报告的配额；没有数据表示未知"`
+	ID                   string                            `json:"id" doc:"凭证 ID"`
+	PoolID               string                            `json:"pool_id" doc:"凭证池 ID"`
+	Name                 string                            `json:"name" doc:"凭证名称"`
+	ProviderType         string                            `json:"provider_type" enum:"codex,claude_oauth,gemini_cli,antigravity" doc:"供应商类型"`
+	Email                string                            `json:"email" doc:"账号邮箱"`
+	TokenType            string                            `json:"token_type" doc:"Token 类型"`
+	Scope                string                            `json:"scope" doc:"授权范围"`
+	ExpiresAt            *int64                            `json:"expires_at,omitempty" doc:"过期时间，Unix 毫秒"`
+	AuthMetadata         map[string]any                    `json:"auth_metadata,omitempty" doc:"允许公开的账户身份元数据；仅包含已知 ID 和套餐字段"`
+	Weight               int                               `json:"weight" doc:"权重"`
+	Status               string                            `json:"status" enum:"active,invalid,disabled" doc:"状态"`
+	InvalidReason        *string                           `json:"invalid_reason,omitempty" doc:"失效原因"`
+	CooldownUntil        *int64                            `json:"cooldown_until,omitempty" doc:"临时冷却截止时间，Unix 毫秒"`
+	LastUsedAt           *int64                            `json:"last_used_at,omitempty" doc:"最后使用时间，Unix 毫秒"`
+	LastRefreshedAt      *int64                            `json:"last_refreshed_at,omitempty" doc:"最后刷新时间，Unix 毫秒"`
+	LastFailedAt         *int64                            `json:"last_failed_at,omitempty" doc:"最后失败时间，Unix 毫秒"`
+	ConsecutiveFailCount int                               `json:"consecutive_fail_count" doc:"连续失败次数"`
+	SuccessCount         int64                             `json:"success_count" doc:"成功次数"`
+	FailCount            int64                             `json:"fail_count" doc:"失败次数"`
+	CreatedAt            *int64                            `json:"created_at,omitempty" doc:"创建时间，Unix 毫秒"`
+	UpdatedAt            *int64                            `json:"updated_at,omitempty" doc:"更新时间，Unix 毫秒"`
 }
 
 type poolCredentialsOutput struct {
@@ -143,7 +147,7 @@ type poolCredentialWriteRequest struct {
 	TokenType     string         `json:"token_type,omitempty" doc:"Token 类型；为空默认 bearer"`
 	Scope         string         `json:"scope,omitempty" doc:"授权范围"`
 	ExpiresAt     *int64         `json:"expires_at,omitempty" doc:"过期时间，Unix 秒；兼容 Codex OAuth 导出"`
-	Weight        *int           `json:"weight,omitempty" minimum:"0" doc:"权重；为空或 0 时默认 100"`
+	Weight        *int           `json:"weight,omitempty" minimum:"0" doc:"权重；为空时默认 100，0 不接收新的加权会话"`
 	AuthMetadata  map[string]any `json:"auth_metadata,omitempty" doc:"运行时账户元数据；响应仅返回已知的非敏感账户身份字段"`
 	AccountID     string         `json:"account_id,omitempty" doc:"Codex 导出 account_id，会合并到 auth_metadata"`
 	PlanType      string         `json:"plan_type,omitempty" doc:"Codex 导出 plan_type，会合并到 auth_metadata"`
@@ -152,8 +156,16 @@ type poolCredentialWriteRequest struct {
 }
 
 type poolCredentialPatchRequest struct {
-	Status *string `json:"status,omitempty" enum:"active,disabled" doc:"凭证管理状态；仅允许 active/disabled"`
-	Weight *int    `json:"weight,omitempty" minimum:"0" doc:"权重；0 表示保留为 0"`
+	Name         *string        `json:"name,omitempty" doc:"账号显示名称"`
+	Email        *string        `json:"email,omitempty" doc:"账号邮箱"`
+	AccessToken  string         `json:"access_token,omitempty" doc:"新的 access token；空值保留原值，只写不读"`
+	RefreshToken string         `json:"refresh_token,omitempty" doc:"新的 refresh token；空值保留原值，只写不读"`
+	TokenType    *string        `json:"token_type,omitempty"`
+	Scope        *string        `json:"scope,omitempty"`
+	ExpiresAt    *int64         `json:"expires_at,omitempty" doc:"新 token 到期时间，Unix 秒"`
+	AuthMetadata map[string]any `json:"auth_metadata,omitempty" doc:"合并更新账户身份信息"`
+	Status       *string        `json:"status,omitempty" enum:"active,disabled" doc:"凭证管理状态；仅允许 active/disabled"`
+	Weight       *int           `json:"weight,omitempty" minimum:"0" doc:"权重；0 表示保留为 0"`
 }
 
 type poolCredentialOutput struct {
@@ -167,16 +179,18 @@ type deletePoolCredentialOutput struct {
 }
 
 type poolAvailableModelsInput struct {
-	PoolID string `path:"poolID" doc:"凭证池 ID"`
+	PoolID  string `path:"poolID" doc:"凭证池 ID"`
+	Refresh bool   `query:"refresh" doc:"主动重新识别启用账号的模型，忽略缓存有效期"`
 }
 
 type poolAvailableModelsDTO struct {
-	PoolID            string   `json:"pool_id" doc:"凭证池 ID"`
-	FixedProviderType string   `json:"fixed_provider_type" enum:"codex,claude_oauth,gemini_cli,antigravity" doc:"固定供应商类型"`
-	Models            []string `json:"models" doc:"当前可用上游模型"`
-	Source            string   `json:"source" enum:"live,cache,stale,fallback" doc:"模型来源"`
-	ProfileRevision   string   `json:"profile_revision" doc:"发现模型时使用的客户端 Profile 或 fallback 版本"`
-	ObservedAt        int64    `json:"observed_at" doc:"模型目录观测时间，Unix 毫秒"`
+	PoolID            string                          `json:"pool_id" doc:"凭证池 ID"`
+	FixedProviderType string                          `json:"fixed_provider_type" enum:"codex,claude_oauth,gemini_cli,antigravity" doc:"固定供应商类型"`
+	Models            []string                        `json:"models" doc:"当前可用上游模型"`
+	Source            string                          `json:"source" enum:"live,cache,stale,fallback" doc:"模型来源"`
+	ProfileRevision   string                          `json:"profile_revision" doc:"发现模型时使用的客户端 Profile 或 fallback 版本"`
+	ObservedAt        int64                           `json:"observed_at" doc:"模型目录观测时间，Unix 毫秒"`
+	Accounts          []domain.CredentialModelCatalog `json:"accounts" doc:"逐账号的独立模型目录；池目录取已观测模型的并集"`
 }
 
 type poolAvailableModelsOutput struct {
@@ -331,7 +345,7 @@ func registerOAuthPools(api huma.API, d OAuthManagementHTTPDeps) {
 		Method:      http.MethodDelete,
 		Path:        "/api/v1/credential-pools/{poolID}",
 		Summary:     "删除 OAuth 凭证池",
-		Description: "删除凭证池会级联删除池内 OAuth credential；若存在上游部署引用，数据库会拒绝删除。",
+		Description: "仅允许删除无账号且无分组引用的凭证池；池内显式模型绑定会一并删除。",
 		Tags:        []string{"credential-pools"},
 	}, func(ctx context.Context, in *deleteCredentialPoolInput) (*deleteCredentialPoolOutput, error) {
 		if d.PoolWriter == nil {
@@ -359,14 +373,39 @@ func registerOAuthPools(api huma.API, d OAuthManagementHTTPDeps) {
 		if in.PoolID == "" {
 			return nil, httpx.ErrBadRequest.WithDetail("poolID is required")
 		}
+		inspections := map[string]domain.CredentialQuotaInspection{}
+		if in.RefreshQuota {
+			if d.QuotaInspector == nil {
+				return nil, httpx.ErrUnavailable.WithDetail("oauth quota inspector is not configured")
+			}
+			var err error
+			inspections, err = d.QuotaInspector.RefreshPool(ctx, in.PoolID, true)
+			if err != nil {
+				return nil, httpx.ErrUnavailable.WithDetail("上游配额查询暂不可用，请稍后重试；已有观测保留")
+			}
+		}
 		rows, err := d.CredentialReader.ListForPool(ctx, in.PoolID)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
 		out := &poolCredentialsOutput{}
+		catalogs := map[string]domain.CredentialModelCatalog{}
+		if reader, ok := d.ClientCatalog.(interface {
+			ReadCredentialModels(context.Context, string) (map[string]domain.CredentialModelCatalog, error)
+		}); ok {
+			// Account discovery stays in the background on ordinary list reads.
+			catalogs, _ = reader.ReadCredentialModels(ctx, in.PoolID)
+		}
 		out.Body.Items = make([]poolCredentialDTO, 0, len(rows))
 		for _, row := range rows {
-			out.Body.Items = append(out.Body.Items, poolCredentialSummaryToDTO(row))
+			dto := poolCredentialSummaryToDTO(row)
+			if result, exists := inspections[row.ID]; exists {
+				dto.QuotaInspection = &result
+			}
+			if catalog, exists := catalogs[row.ID]; exists {
+				dto.ModelCatalog = &catalog
+			}
+			out.Body.Items = append(out.Body.Items, dto)
 		}
 		out.Body.Total = len(out.Body.Items)
 		return out, nil
@@ -377,7 +416,7 @@ func registerOAuthPools(api huma.API, d OAuthManagementHTTPDeps) {
 		Method:      http.MethodPost,
 		Path:        "/api/v1/credential-pools/{poolID}/credentials",
 		Summary:     "导入 OAuth 凭证",
-		Description: "向指定凭证池导入 OAuth credential。响应只返回非敏感展示字段，不返回 access token、refresh token 或密文。",
+		Description: "向指定凭证池导入 OAuth credential；同一账号重复导入返回冲突，请通过编辑更新原账号。不同工作区分别保留。响应不返回 token 或密文。",
 		Tags:        []string{"credential-pools"},
 	}, func(ctx context.Context, in *createPoolCredentialInput) (*poolCredentialOutput, error) {
 		if d.CredentialCreator == nil || d.CredentialReader == nil {
@@ -399,8 +438,8 @@ func registerOAuthPools(api huma.API, d OAuthManagementHTTPDeps) {
 		OperationID: "ai-update-pool-credential",
 		Method:      http.MethodPatch,
 		Path:        "/api/v1/credential-pools/{poolID}/credentials/{credID}",
-		Summary:     "更新 OAuth 凭证状态/权重",
-		Description: "管理侧只允许在 active/disabled 间切换状态；invalid 由运行时失败路径维护。",
+		Summary:     "编辑 OAuth 账号",
+		Description: "原子更新账号信息、权重和状态，并可替换 OAuth 令牌。空令牌字段保留原值；账号 ID 和历史记录保持不变。",
 		Tags:        []string{"credential-pools"},
 	}, func(ctx context.Context, in *updatePoolCredentialInput) (*poolCredentialOutput, error) {
 		if d.CredentialWriter == nil || d.CredentialReader == nil {
@@ -412,15 +451,17 @@ func registerOAuthPools(api huma.API, d OAuthManagementHTTPDeps) {
 		if err := validatePoolCredentialPatch(in.Body); err != nil {
 			return nil, mapServiceError(err)
 		}
-		if in.Body.Status != nil {
-			if err := d.CredentialWriter.UpdateStatus(ctx, in.CredID, strings.TrimSpace(*in.Body.Status)); err != nil {
-				return nil, mapServiceError(err)
-			}
+		var expiry *time.Time
+		if in.Body.ExpiresAt != nil {
+			t := time.Unix(*in.Body.ExpiresAt, 0).UTC()
+			expiry = &t
 		}
-		if in.Body.Weight != nil {
-			if err := d.CredentialWriter.UpdateWeight(ctx, in.CredID, *in.Body.Weight); err != nil {
-				return nil, mapServiceError(err)
-			}
+		if err := d.CredentialWriter.UpdateCredential(ctx, in.CredID, domain.OAuthCredentialUpdate{
+			Name: in.Body.Name, Email: in.Body.Email, Status: in.Body.Status, Weight: in.Body.Weight,
+			AccessToken: strings.TrimSpace(in.Body.AccessToken), RefreshToken: strings.TrimSpace(in.Body.RefreshToken),
+			TokenType: in.Body.TokenType, Scope: in.Body.Scope, ExpiresAt: expiry, AuthMetadata: in.Body.AuthMetadata,
+		}); err != nil {
+			return nil, mapServiceError(err)
 		}
 		row, err := getPoolCredentialScoped(ctx, d.CredentialReader, in.PoolID, in.CredID)
 		if err != nil {
@@ -487,7 +528,7 @@ func registerOAuthPools(api huma.API, d OAuthManagementHTTPDeps) {
 		Method:      http.MethodGet,
 		Path:        "/api/v1/credential-pools/{poolID}/available-models",
 		Summary:     "OAuth 凭证池可用模型",
-		Description: "优先通过版本化客户端 Profile 在线发现模型，并以缓存、最后成功快照或内置目录降级。",
+		Description: "分别识别各启用账号的模型并汇总去重。支持主动刷新，以账号缓存、最后成功快照或内置目录降级；内置目录不代表账号权限。",
 		Tags:        []string{"credential-pools"},
 	}, func(ctx context.Context, in *poolAvailableModelsInput) (*poolAvailableModelsOutput, error) {
 		if d.PoolReader == nil {
@@ -500,7 +541,7 @@ func registerOAuthPools(api huma.API, d OAuthManagementHTTPDeps) {
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
-		catalog := resolvePoolModelCatalog(ctx, d, *pool)
+		catalog := resolvePoolModelCatalog(ctx, d, *pool, in.Refresh)
 		out := &poolAvailableModelsOutput{}
 		out.Body = poolAvailableModelsDTO{
 			PoolID:            pool.ID,
@@ -509,6 +550,7 @@ func registerOAuthPools(api huma.API, d OAuthManagementHTTPDeps) {
 			Source:            catalog.Source,
 			ProfileRevision:   catalog.ProfileRevision,
 			ObservedAt:        catalog.ObservedAt.UnixMilli(),
+			Accounts:          catalog.Accounts,
 		}
 		return out, nil
 	})
@@ -757,9 +799,7 @@ func poolCredentialCreateInput(providerType string, req poolCredentialWriteReque
 		if *req.Weight < 0 {
 			return domain.OAuthCredentialCreate{}, domain.NewValidationError("weight", "weight must be >= 0")
 		}
-		if *req.Weight > 0 {
-			weight = *req.Weight
-		}
+		weight = *req.Weight
 	}
 	var expiresAt *time.Time
 	if req.ExpiresAt != nil {
@@ -767,16 +807,17 @@ func poolCredentialCreateInput(providerType string, req poolCredentialWriteReque
 		expiresAt = &t
 	}
 	return domain.OAuthCredentialCreate{
-		Name:         name,
-		ProviderType: domain.FixedProviderType(providerType),
-		Email:        email,
-		AccessToken:  accessToken,
-		RefreshToken: req.RefreshToken,
-		TokenType:    strings.TrimSpace(req.TokenType),
-		Scope:        strings.TrimSpace(req.Scope),
-		ExpiresAt:    expiresAt,
-		AuthMetadata: poolCredentialAuthMetadata(req),
-		Weight:       weight,
+		Name:            name,
+		ProviderType:    domain.FixedProviderType(providerType),
+		Email:           email,
+		AccessToken:     accessToken,
+		RefreshToken:    req.RefreshToken,
+		TokenType:       strings.TrimSpace(req.TokenType),
+		Scope:           strings.TrimSpace(req.Scope),
+		ExpiresAt:       expiresAt,
+		AuthMetadata:    poolCredentialAuthMetadata(req),
+		Weight:          weight,
+		WeightSpecified: req.Weight != nil,
 	}, nil
 }
 
@@ -824,6 +865,12 @@ func importPoolCredential(ctx context.Context, d OAuthManagementHTTPDeps, poolID
 }
 
 func validatePoolCredentialPatch(req poolCredentialPatchRequest) error {
+	if req.Name != nil && strings.TrimSpace(*req.Name) == "" {
+		return domain.NewValidationError("name", "name is required")
+	}
+	if req.ExpiresAt != nil && *req.ExpiresAt <= 0 {
+		return domain.NewValidationError("expires_at", "expires_at must be positive Unix seconds")
+	}
 	if req.Status != nil {
 		switch strings.TrimSpace(*req.Status) {
 		case "active", "disabled":
@@ -850,6 +897,7 @@ func getPoolCredentialScoped(ctx context.Context, reader OAuthCredentialReader, 
 
 func poolCredentialSummaryToDTO(row domain.OAuthCredentialSummary) poolCredentialDTO {
 	return poolCredentialDTO{
+		Quotas:               row.Quotas,
 		ID:                   row.ID,
 		PoolID:               row.PoolID,
 		Name:                 row.Name,
@@ -889,8 +937,15 @@ func oauthPoolHealthToDTO(row domain.OAuthPoolHealthSummary) oauthPoolHealthDTO 
 	}
 }
 
-func resolvePoolModelCatalog(ctx context.Context, d OAuthManagementHTTPDeps, pool domain.CredentialPool) clientcatalog.Result {
+func resolvePoolModelCatalog(ctx context.Context, d OAuthManagementHTTPDeps, pool domain.CredentialPool, refresh ...bool) clientcatalog.Result {
 	if d.ClientCatalog != nil {
+		if len(refresh) > 0 && refresh[0] {
+			if resolver, ok := d.ClientCatalog.(interface {
+				ResolveFresh(context.Context, domain.CredentialPool) clientcatalog.Result
+			}); ok {
+				return resolver.ResolveFresh(ctx, pool)
+			}
+		}
 		return d.ClientCatalog.Resolve(ctx, pool)
 	}
 	return clientcatalog.Result{

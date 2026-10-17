@@ -170,7 +170,9 @@ type ModelCard struct {
 
 type InspectionSnapshot struct {
 	ProfileRevision string
+	TokenVersion    int64
 	Models          []ModelCard
+	Quotas          []domain.CredentialQuota
 	ETag            string
 	NotModified     bool
 	Source          string

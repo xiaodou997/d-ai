@@ -160,3 +160,13 @@ func TestPolicyScoresUseFrozenCostSuccessLatencyLoadAndSampleCorrection(t *testi
 		}
 	}
 }
+
+func TestBalancedPoolLoadIsNormalizedByEligibleAccountCount(t *testing.T) {
+	direct := &domain.RouteCandidate{RouteID: "direct", CandidateID: "direct", AccountID: "direct"}
+	pool := &domain.RouteCandidate{RouteID: "pool", CandidateID: "pool", PoolID: "pool", PoolCredentialCount: 10}
+	stats := map[string]routing.RouteStats{candidateStatsKey(direct, false): {EWMATotalMs: 100, InflightCount: 1}, candidateStatsKey(pool, false): {EWMATotalMs: 100, InflightCount: 10}}
+	scores := (&MultiDimScorer{}).normalizedCandidateScores(context.Background(), RouteScoringContext{}, []*domain.RouteCandidate{direct, pool}, stats)
+	if scores[0] != scores[1] {
+		t.Fatalf("equal per-account load got different scores: %v", scores)
+	}
+}

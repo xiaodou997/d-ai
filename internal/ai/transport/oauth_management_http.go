@@ -15,6 +15,7 @@ type OAuthManagementHTTPDeps struct {
 	PoolHealthReader  OAuthPoolHealthReader
 	TokenRefresher    OAuthTokenRefresher
 	ClientCatalog     ClientCatalogResolver
+	QuotaInspector    OAuthQuotaInspector
 	ModelBindings     UpstreamModelBindingStore
 }
 

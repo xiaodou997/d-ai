@@ -51,7 +51,7 @@ type accountEndpointDTO struct {
 	UpdatedAt     *int64          `json:"updated_at,omitempty" doc:"更新时间，Unix 毫秒"`
 }
 
-type accountEndpointWriteRequest struct {
+type AccountEndpointWriteRequest struct {
 	APIFormat    string          `json:"api_format" enum:"openai_chat,openai_responses,openai_embeddings,openai_images,anthropic_messages,gemini_generate,gemini_embeddings"`
 	BaseURL      string          `json:"base_url"`
 	PathOverride string          `json:"path_override,omitempty"`
@@ -59,6 +59,11 @@ type accountEndpointWriteRequest struct {
 	AuthHeader   string          `json:"auth_header,omitempty"`
 	ExtraHeaders json.RawMessage `json:"extra_headers,omitempty" doc:"端点附加请求头；编辑时敏感字段值为 ***REDACTED*** 表示保留原值，删除字段表示删除请求头"`
 	Status       string          `json:"status,omitempty" enum:"active,disabled"`
+}
+
+type accountEndpointUpdateRequest struct {
+	ID string `json:"id,omitempty" doc:"已有端点 ID；为空创建端点"`
+	AccountEndpointWriteRequest
 }
 
 type accountsOutput struct {
@@ -78,21 +83,22 @@ type createAccountRequest struct {
 	TenantDisplayName string                        `json:"tenant_display_name,omitempty" doc:"租户侧展示名称；为空时使用账号名称"`
 	TenantAccessMode  string                        `json:"tenant_access_mode,omitempty" enum:"public,restricted" doc:"租户访问范围；为空保留原值"`
 	APIKey            string                        `json:"api_key" doc:"上游 API key 明文；仅写入时接收，响应不返回"`
-	Endpoints         []accountEndpointWriteRequest `json:"endpoints" minItems:"1" doc:"账号支持的请求端点；同一 API 格式至多一个"`
+	Endpoints         []AccountEndpointWriteRequest `json:"endpoints" minItems:"1" doc:"账号支持的请求端点；同一 API 格式至多一个"`
 	ConcurrencyLimit  *int32                        `json:"concurrency_limit,omitempty" minimum:"1" doc:"最大并发请求数；为空表示不限制"`
 	PriceBookID       string                        `json:"price_book_id,omitempty" doc:"租户结算价格表 ID；为空不绑定"`
 	TenantMultiplier  *float64                      `json:"tenant_multiplier,omitempty" doc:"默认租户扣费倍率；为空不设置"`
 }
 
 type updateAccountRequest struct {
-	Description       *string  `json:"description,omitempty"`
-	Name              string   `json:"name" doc:"账号名称"`
-	TenantDisplayName string   `json:"tenant_display_name,omitempty" doc:"租户侧展示名称；为空时使用账号名称"`
-	TenantAccessMode  string   `json:"tenant_access_mode,omitempty" enum:"public,restricted" doc:"租户访问范围；为空默认 public"`
-	APIKey            string   `json:"api_key,omitempty" doc:"上游 API key 明文；为空保留原密文"`
-	ConcurrencyLimit  *int32   `json:"concurrency_limit,omitempty" minimum:"1" doc:"最大并发请求数；为空表示不限制"`
-	PriceBookID       string   `json:"price_book_id,omitempty" doc:"租户结算价格表 ID；为空不绑定"`
-	TenantMultiplier  *float64 `json:"tenant_multiplier,omitempty" doc:"默认租户扣费倍率；为空不设置"`
+	Description       *string                        `json:"description,omitempty"`
+	Name              string                         `json:"name" doc:"账号名称"`
+	TenantDisplayName string                         `json:"tenant_display_name,omitempty" doc:"租户侧展示名称；为空时使用账号名称"`
+	TenantAccessMode  string                         `json:"tenant_access_mode,omitempty" enum:"public,restricted" doc:"租户访问范围；为空默认 public"`
+	APIKey            string                         `json:"api_key,omitempty" doc:"上游 API key 明文；为空保留原密文"`
+	Endpoints         []accountEndpointUpdateRequest `json:"endpoints,omitempty" minItems:"1" doc:"与账号及 API Key 原子保存的完整端点列表；省略或 null 保留原配置，未列出的旧端点会被删除"`
+	ConcurrencyLimit  *int32                         `json:"concurrency_limit,omitempty" minimum:"1" doc:"最大并发请求数；为空表示不限制"`
+	PriceBookID       string                         `json:"price_book_id,omitempty" doc:"租户结算价格表 ID；为空不绑定"`
+	TenantMultiplier  *float64                       `json:"tenant_multiplier,omitempty" doc:"默认租户扣费倍率；为空不设置"`
 }
 
 type accountStatusRequest struct {
@@ -126,12 +132,12 @@ type accountEndpointInput struct {
 }
 type createAccountEndpointInput struct {
 	AccountID string `path:"accountID" doc:"上游账号 ID"`
-	Body      accountEndpointWriteRequest
+	Body      AccountEndpointWriteRequest
 }
 type updateAccountEndpointInput struct {
 	AccountID  string `path:"accountID" doc:"上游账号 ID"`
 	EndpointID string `path:"endpointID" doc:"请求端点 ID"`
-	Body       accountEndpointWriteRequest
+	Body       AccountEndpointWriteRequest
 }
 type accountEndpointsOutput struct {
 	Body struct {
@@ -201,11 +207,18 @@ func registerUpstreamAccounts(api huma.API, d UpstreamAccountManagementHTTPDeps)
 		Method:      http.MethodPatch,
 		Path:        "/api/v1/upstream-accounts/{accountID}",
 		Summary:     "更新上游账号",
-		Description: "更新上游账号元数据或 API Key；请求端点通过独立 Endpoint API 管理。",
+		Description: "在同一事务内更新账号资料、API Key 和完整请求端点配置；省略 endpoints 时保留原端点。",
 		Tags:        []string{"upstream-accounts"},
 	}, func(ctx context.Context, in *updateAccountInput) (*accountOutput, error) {
 		if d.AccountManager == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("account service is not configured")
+		}
+		var endpoints []upstreamcontrol.AccountEndpointUpdate
+		if in.Body.Endpoints != nil {
+			endpoints = make([]upstreamcontrol.AccountEndpointUpdate, 0, len(in.Body.Endpoints))
+			for _, endpoint := range in.Body.Endpoints {
+				endpoints = append(endpoints, upstreamcontrol.AccountEndpointUpdate{ID: endpoint.ID, UpstreamAccountEndpointWrite: endpointWriteFromRequest(endpoint.AccountEndpointWriteRequest)})
+			}
 		}
 		a, err := d.AccountManager.UpdateAccount(ctx, upstreamcontrol.UpdateAccountInput{
 			ID:                in.AccountID,
@@ -214,6 +227,7 @@ func registerUpstreamAccounts(api huma.API, d UpstreamAccountManagementHTTPDeps)
 			Description:       in.Body.Description,
 			TenantAccessMode:  in.Body.TenantAccessMode,
 			APIKey:            in.Body.APIKey,
+			Endpoints:         endpoints,
 			ConcurrencyLimit:  int32PtrToIntPtr(in.Body.ConcurrencyLimit),
 			PriceBookID:       in.Body.PriceBookID,
 			TenantMultiplier:  in.Body.TenantMultiplier,
@@ -304,7 +318,7 @@ func accountToDTO(a domain.UpstreamAccount) accountDTO {
 	}
 }
 
-func endpointWriteFromRequest(in accountEndpointWriteRequest) domain.UpstreamAccountEndpointWrite {
+func endpointWriteFromRequest(in AccountEndpointWriteRequest) domain.UpstreamAccountEndpointWrite {
 	return domain.UpstreamAccountEndpointWrite{
 		APIFormat: domain.UpstreamProtocol(in.APIFormat), BaseURL: in.BaseURL,
 		PathOverride: in.PathOverride, AuthScheme: in.AuthScheme, AuthHeader: in.AuthHeader,
@@ -312,7 +326,7 @@ func endpointWriteFromRequest(in accountEndpointWriteRequest) domain.UpstreamAcc
 	}
 }
 
-func endpointWritesFromRequests(items []accountEndpointWriteRequest) []domain.UpstreamAccountEndpointWrite {
+func endpointWritesFromRequests(items []AccountEndpointWriteRequest) []domain.UpstreamAccountEndpointWrite {
 	out := make([]domain.UpstreamAccountEndpointWrite, 0, len(items))
 	for _, item := range items {
 		out = append(out, endpointWriteFromRequest(item))

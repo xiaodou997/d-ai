@@ -54,6 +54,12 @@ const credential = {
 };
 
 describe("AI admin credential pool generated operation facade", () => {
+  it("explicitly refreshes quotas and preserves per-account inspection state", async () => {
+    mocks.request.mockResolvedValue({ items: [{ ...credential, quota_inspection: { state: 'failed', observed_at: 123 }, quotas: [{ source: 'quota_api', observed_at: 100, windows: [{ key: 'primary', used_percent: 42 }] }] }], total: 1 });
+    const result = await aiAdminApi.listPoolCredentials('pool/1', true);
+    expect(mocks.request.mock.calls[0]?.[0]).toMatchObject({ pathParams: { poolID: 'pool/1' }, query: { refresh_quota: true } });
+    expect(result.items[0]).toMatchObject({ quota_inspection: { state: 'failed' }, quotas: [{ windows: [{ used_percent: 42 }] }] });
+  });
   it("normalizes pool lists and maps pool CRUD/status/delete operations", async () => {
     mocks.request
       .mockResolvedValueOnce({ items: null, total: 0, $schema: "ignored" })
@@ -156,6 +162,24 @@ describe("AI admin credential pool generated operation facade", () => {
       total: 1
     });
     expect(result.items[0]).not.toHaveProperty("cooling_down");
+  });
+
+  it("keeps runtime quota facts and edits credentials without sending blank secrets", async () => {
+    mocks.request.mockResolvedValueOnce({ ...credential, quotas: [{ source: "response_headers", observed_at: 200, windows: [{ key: "primary", used_percent: 80, window_minutes: 300, reset_at: 1000 }] }] });
+    const result = await aiAdminApi.patchPoolCredential("pool-1", "cred-1", { name: "Renamed", access_token: " ", refresh_token: " new-refresh ", auth_metadata: { account_id: "acct-1" } });
+    expect(result.cooldown_until).toBe(400);
+    expect(result.quotas?.[0].windows[0].used_percent).toBe(80);
+    expect(mocks.request.mock.calls[0]?.[0].body).toMatchObject({ name: "Renamed", access_token: undefined, refresh_token: "new-refresh", auth_metadata: { account_id: "acct-1" } });
+  });
+
+  it("keeps account model observations separate and sends an explicit refresh query", async () => {
+    mocks.request.mockResolvedValueOnce({ ...credential, model_catalog: { credential_id: 'cred-1', models: null, source: 'unknown' } });
+    const account = await aiAdminApi.refreshPoolCredential('pool-1', 'cred-1');
+    expect(account.model_catalog).toEqual({ credential_id: 'cred-1', models: [], source: 'unknown' });
+    mocks.request.mockResolvedValueOnce({ pool_id: 'pool-1', fixed_provider_type: 'codex', models: ['one'], source: 'live', profile_revision: 'profile', observed_at: 100, accounts: [{ credential_id: 'cred-1', models: ['one'], source: 'live', valid_until: 200 }] });
+    const result = await aiAdminApi.getPoolAvailableModels('pool-1', true);
+    expect(result.accounts[0]).toMatchObject({ credential_id: 'cred-1', models: ['one'], valid_until: 200 });
+    expect(mocks.request.mock.calls[1]?.[0]).toMatchObject({ query: { refresh: true }, pathParams: { poolID: 'pool-1' } });
   });
 
   it("rejects unsupported pool and credential values before transport", async () => {

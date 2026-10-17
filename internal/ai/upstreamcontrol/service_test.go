@@ -91,11 +91,13 @@ func (s *repoStub) ListEndpoints(context.Context, string) ([]domain.UpstreamAcco
 	return s.endpoints, nil
 }
 
-func (s *repoStub) GetEndpoint(context.Context, string, string) (domain.UpstreamAccountEndpoint, error) {
-	if len(s.endpoints) == 0 {
-		return domain.UpstreamAccountEndpoint{}, domain.ErrNotFound
+func (s *repoStub) GetEndpoint(_ context.Context, accountID, endpointID string) (domain.UpstreamAccountEndpoint, error) {
+	for _, endpoint := range s.endpoints {
+		if endpoint.ID == endpointID && (endpoint.AccountID == "" || endpoint.AccountID == accountID) {
+			return endpoint, nil
+		}
 	}
-	return s.endpoints[0], nil
+	return domain.UpstreamAccountEndpoint{}, domain.ErrNotFound
 }
 
 func (s *repoStub) CreateEndpoint(_ context.Context, accountID string, write domain.UpstreamAccountEndpointWrite) (domain.UpstreamAccountEndpoint, error) {

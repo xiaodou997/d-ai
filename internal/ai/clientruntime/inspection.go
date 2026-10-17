@@ -18,15 +18,28 @@ type inspectionProfile interface {
 	decodeModels([]byte) ([]ModelCard, error)
 }
 
+type quotaProfile interface {
+	clientProfile
+	prepareQuota(Inspection) (*WireRequest, error)
+	decodeQuota([]byte, time.Time) ([]domain.CredentialQuota, error)
+}
+
 func (r *Runtime) SupportsInspection(provider domain.FixedProviderType, want InspectionWant) bool {
-	if r == nil || want == 0 || want&^InspectModels != 0 {
+	if r == nil {
 		return false
 	}
 	profile, ok := r.profiles[provider]
 	if !ok {
 		return false
 	}
-	_, ok = profile.(inspectionProfile)
+	switch want {
+	case InspectModels:
+		_, ok = profile.(inspectionProfile)
+	case InspectQuota:
+		_, ok = profile.(quotaProfile)
+	default:
+		return false
+	}
 	return ok
 }
 
@@ -44,8 +57,7 @@ func (r *Runtime) Inspect(ctx context.Context, in Inspection) (InspectionSnapsho
 			SafeDetail: fmt.Sprintf("fixed-provider client profile %q is not registered", in.Provider),
 		}
 	}
-	inspector, ok := profile.(inspectionProfile)
-	if !ok || in.Want&InspectModels == 0 {
+	if !r.SupportsInspection(in.Provider, in.Want) {
 		return InspectionSnapshot{}, &Error{
 			Code:            ErrorUnsupportedProvider,
 			ProfileRevision: profile.revision(),
@@ -60,22 +72,32 @@ func (r *Runtime) Inspect(ctx context.Context, in Inspection) (InspectionSnapsho
 		}
 	}
 
-	response, refreshedCredential, err := r.executeInspection(ctx, inspector, in)
+	var prepare func(Inspection) (*WireRequest, error)
+	if in.Want == InspectQuota {
+		prepare = profile.(quotaProfile).prepareQuota
+	} else {
+		prepare = profile.(inspectionProfile).prepareInspection
+	}
+	response, refreshedCredential, err := r.executeInspection(ctx, profile, prepare, in)
 	if err != nil {
 		return InspectionSnapshot{}, err
 	}
 	if refreshedCredential.ID != "" {
 		in.Credential = refreshedCredential
 	}
+	if response.Body == nil {
+		return InspectionSnapshot{}, &Error{Code: ErrorTransport, ProfileRevision: profile.revision(), SafeDetail: "provider inspection returned no body"}
+	}
 	defer response.Body.Close()
 
 	snapshot := InspectionSnapshot{
 		ProfileRevision: profile.revision(),
+		TokenVersion:    in.Credential.TokenVersion,
 		ETag:            response.Headers.Get("ETag"),
 		Source:          "live",
 		ObservedAt:      time.Now().UTC(),
 	}
-	if response.StatusCode == http.StatusNotModified {
+	if response.StatusCode == http.StatusNotModified && in.Want == InspectModels {
 		snapshot.NotModified = true
 		return snapshot, nil
 	}
@@ -83,7 +105,7 @@ func (r *Runtime) Inspect(ctx context.Context, in Inspection) (InspectionSnapsho
 		return InspectionSnapshot{}, &Error{
 			Code:            ErrorTransport,
 			ProfileRevision: profile.revision(),
-			SafeDetail:      fmt.Sprintf("provider model inspection returned HTTP %d", response.StatusCode),
+			SafeDetail:      fmt.Sprintf("provider inspection returned HTTP %d", response.StatusCode),
 		}
 	}
 	body, err := io.ReadAll(io.LimitReader(response.Body, inspectionBodyLimit+1))
@@ -102,7 +124,11 @@ func (r *Runtime) Inspect(ctx context.Context, in Inspection) (InspectionSnapsho
 			SafeDetail:      "provider model inspection response exceeded the size limit",
 		}
 	}
-	models, err := inspector.decodeModels(body)
+	if in.Want == InspectQuota {
+		snapshot.Quotas, err = profile.(quotaProfile).decodeQuota(body, snapshot.ObservedAt)
+	} else {
+		snapshot.Models, err = profile.(inspectionProfile).decodeModels(body)
+	}
 	if err != nil {
 		return InspectionSnapshot{}, &Error{
 			Code:            ErrorRequestContract,
@@ -111,12 +137,11 @@ func (r *Runtime) Inspect(ctx context.Context, in Inspection) (InspectionSnapsho
 			Cause:           err,
 		}
 	}
-	snapshot.Models = models
 	return snapshot, nil
 }
 
-func (r *Runtime) executeInspection(ctx context.Context, profile inspectionProfile, in Inspection) (*WireResponse, Credential, error) {
-	request, err := profile.prepareInspection(in)
+func (r *Runtime) executeInspection(ctx context.Context, profile clientProfile, prepare func(Inspection) (*WireRequest, error), in Inspection) (*WireResponse, Credential, error) {
+	request, err := prepare(in)
 	if err != nil {
 		return nil, Credential{}, &Error{
 			Code:            ErrorRequestContract,
@@ -155,7 +180,7 @@ func (r *Runtime) executeInspection(ctx context.Context, profile inspectionProfi
 		}
 	}
 	in.Credential = refreshed
-	request, err = profile.prepareInspection(in)
+	request, err = prepare(in)
 	if err != nil {
 		return nil, Credential{}, &Error{
 			Code:            ErrorRequestContract,

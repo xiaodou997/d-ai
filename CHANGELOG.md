@@ -2,6 +2,28 @@
 
 All notable changes to D-AI are documented in this file.
 
+## [0.3.26] - 2026-10-17
+
+### Upstream accounts and pools
+
+- Save API-key account credentials and endpoint connections together in one editor and transaction.
+- Edit OAuth account identities and tokens together; preserve blank credentials, reject duplicate imports, and retry only failed imports.
+- Fence token refresh and quota observations against concurrent account edits. Use the configured round-robin or weighted account selection.
+- Discover account-specific Codex model permissions and filter unavailable models while keeping unknown or stale observations eligible.
+- Query Codex, Claude OAuth, Gemini CLI and Antigravity subscription quota endpoints with bounded concurrency and shared refreshes. Failed or missing quota observations never imply exhaustion.
+- Show account models, observed quota and runtime restrictions independently, with explicit model discovery and quota refresh actions.
+
+### Protocol compatibility
+
+- Preserve Responses timestamps and align Gemini reasoning settings with the effective upstream model.
+- Use native Codex SSE and aggregate the completed snapshot for non-streaming clients, including tool calls and authoritative token usage.
+- Cover all four client surfaces against four OAuth profiles for streaming tool calls and tool results, plus cancellation, retry and failure accounting.
+
+### Upgrade notes
+
+- No new database migration; the schema contract remains v46.
+- See `docs/ACCOUNT_POOL_ACCEPTANCE.md` for manual acceptance with real upstream accounts.
+
 ## [0.3.25] - 2026-09-20
 
 ### Security and authorization

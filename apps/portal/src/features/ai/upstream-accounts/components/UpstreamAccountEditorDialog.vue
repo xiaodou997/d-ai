@@ -15,9 +15,11 @@ const props = withDefaults(defineProps<{
   modelValue: boolean
   account?: AccountDTO | null
   priceBooks?: PriceBookRecord[]
+  addEndpointOnOpen?: boolean
 }>(), {
   account: null,
-  priceBooks: () => []
+  priceBooks: () => [],
+  addEndpointOnOpen: false
 })
 
 const emit = defineEmits<{
@@ -79,20 +81,29 @@ function resetForm() {
     tenant_display_name: account.tenant_display_name || account.name,
     tenant_access_mode: account.tenant_access_mode || 'public',
     api_key: '',
-    endpoints: [],
+    endpoints: (account.endpoints || []).map(endpoint => ({
+      ...endpoint,
+      extra_headers: endpoint.extra_headers && typeof endpoint.extra_headers === 'object'
+        ? { ...endpoint.extra_headers as Record<string, unknown> } : {}
+    })),
     concurrency_limit: account.concurrency_limit ?? null,
     price_book_id: account.price_book_id || '',
     tenant_multiplier: account.tenant_multiplier ?? null
   })
 }
 
-watch(() => props.modelValue, (open) => { if (open) resetForm() })
+watch(() => props.modelValue, (open) => {
+  if (!open) return
+  resetForm()
+  if (props.addEndpointOnOpen) addEndpoint()
+}, { immediate: true })
 watch(activePriceBookId, (id) => {
   if (props.modelValue && !isEditing.value && !form.price_book_id) form.price_book_id = id
 })
 
-function endpointPayload(endpoint: EndpointDraft): UpstreamAccountEndpointWriteRequest {
+function endpointPayload(endpoint: EndpointDraft): UpstreamAccountEndpointWriteRequest & { id?: string } {
   return {
+    ...(endpoint.id ? { id: endpoint.id } : {}),
     api_format: endpoint.api_format,
     base_url: endpoint.base_url.trim(),
     path_override: endpoint.path_override?.trim() || undefined,
@@ -152,14 +163,14 @@ function formatDisabled(format: string, index: number) {
 function payload(): AccountWriteRequest {
   const value: AccountWriteRequest = {
     name: form.name.trim(),
-    description: form.description.trim() || undefined,
+    description: form.description.trim(),
     tenant_display_name: form.tenant_display_name.trim() || form.name.trim(),
     tenant_access_mode: form.tenant_access_mode,
     concurrency_limit: form.concurrency_limit ?? null,
     price_book_id: form.price_book_id || undefined,
     tenant_multiplier: form.tenant_multiplier ?? undefined
   }
-  if (!isEditing.value) value.endpoints = form.endpoints.map(endpointPayload)
+  value.endpoints = form.endpoints.map(endpointPayload)
   if (form.api_key.trim()) value.api_key = form.api_key.trim()
   return value
 }
@@ -167,7 +178,11 @@ function payload(): AccountWriteRequest {
 async function submit() {
   if (!form.name.trim()) { ElMessage.warning('请填写账号名称'); return }
   if (!isEditing.value && !form.api_key.trim()) { ElMessage.warning('请填写上游 API key'); return }
-  if (!isEditing.value && !validateEndpoints()) return
+  if (!validateEndpoints()) return
+  if (props.account?.status === 'active' && !form.endpoints.some(endpoint => endpoint.status === 'active')) {
+    ElMessage.warning('启用账号至少需要一个启用中的请求端点')
+    return
+  }
   submitting.value = true
   try {
     const saved = isEditing.value
@@ -186,62 +201,68 @@ async function submit() {
 
 <template>
   <el-dialog
+    class="upstream-connection-dialog"
     :model-value="modelValue"
-    :title="isEditing ? '编辑上游账号' : '新增上游账号'"
-    width="640px"
+    :title="isEditing ? '编辑上游连接' : '新增上游账号'"
+    width="min(760px, 94vw)"
+    top="5vh"
+    :close-on-click-modal="false"
     @update:model-value="emit('update:modelValue', $event)"
   >
-    <el-form label-width="130px">
-      <el-form-item label="名称" required><el-input v-model="form.name" placeholder="如 OpenAI 官方 / 某中转" /></el-form-item>
-      <el-form-item label="描述"><el-input v-model="form.description" type="textarea" :rows="2" maxlength="200" show-word-limit placeholder="给租户展示的一句话说明（可选）" /></el-form-item>
-      <el-form-item label="展示名称" required><el-input v-model="form.tenant_display_name" placeholder="租户目录中显示的名称" /></el-form-item>
-      <el-form-item label="租户专属">
-        <el-switch v-model="form.tenant_access_mode" active-value="restricted" inactive-value="public" active-text="开启" inactive-text="关闭" />
-      </el-form-item>
-      <el-form-item label="API Key" :required="!isEditing">
-        <el-input v-model="form.api_key" type="password" show-password :placeholder="isEditing ? '留空不改；密文存储' : '输入上游 API Key（密文存储）'" />
-      </el-form-item>
+    <div class="connection-form-scroll">
+      <el-form label-width="130px">
+        <el-form-item label="名称" required><el-input v-model="form.name" placeholder="如 OpenAI 官方 / 某中转" /></el-form-item>
+        <el-form-item label="描述"><el-input v-model="form.description" type="textarea" :rows="2" maxlength="200" show-word-limit placeholder="给租户展示的一句话说明（可选）" /></el-form-item>
+        <el-form-item label="展示名称" required><el-input v-model="form.tenant_display_name" placeholder="租户目录中显示的名称" /></el-form-item>
+        <el-form-item label="租户专属">
+          <el-switch v-model="form.tenant_access_mode" active-value="restricted" inactive-value="public" active-text="开启" inactive-text="关闭" />
+        </el-form-item>
+        <el-form-item label="API Key" :required="!isEditing">
+          <el-input v-model="form.api_key" type="password" show-password :placeholder="isEditing ? '留空不改；密文存储' : '输入上游 API Key（密文存储）'" />
+          <span class="hint">以下端点共用此密钥；地址与密钥可一起修改、一次保存。</span>
+        </el-form-item>
 
-      <div v-if="!isEditing" class="endpoint-drafts">
-        <div class="endpoint-drafts__head">
-          <div><strong>请求端点</strong><p>一个账号可支持多种 API 格式；同一种格式不能重复配置。</p></div>
-          <el-button size="small" :icon="Plus" @click="addEndpoint">添加格式</el-button>
-        </div>
-        <div v-for="(endpoint, index) in form.endpoints" :key="index" class="endpoint-draft">
-          <div class="endpoint-draft__title">
-            <span>端点 {{ index + 1 }}</span>
-            <el-button link type="danger" :disabled="form.endpoints.length <= 1" @click="removeEndpoint(index)">移除</el-button>
+        <div class="endpoint-drafts">
+          <div class="endpoint-drafts__head">
+            <div><strong>请求端点</strong><p>地址、协议与账号凭据一起保存；每种 API 格式最多配置一个端点。</p></div>
+            <el-button size="small" :icon="Plus" @click="addEndpoint">添加格式</el-button>
           </div>
-          <el-form-item label="API 格式" required>
-            <el-select v-model="endpoint.api_format" class="w-full">
-              <el-option v-for="option in upstreamAPIFormatOptions" :key="option.value" :label="option.label" :value="option.value" :disabled="formatDisabled(option.value, index)" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="Base URL" required><el-input v-model="endpoint.base_url" placeholder="https://api.example.com" /></el-form-item>
-          <el-form-item label="路径覆盖"><el-input v-model="endpoint.path_override" placeholder="留空使用该 API 格式的默认路径" /></el-form-item>
-          <el-form-item label="认证方式">
-            <el-select v-model="endpoint.auth_scheme" class="w-full"><el-option v-for="option in endpointAuthSchemeOptions" :key="option.value" :label="option.label" :value="option.value" /></el-select>
-          </el-form-item>
-          <el-form-item v-if="endpoint.auth_scheme === 'custom_header'" label="认证请求头" required><el-input v-model="endpoint.auth_header" placeholder="如 X-API-Key" /></el-form-item>
-          <el-form-item label="附加请求头"><KeyValueEditor v-model="endpoint.extra_headers" /></el-form-item>
+          <div v-for="(endpoint, index) in form.endpoints" :key="index" class="endpoint-draft">
+            <div class="endpoint-draft__title">
+              <span>端点 {{ index + 1 }}</span>
+              <el-button link type="danger" :disabled="form.endpoints.length <= 1" @click="removeEndpoint(index)">移除</el-button>
+            </div>
+            <el-form-item label="API 格式" required>
+              <el-select v-model="endpoint.api_format" class="w-full">
+                <el-option v-for="option in upstreamAPIFormatOptions" :key="option.value" :label="option.label" :value="option.value" :disabled="formatDisabled(option.value, index)" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="Base URL" required><el-input v-model="endpoint.base_url" placeholder="https://api.example.com" /></el-form-item>
+            <el-form-item label="路径覆盖"><el-input v-model="endpoint.path_override" placeholder="留空使用该 API 格式的默认路径" /></el-form-item>
+            <el-form-item label="认证方式">
+              <el-select v-model="endpoint.auth_scheme" class="w-full"><el-option v-for="option in endpointAuthSchemeOptions" :key="option.value" :label="option.label" :value="option.value" /></el-select>
+            </el-form-item>
+            <el-form-item v-if="endpoint.auth_scheme === 'custom_header'" label="认证请求头" required><el-input v-model="endpoint.auth_header" placeholder="如 X-API-Key" /></el-form-item>
+            <el-form-item label="状态"><el-switch v-model="endpoint.status" active-value="active" inactive-value="disabled" active-text="启用" inactive-text="停用" /></el-form-item>
+            <el-form-item label="附加请求头"><KeyValueEditor v-model="endpoint.extra_headers" /><span v-if="isEditing" class="hint">敏感值保持 ***REDACTED*** 可保留原配置。</span></el-form-item>
+          </div>
         </div>
-      </div>
-      <el-alert v-else type="info" :closable="false" title="请求端点在账号详情页单独管理，修改账号资料不会覆盖端点配置。" />
 
-      <el-form-item label="最大并发数">
-        <DsNumberInput v-model="form.concurrency_limit" :min="1" :step="1" />
-        <span class="hint">留空表示不限制；指该账号同时在飞的上游请求数上限。</span>
-      </el-form-item>
-      <el-form-item label="价格表">
-        <el-select v-model="form.price_book_id" clearable class="w-full" :placeholder="activePriceBookId ? '该账号成本基准' : '暂无启用价格表'">
-          <el-option v-for="book in priceBooks" :key="book.id" :label="book.name" :value="book.id" />
-        </el-select>
-      </el-form-item>
-      <el-form-item label="租户倍率">
-        <DsNumberInput v-model="form.tenant_multiplier" :min="0" :step="0.1" :precision="4" />
-        <span class="hint">租户扣费 = 价格表 USD × 默认倍率；默认 1</span>
-      </el-form-item>
-    </el-form>
+        <el-form-item label="最大并发数">
+          <DsNumberInput v-model="form.concurrency_limit" :min="1" :step="1" />
+          <span class="hint">留空表示不限制；指该账号同时在飞的上游请求数上限。</span>
+        </el-form-item>
+        <el-form-item label="价格表">
+          <el-select v-model="form.price_book_id" clearable class="w-full" :placeholder="activePriceBookId ? '该账号成本基准' : '暂无启用价格表'">
+            <el-option v-for="book in priceBooks" :key="book.id" :label="book.name" :value="book.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="租户倍率">
+          <DsNumberInput v-model="form.tenant_multiplier" :min="0" :step="0.1" :precision="4" />
+          <span class="hint">租户扣费 = 价格表 USD × 默认倍率；默认 1</span>
+        </el-form-item>
+      </el-form>
+    </div>
     <template #footer>
       <el-button @click="emit('update:modelValue', false)">取消</el-button>
       <el-button type="primary" :loading="submitting" @click="submit">保存</el-button>
@@ -250,6 +271,7 @@ async function submit() {
 </template>
 
 <style scoped>
+.connection-form-scroll { max-height: 70vh; overflow-y: auto; padding-right: 4px; }
 .hint { color: var(--ds-faint); font-size: 12px; margin-left: 8px; }
 .endpoint-drafts { display: flex; flex-direction: column; gap: 12px; margin: 8px 0 18px; }
 .endpoint-drafts__head,
@@ -257,4 +279,11 @@ async function submit() {
 .endpoint-drafts__head p { margin: 4px 0 0; color: var(--ds-muted); font-size: 12px; }
 .endpoint-draft { padding: 14px 14px 2px; border: 1px solid var(--ds-line); border-radius: var(--ds-radius-control); background: var(--ds-panel-muted); }
 .endpoint-draft__title { margin-bottom: 10px; color: var(--ds-ink); font-weight: 700; }
+@media (max-width: 600px) {
+  .connection-form-scroll :deep(.el-form-item) { display: block; }
+  .connection-form-scroll :deep(.el-form-item__label) { width: auto !important; justify-content: flex-start; padding: 0; }
+  .connection-form-scroll :deep(.el-form-item__content) { margin-left: 0 !important; }
+  .connection-form-scroll :deep(.kv .row) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 28px; gap: 6px; }
+  .endpoint-drafts__head { flex-wrap: wrap; }
+}
 </style>

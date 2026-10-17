@@ -95,6 +95,25 @@ describe('UpstreamAccountDetailWorkspace', () => {
     wrapper.unmount()
   })
 
+  it('opens the combined connection editor from the detail page', async () => {
+    const { wrapper } = await mountDetail()
+    await wrapper.findAll('button').find(button => button.text() === '编辑连接')!.trigger('click')
+    const editor = wrapper.findComponent({ name: 'UpstreamAccountEditorDialog' })
+    expect(editor.props('modelValue')).toBe(true)
+    expect(editor.props('account')).toMatchObject({ id: 'account-1', endpoints: [{ id: 'endpoint-1' }] })
+    expect(editor.props('addEndpointOnOpen')).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('stages a new endpoint in the same account editor', async () => {
+    const { wrapper } = await mountDetail('/admin/ai/upstreams/accounts/account-1?tab=endpoints')
+    await wrapper.findAll('button').find(button => button.text() === '添加端点')!.trigger('click')
+    const editor = wrapper.findComponent({ name: 'UpstreamAccountEditorDialog' })
+    expect(editor.props('modelValue')).toBe(true)
+    expect(editor.props('addEndpointOnOpen')).toBe(true)
+    wrapper.unmount()
+  })
+
   it('shows an explicit empty state for an unknown account', async () => {
     const { wrapper } = await mountDetail('/admin/ai/upstreams/accounts/missing')
     expect(wrapper.text()).toContain('上游账号不存在')

@@ -249,7 +249,7 @@ export interface AccountWriteRequest {
   tenant_display_name?: string;
   tenant_access_mode?: "public" | "restricted";
   api_key?: string;
-  endpoints?: UpstreamAccountEndpointWriteRequest[];
+  endpoints?: (UpstreamAccountEndpointWriteRequest & { id?: string })[];
   concurrency_limit?: number | null;
   price_book_id?: string;
   tenant_multiplier?: number;

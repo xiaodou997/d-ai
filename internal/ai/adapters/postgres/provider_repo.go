@@ -2,7 +2,9 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"maps"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -193,6 +195,11 @@ func (r *AccountRepo) UpdateAccount(ctx context.Context, e upstreamcontrol.Accou
 	if err != nil {
 		return domain.UpstreamAccount{}, err
 	}
+	if e.Endpoints != nil {
+		if err := replaceAccountEndpoints(ctx, qtx, aid, e.Endpoints); err != nil {
+			return domain.UpstreamAccount{}, err
+		}
+	}
 	if e.Status == domain.UpstreamAccountStatusActive {
 		if err := validateActiveDirectAccountConfiguration(ctx, tx, e.ID); err != nil {
 			return domain.UpstreamAccount{}, err
@@ -211,6 +218,84 @@ func (r *AccountRepo) UpdateAccount(ctx context.Context, e upstreamcontrol.Accou
 		return domain.UpstreamAccount{}, err
 	}
 	return r.GetAccount(ctx, uuidToString(row.ID))
+}
+
+// The account row is already locked by UpdateUpstreamAccount. Nested endpoint
+// writes use the same lock, so ownership checks and replacement are serialized.
+func replaceAccountEndpoints(ctx context.Context, q *dbgen.Queries, accountID pgtype.UUID, items []upstreamcontrol.AccountEndpointUpdate) error {
+	if len(items) == 0 {
+		return domain.NewValidationError("endpoints", "account must keep at least one endpoint")
+	}
+	current, err := q.ListUpstreamAccountEndpoints(ctx, accountID)
+	if err != nil {
+		return err
+	}
+	owned := make(map[string]bool, len(current))
+	rowsByID := make(map[string]dbgen.AiUpstreamAccountEndpoint, len(current))
+	for _, endpoint := range current {
+		owned[uuidToString(endpoint.ID)] = true
+		rowsByID[uuidToString(endpoint.ID)] = endpoint
+	}
+	keep := make(map[string]bool, len(items))
+	for _, endpoint := range items {
+		if endpoint.ID == "" {
+			continue
+		}
+		if !owned[endpoint.ID] {
+			return domain.ErrNotFound
+		}
+		if keep[endpoint.ID] {
+			return domain.NewValidationError("endpoints", "endpoint IDs must be unique")
+		}
+		keep[endpoint.ID] = true
+	}
+	// Remove omitted formats before inserting replacements. Retain IDs for
+	// edited endpoints and diagnostics for connections that did not change.
+	for _, endpoint := range current {
+		if !keep[uuidToString(endpoint.ID)] {
+			if _, err := q.DeleteUpstreamAccountEndpoint(ctx, dbgen.DeleteUpstreamAccountEndpointParams{ID: endpoint.ID, AccountID: accountID}); err != nil {
+				return err
+			}
+		}
+	}
+	for _, endpoint := range items {
+		write := endpoint.UpstreamAccountEndpointWrite
+		if endpoint.ID == "" {
+			if _, err := q.CreateUpstreamAccountEndpoint(ctx, endpointCreateParams(accountID, write)); err != nil {
+				return translatePersistenceError(err)
+			}
+			continue
+		}
+		if endpointWriteUnchanged(rowsByID[endpoint.ID], write) {
+			continue
+		}
+		id, err := akUUID(endpoint.ID)
+		if err != nil {
+			return err
+		}
+		if _, err := q.UpdateUpstreamAccountEndpoint(ctx, dbgen.UpdateUpstreamAccountEndpointParams{
+			ID: id, AccountID: accountID, ApiFormat: string(write.APIFormat), BaseUrl: write.BaseURL,
+			PathOverride: write.PathOverride, AuthScheme: write.AuthScheme, AuthHeader: write.AuthHeader,
+			ExtraHeaders: pvJSONObjectOrDefault(write.ExtraHeaders), Status: write.Status,
+		}); err != nil {
+			return translatePersistenceError(err)
+		}
+	}
+	return nil
+}
+
+func endpointWriteUnchanged(row dbgen.AiUpstreamAccountEndpoint, write domain.UpstreamAccountEndpointWrite) bool {
+	if row.ApiFormat != string(write.APIFormat) || row.BaseUrl != write.BaseURL ||
+		row.PathOverride != write.PathOverride || row.AuthScheme != write.AuthScheme ||
+		row.AuthHeader != write.AuthHeader || row.Status != write.Status {
+		return false
+	}
+	var current, next map[string]string
+	if json.Unmarshal(pvJSONObjectOrDefault(row.ExtraHeaders), &current) != nil ||
+		json.Unmarshal(pvJSONObjectOrDefault(write.ExtraHeaders), &next) != nil {
+		return false
+	}
+	return maps.Equal(current, next)
 }
 
 func endpointCreateParams(accountID pgtype.UUID, write domain.UpstreamAccountEndpointWrite) dbgen.CreateUpstreamAccountEndpointParams {

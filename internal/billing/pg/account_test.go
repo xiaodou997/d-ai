@@ -19,7 +19,9 @@ func TestAccountRepositoryUsesCanonicalBalanceAndQueryProjections(t *testing.T) 
 	}
 	t.Cleanup(func() { _ = cleanup(context.Background()) })
 
-	now := time.Date(2026, time.August, 25, 8, 0, 0, 0, time.UTC)
+	// Use the current partition and reporting window. A fixed historical date
+	// eventually falls outside both and makes this projection regression expire.
+	now := time.Now().UTC()
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO iam_tenants (tenant_id, tenant_name, created_at, updated_at)
 		VALUES ('account-query-tenant', 'Account Query Tenant', $1, $1)

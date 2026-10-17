@@ -120,7 +120,11 @@ func (s *MultiDimScorer) normalizedCandidateScores(_ context.Context, scoring Ro
 		case "stability":
 			out[i] = wilsonLowerBound(st.Successes, st.Failures)
 		default:
-			out[i] = -latencies[i] * (float64(st.InflightCount) + 1)
+			load := float64(st.InflightCount)
+			if c.PoolCredentialCount > 0 {
+				load /= float64(c.PoolCredentialCount)
+			}
+			out[i] = -latencies[i] * (load + 1)
 		}
 	}
 	return out

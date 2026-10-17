@@ -575,7 +575,7 @@ func canonicalGenerationConfigToGemini(req *Request) map[string]any {
 		applyResponseFormatToGemini(gc, req.ResponseFormat)
 	}
 	if req.Thinking != nil {
-		if tc := geminiThinkingConfig(req.Thinking); tc != nil {
+		if tc := geminiThinkingConfig(req.Thinking, req.Model); tc != nil {
 			gc["thinkingConfig"] = tc
 		}
 	}
@@ -603,12 +603,35 @@ func applyResponseFormatToGemini(gc map[string]any, rf *ResponseFormat) {
 	}
 }
 
-func geminiThinkingConfig(t *ThinkingConfig) map[string]any {
+func geminiThinkingConfig(t *ThinkingConfig, model string) map[string]any {
 	// 优先用解析时保留的原始 thinking_config
 	if bucket := t.Extensions.get("gemini"); bucket != nil {
 		if tc, ok := decodeObject(bucket["thinking_config"]); ok {
 			return rawObjToAny(tc)
 		}
+	}
+	// Gemini 3/4 use levels, while 2.5 still requires a token budget. Inspect
+	// the mapped upstream model so a public alias does not select the wrong API.
+	model = strings.ToLower(strings.TrimSpace(model))
+	if index := strings.LastIndex(model, "/"); index >= 0 {
+		model = model[index+1:]
+	}
+	if strings.HasPrefix(model, "gemini-3") || strings.HasPrefix(model, "gemini-4") {
+		effort := openaiReasoningEffort(t)
+		if effort == "" && t.BudgetTokens != nil {
+			effort = budgetToReasoningEffort(*t.BudgetTokens)
+		}
+		switch strings.ToLower(strings.TrimSpace(effort)) {
+		case "minimal", "none", "low":
+			effort = "low"
+		case "medium":
+			effort = "medium"
+		case "high", "xhigh", "max":
+			effort = "high"
+		default:
+			return nil
+		}
+		return map[string]any{"includeThoughts": true, "thinkingLevel": effort}
 	}
 	var budget *uint64
 	if t.BudgetTokens != nil {
@@ -640,10 +663,12 @@ func geminiThinkingToCanonical(raw json.RawMessage) *ThinkingConfig {
 		budget = &b
 		ext.setField("openai", "reasoning_effort", rawString(budgetToReasoningEffort(b)))
 	}
-	enabled := true
-	if v, ok := asBool(fieldOr(tc, "includeThoughts", "include_thoughts")); ok {
-		enabled = v
+	if level := normalizeReasoningEffort(strFirst(tc, "thinkingLevel", "thinking_level")); level != "" {
+		ext.setField("openai", "reasoning_effort", rawString(level))
 	}
+	// includeThoughts controls summary visibility, not whether the model thinks.
+	// Only an explicit zero budget disables thinking on models that support it.
+	enabled := budget == nil || *budget > 0
 	return &ThinkingConfig{Enabled: enabled, BudgetTokens: budget, Extensions: ext}
 }
 

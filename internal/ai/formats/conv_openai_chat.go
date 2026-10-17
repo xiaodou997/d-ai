@@ -188,7 +188,7 @@ func openaiChatResponseFrom(body json.RawMessage) (*Response, bool) {
 		Content:    outputs[0].Content,
 		StopReason: outputs[0].StopReason,
 		Usage:      openaiUsageToCanonical(field(obj, "usage")),
-		Extensions: collectExtensions(obj, "openai", "id", "object", "model", "choices", "usage", "created"),
+		Extensions: collectExtensions(obj, "openai", "id", "object", "model", "choices", "usage"),
 	}
 	return resp, true
 }

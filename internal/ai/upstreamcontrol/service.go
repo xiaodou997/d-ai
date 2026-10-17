@@ -108,6 +108,7 @@ type UpdateAccountInput struct {
 	TenantDisplayName string
 	TenantAccessMode  string
 	APIKey            string
+	Endpoints         []AccountEndpointUpdate
 	ConcurrencyLimit  *int
 	PriceBookID       string
 	TenantMultiplier  *float64
@@ -166,6 +167,19 @@ func (s *Service) UpdateAccount(ctx context.Context, in UpdateAccountInput) (dom
 	if in.Description != nil {
 		description = strings.TrimSpace(*in.Description)
 	}
+	endpoints, err := s.prepareAccountEndpoints(ctx, in.ID, in.Endpoints)
+	if err != nil {
+		return domain.UpstreamAccount{}, err
+	}
+	if endpoints != nil && status == domain.UpstreamAccountStatusActive {
+		active := false
+		for _, endpoint := range endpoints {
+			active = active || endpoint.Status == domain.EndpointStatusActive
+		}
+		if !active {
+			return domain.UpstreamAccount{}, domain.NewValidationError("endpoints", "active account requires at least one active endpoint")
+		}
+	}
 	return s.repo.UpdateAccount(ctx, AccountUpdate{
 		ID:                in.ID,
 		Name:              strings.TrimSpace(in.Name),
@@ -173,11 +187,62 @@ func (s *Service) UpdateAccount(ctx context.Context, in UpdateAccountInput) (dom
 		TenantDisplayName: displayName,
 		TenantAccessMode:  accessMode,
 		Ciphertext:        ciphertext,
+		Endpoints:         endpoints,
 		ConcurrencyLimit:  in.ConcurrencyLimit,
 		PriceBookID:       in.PriceBookID,
 		TenantMultiplier:  in.TenantMultiplier,
 		Status:            status,
 	})
+}
+
+func (s *Service) prepareAccountEndpoints(ctx context.Context, accountID string, items []AccountEndpointUpdate) ([]AccountEndpointUpdate, error) {
+	if items == nil {
+		return nil, nil
+	}
+	if len(items) == 0 {
+		return nil, domain.NewValidationError("endpoints", "account must keep at least one endpoint")
+	}
+	out := make([]AccountEndpointUpdate, 0, len(items))
+	seenIDs := make(map[string]bool, len(items))
+	seenFormats := make(map[domain.UpstreamProtocol]bool, len(items))
+	for _, item := range items {
+		id := strings.TrimSpace(item.ID)
+		write, err := normalizeEndpointWrite(item.UpstreamAccountEndpointWrite)
+		if err != nil {
+			return nil, err
+		}
+		if seenFormats[write.APIFormat] {
+			return nil, domain.NewValidationError("endpoints", "each API format may only be configured once")
+		}
+		seenFormats[write.APIFormat] = true
+		var current domain.UpstreamAccountEndpoint
+		if id != "" {
+			if seenIDs[id] {
+				return nil, domain.NewValidationError("endpoints", "endpoint IDs must be unique")
+			}
+			seenIDs[id] = true
+			// Read the stored headers, rather than decrypted AccountSecret headers,
+			// so masked values preserve their existing ciphertext.
+			current, err = s.repo.GetEndpoint(ctx, accountID, id)
+			if err != nil {
+				return nil, err
+			}
+		} else if err := rejectUnboundRedactedHeaders(write.ExtraHeaders); err != nil {
+			return nil, err
+		}
+		write.ExtraHeaders, err = encryptSensitiveExtraHeaders(write.ExtraHeaders, s.encrypt)
+		if err != nil {
+			return nil, err
+		}
+		if id != "" {
+			write.ExtraHeaders, err = preserveRedactedExtraHeaders(current.ExtraHeaders, write.ExtraHeaders)
+			if err != nil {
+				return nil, err
+			}
+		}
+		out = append(out, AccountEndpointUpdate{ID: id, UpstreamAccountEndpointWrite: write})
+	}
+	return out, nil
 }
 
 func (s *Service) UpdateAccountStatus(ctx context.Context, id, status string) (domain.UpstreamAccount, error) {

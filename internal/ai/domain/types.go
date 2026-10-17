@@ -212,10 +212,11 @@ type Model struct {
 // RouteID = ai_group_targets.id（绑定行，用于日志/统计/sticky 校验）。
 // 目标身份（健康/sticky）：直连取具体 EndpointID，池取 PoolID。
 type RouteCandidate struct {
-	CandidateID        string // one concrete executable endpoint/credential/model path
-	CredentialID       string
-	Operation          string
-	EstimatedCostMicro int64
+	CandidateID         string // one concrete executable endpoint/credential/model path
+	CredentialID        string
+	PoolCredentialCount int // eligible members used to normalize aggregate pool load
+	Operation           string
+	EstimatedCostMicro  int64
 
 	RouteID   string
 	GroupRank int
@@ -459,16 +460,32 @@ type OAuthCredential struct {
 // OAuthCredentialCreate carries the secret-bearing input needed to import a
 // credential. It is a command model, not a management response model.
 type OAuthCredentialCreate struct {
-	Name         string
-	ProviderType FixedProviderType
-	Email        string
+	WeightSpecified bool // distinguish an explicit zero weight from the default
+	Name            string
+	ProviderType    FixedProviderType
+	Email           string
+	AccessToken     string
+	RefreshToken    string
+	TokenType       string
+	Scope           string
+	ExpiresAt       *time.Time
+	AuthMetadata    map[string]any
+	Weight          int
+}
+
+// OAuthCredentialUpdate changes an existing account without replacing its ID
+// or history. Empty secret fields preserve the stored credentials.
+type OAuthCredentialUpdate struct {
+	Name         *string
+	Email        *string
+	Status       *string
+	Weight       *int
 	AccessToken  string
 	RefreshToken string
-	TokenType    string
-	Scope        string
+	TokenType    *string
+	Scope        *string
 	ExpiresAt    *time.Time
 	AuthMetadata map[string]any
-	Weight       int
 }
 
 // OAuthCredentialSummary is the non-secret read model exposed to management
@@ -476,6 +493,7 @@ type OAuthCredentialCreate struct {
 // ciphertexts while retaining the health and audit fields used by the pool
 // credential list endpoint.
 type OAuthCredentialSummary struct {
+	Quotas               []CredentialQuota
 	ID                   string
 	PoolID               string
 	Name                 string

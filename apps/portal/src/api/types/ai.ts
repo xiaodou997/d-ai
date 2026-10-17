@@ -249,7 +249,35 @@ export interface CredentialPoolWriteRequest {
   tenant_multiplier?: number;
 }
 
+export interface CredentialQuotaWindow {
+  key: string;
+  used_percent?: number;
+  remaining?: number;
+  limit?: number;
+  window_minutes?: number;
+  reset_at?: number;
+}
+export interface CredentialQuota {
+  model?: string;
+  source: string;
+  observed_at: number;
+  windows: CredentialQuotaWindow[];
+  credits_available?: boolean;
+}
+
+export interface CredentialModelCatalogDTO {
+  credential_id: string;
+  models: string[];
+  source: 'live' | 'cache' | 'stale' | 'unknown';
+  observed_at?: number;
+  valid_until?: number;
+}
+
 export interface PoolCredentialDTO {
+	quota_inspection?: { state: 'live' | 'cache' | 'unknown' | 'failed' | 'unsupported'; observed_at?: number };
+  model_catalog?: CredentialModelCatalogDTO;
+  quotas?: CredentialQuota[];
+  cooldown_until?: number;
   id: string;
   pool_id: string;
   name: string;
@@ -295,6 +323,14 @@ export interface PoolCredentialWriteRequest {
 }
 
 export interface PoolCredentialPatchRequest {
+  name?: string;
+  email?: string;
+  access_token?: string;
+  refresh_token?: string;
+  token_type?: string;
+  scope?: string;
+  expires_at?: number;
+  auth_metadata?: Record<string, unknown>;
   status?: string;
   weight?: number;
 }
@@ -304,6 +340,9 @@ export interface PoolAvailableModelsDTO {
   fixed_provider_type: string;
   models: string[];
   source: string;
+  profile_revision?: string;
+  observed_at?: number;
+  accounts: CredentialModelCatalogDTO[];
 }
 
 export interface OAuthPoolHealthDTO {

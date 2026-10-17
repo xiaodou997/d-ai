@@ -3,6 +3,7 @@ package clientcatalog
 import (
 	"context"
 	"errors"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -13,8 +14,45 @@ import (
 
 type selectorFunc func(context.Context, string, string) (*domain.OAuthCredential, error)
 
-func (f selectorFunc) SelectCredentialFromPool(ctx context.Context, poolID, strategy string) (*domain.OAuthCredential, error) {
-	return f(ctx, poolID, strategy)
+type fixtureReader struct {
+	mu          sync.Mutex
+	selectFn    selectorFunc
+	credentials map[string]*domain.OAuthCredential
+}
+
+func testReader(f selectorFunc) *fixtureReader {
+	return &fixtureReader{selectFn: f, credentials: map[string]*domain.OAuthCredential{}}
+}
+
+func (r *fixtureReader) ListModelCredentials(ctx context.Context, poolID string) ([]domain.CredentialModelIdentity, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if len(r.credentials) == 0 && r.selectFn != nil {
+		c, err := r.selectFn(ctx, poolID, "round_robin")
+		if err != nil {
+			return nil, err
+		}
+		c.PoolID = poolID
+		c.ProviderType = domain.FixedProviderCodex
+		c.Status = domain.OAuthCredentialActive
+		r.credentials[c.ID] = c
+	}
+	refs := []domain.CredentialModelIdentity{}
+	for _, c := range r.credentials {
+		if c.PoolID == poolID && c.Status == domain.OAuthCredentialActive {
+			refs = append(refs, domain.CredentialModelIdentity{ID: c.ID, PoolID: c.PoolID, ProviderType: c.ProviderType, TokenVersion: c.TokenVersion})
+		}
+	}
+	return refs, nil
+}
+func (r *fixtureReader) GetDecryptedByID(_ context.Context, id string) (*domain.OAuthCredential, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if c := r.credentials[id]; c != nil {
+		clone := *c
+		return &clone, nil
+	}
+	return nil, domain.ErrNotFound
 }
 
 type inspectorStub struct {
@@ -33,13 +71,13 @@ func (s inspectorStub) Inspect(ctx context.Context, in clientruntime.Inspection)
 func TestServiceDiscoversThenCachesPoolModels(t *testing.T) {
 	var selections atomic.Int32
 	var inspections atomic.Int32
-	service := New(selectorFunc(func(_ context.Context, poolID, strategy string) (*domain.OAuthCredential, error) {
+	service := New(testReader(selectorFunc(func(_ context.Context, poolID, strategy string) (*domain.OAuthCredential, error) {
 		selections.Add(1)
 		if poolID != "pool-1" || strategy != "round_robin" {
 			t.Fatalf("selection = %q, %q", poolID, strategy)
 		}
 		return &domain.OAuthCredential{ID: "credential-1", AccessToken: "token"}, nil
-	}), inspectorStub{
+	})), inspectorStub{
 		supported: true,
 		inspect: func(_ context.Context, in clientruntime.Inspection) (clientruntime.InspectionSnapshot, error) {
 			inspections.Add(1)
@@ -82,9 +120,9 @@ func TestServiceDiscoversThenCachesPoolModels(t *testing.T) {
 func TestServiceUsesStaleSnapshotAfterDiscoveryFailure(t *testing.T) {
 	now := time.Unix(1000, 0).UTC()
 	var fail atomic.Bool
-	service := New(selectorFunc(func(context.Context, string, string) (*domain.OAuthCredential, error) {
+	service := New(testReader(selectorFunc(func(context.Context, string, string) (*domain.OAuthCredential, error) {
 		return &domain.OAuthCredential{ID: "credential-1", AccessToken: "token"}, nil
-	}), inspectorStub{
+	})), inspectorStub{
 		supported: true,
 		inspect: func(_ context.Context, _ clientruntime.Inspection) (clientruntime.InspectionSnapshot, error) {
 			if fail.Load() {
@@ -129,9 +167,9 @@ func TestServiceCallerCancellationDoesNotPoisonSharedDiscovery(t *testing.T) {
 	started := make(chan struct{})
 	release := make(chan struct{})
 	var inspections atomic.Int32
-	service := New(selectorFunc(func(context.Context, string, string) (*domain.OAuthCredential, error) {
+	service := New(testReader(selectorFunc(func(context.Context, string, string) (*domain.OAuthCredential, error) {
 		return &domain.OAuthCredential{ID: "credential-1", AccessToken: "token"}, nil
-	}), inspectorStub{
+	})), inspectorStub{
 		supported: true,
 		inspect: func(ctx context.Context, _ clientruntime.Inspection) (clientruntime.InspectionSnapshot, error) {
 			if inspections.Add(1) == 1 {
@@ -181,9 +219,9 @@ func TestServiceStopCancelsInFlightDiscovery(t *testing.T) {
 	started := make(chan struct{})
 	canceled := make(chan struct{})
 	release := make(chan struct{})
-	service := New(selectorFunc(func(context.Context, string, string) (*domain.OAuthCredential, error) {
+	service := New(testReader(selectorFunc(func(context.Context, string, string) (*domain.OAuthCredential, error) {
 		return &domain.OAuthCredential{ID: "credential-1", AccessToken: "token"}, nil
-	}), inspectorStub{
+	})), inspectorStub{
 		supported: true,
 		inspect: func(ctx context.Context, _ clientruntime.Inspection) (clientruntime.InspectionSnapshot, error) {
 			close(started)
@@ -229,9 +267,9 @@ func TestServiceStopCancelsInFlightDiscovery(t *testing.T) {
 
 func TestServiceStopBeforeStartPreventsDiscovery(t *testing.T) {
 	var inspections atomic.Int32
-	service := New(selectorFunc(func(context.Context, string, string) (*domain.OAuthCredential, error) {
+	service := New(testReader(selectorFunc(func(context.Context, string, string) (*domain.OAuthCredential, error) {
 		return &domain.OAuthCredential{ID: "credential-1", AccessToken: "token"}, nil
-	}), inspectorStub{
+	})), inspectorStub{
 		supported: true,
 		inspect: func(context.Context, clientruntime.Inspection) (clientruntime.InspectionSnapshot, error) {
 			inspections.Add(1)
@@ -255,9 +293,9 @@ func TestServiceStopBeforeStartPreventsDiscovery(t *testing.T) {
 func TestServiceOwnerContextCancelsInFlightDiscovery(t *testing.T) {
 	started := make(chan struct{})
 	canceled := make(chan struct{})
-	service := New(selectorFunc(func(context.Context, string, string) (*domain.OAuthCredential, error) {
+	service := New(testReader(selectorFunc(func(context.Context, string, string) (*domain.OAuthCredential, error) {
 		return &domain.OAuthCredential{ID: "credential-1", AccessToken: "token"}, nil
-	}), inspectorStub{
+	})), inspectorStub{
 		supported: true,
 		inspect: func(ctx context.Context, _ clientruntime.Inspection) (clientruntime.InspectionSnapshot, error) {
 			close(started)

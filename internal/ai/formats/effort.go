@@ -47,6 +47,9 @@ func ExtractReasoningEffort(src FormatID, body []byte) string {
 	case FormatGeminiGenerate:
 		if gc, ok := decodeObject(fieldOr(obj, "generationConfig", "generation_config")); ok {
 			if tc, ok := decodeObject(fieldOr(gc, "thinkingConfig", "thinking_config")); ok {
+				if level := normalizeReasoningEffort(strFirst(tc, "thinkingLevel", "thinking_level")); level != "" {
+					return level
+				}
 				if b, ok := asUint(fieldOr(tc, "thinkingBudget", "thinking_budget")); ok && b > 0 {
 					return budgetToReasoningEffort(b)
 				}

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // OpenAI Responses（/v1/responses）的 parse/emit。
@@ -239,6 +240,15 @@ func openaiResponsesResponseTo(resp *Response) json.RawMessage {
 		out["usage"] = canonicalUsageToResponsesUsage(resp.Usage)
 	}
 	emitExtensions(out, resp.Extensions, nsResponses)
+	// Some SDKs require a numeric creation time even when the upstream uses a
+	// different response format. Preserve a valid upstream time when present.
+	if created, ok := asUint(mustRaw(out["created_at"])); !ok || created == 0 {
+		if created, ok := asUint(resp.Extensions.get("openai")["created"]); ok && created > 0 {
+			out["created_at"] = created
+		} else {
+			out["created_at"] = time.Now().Unix()
+		}
+	}
 	return mustRaw(out)
 }
 

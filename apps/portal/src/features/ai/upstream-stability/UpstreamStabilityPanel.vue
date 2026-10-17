@@ -47,6 +47,8 @@ const outcomeLabels: Record<string, string> = {
   network_error: '网络异常',
   unauthorized: '认证失败',
   rate_limited: '限流',
+  quota_exhausted: '上游额度耗尽',
+  capacity_exhausted: '上游共享容量不足',
   model_error: '模型或权限错误',
   client_error: '请求参数错误（不计失败）',
   canceled: '已取消（不计失败）',

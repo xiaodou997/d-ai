@@ -10,6 +10,7 @@ import (
 	"time"
 	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/internal/ai/upstreamcompat"
+	"xiaodou/dai/internal/ai/upstreamquota"
 )
 
 // ResultStatus is shared by retry policy, availability and attempt statistics.
@@ -29,11 +30,17 @@ const (
 	ResultRejected       // candidate skipped by planner/binder verdict, never reached transport
 	ResultModelError     // upstream model or operation is unavailable
 	ResultPolicyRejected // upstream rejected this request by policy, not an account health failure
+	ResultQuotaExhausted
+	ResultCapacityExhausted
 )
 
 // String returns a short human-readable label for the status.
 func (s ResultStatus) String() string {
 	switch s {
+	case ResultQuotaExhausted:
+		return "quota_exhausted"
+	case ResultCapacityExhausted:
+		return "capacity_exhausted"
 	case ResultPolicyRejected:
 		return "policy_rejected"
 	case ResultModelError:
@@ -79,10 +86,11 @@ type Outcome = AttemptOutcome
 type Decision int
 
 const (
-	DecisionAccept       Decision = iota // success — relay to client and stop
-	DecisionRetry                        // try another route from the candidate list
-	DecisionRetryNewCred                 // OAuth 401/403 — same pool, new credential
-	DecisionGiveUp                       // client error — return failure to client
+	DecisionAccept        Decision = iota // success — relay to client and stop
+	DecisionRetry                         // try another route from the candidate list
+	DecisionRetryNewCred                  // OAuth 401/403 — same pool, new credential
+	DecisionGiveUp                        // client error — return failure to client
+	DecisionRetrySameCred                 // one bounded retry on explicit shared-capacity exhaustion
 )
 
 // ClassifyOutcome translates a transport-level (status, err) pair into a
@@ -131,7 +139,7 @@ func (o Outcome) Decision(hasCredential bool) Decision {
 			return DecisionRetryNewCred
 		}
 		return DecisionRetry
-	case ResultPolicyRejected, ResultModelError, ResultRateLimited, ResultServerError, ResultTimeout, ResultNetwork:
+	case ResultPolicyRejected, ResultModelError, ResultRateLimited, ResultQuotaExhausted, ResultCapacityExhausted, ResultServerError, ResultTimeout, ResultNetwork:
 		return DecisionRetry
 	case ResultClientError:
 		return DecisionGiveUp
@@ -234,6 +242,16 @@ func ClassifyResponse(status int, headers http.Header, body string, err error) O
 		out.ErrorCode = envelope.Error.Status
 	}
 	code := strings.ToLower(out.ErrorCode + " " + envelope.Error.Type + " " + envelope.Error.Status)
+	facts := upstreamquota.ClassifyError(status, headers, body, time.Now())
+	out.RetryAt = max(out.RetryAt, facts.RetryAt)
+	if facts.QuotaExhausted {
+		out.Status = ResultQuotaExhausted
+		return out
+	}
+	if facts.CapacityExhausted {
+		out.Status = ResultCapacityExhausted
+		return out
+	}
 	if status == http.StatusTooManyRequests {
 		return out
 	}

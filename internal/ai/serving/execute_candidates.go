@@ -19,7 +19,7 @@ func (s *ExecuteStep) pickCandidate(ctx context.Context, req *Request) (*domain.
 	req.SelectionError = nil
 	candidates := req.Candidates
 	recovery := map[string]bool{}
-	if s.Availability != nil {
+	if s.Availability != nil || s.CredentialModels != nil {
 		var err error
 		candidates, recovery, err = s.prepareEligible(ctx, req)
 		if err != nil {
@@ -52,6 +52,15 @@ func (s *ExecuteStep) pickCandidate(ctx context.Context, req *Request) (*domain.
 		if trial != "" {
 			for _, c := range tier {
 				if c.Key() == trial {
+					if _, ok := s.OAuthPool.(EligibleCredentialSelector); ok && c.IsPoolRoute() && c.CredentialID != "" && c.OAuthStrategy == "weighted" && stickyCredentialID(req, c) != c.CredentialID {
+						target := poolTarget(c)
+						if s.resolvePoolSelection(ctx, req, target, map[string][]*domain.RouteCandidate{target.Key(): {c}}) == nil {
+							if req.SelectionError != nil {
+								return nil, 0
+							}
+							return s.pickCandidate(ctx, req)
+						}
+					}
 					req.SelectionReason = "recovery"
 					return c, 0
 				}
@@ -69,6 +78,7 @@ func (s *ExecuteStep) pickCandidate(ctx context.Context, req *Request) (*domain.
 			}
 		}
 	}
+	targets, poolMembers := s.poolSelectionTargets(tier)
 	var cand *domain.RouteCandidate
 	var score float64
 	scoring := RouteScoringContext{Stream: req.IsStream}
@@ -76,14 +86,21 @@ func (s *ExecuteStep) pickCandidate(ctx context.Context, req *Request) (*domain.
 		scoring.TenantID = subject.TenantID
 	}
 	if sp, ok := s.Scorer.(ScoringPicker); ok {
-		cand, score = sp.PickWithScore(ctx, scoring, tier, req.UsedCandidates)
+		cand, score = sp.PickWithScore(ctx, scoring, targets, req.UsedCandidates)
 	} else if s.Scorer != nil {
-		cand = s.Scorer.Pick(ctx, scoring, tier, req.UsedCandidates)
+		cand = s.Scorer.Pick(ctx, scoring, targets, req.UsedCandidates)
 	} else {
-		cand = tier[0]
+		cand = targets[0]
 	}
 	if cand == nil {
 		return nil, 0
+	}
+	cand = s.resolvePoolSelection(ctx, req, cand, poolMembers)
+	if cand == nil {
+		if req.SelectionError != nil {
+			return nil, 0
+		}
+		return s.pickCandidate(ctx, req)
 	}
 	req.ModelCode = cand.ModelCode
 	req.SelectionReason = routeSelectionReason(cand, score, s.Scorer != nil)
